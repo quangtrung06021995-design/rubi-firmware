@@ -1,0 +1,41 @@
+name: Build Rubi firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - overlay/**
+      - UPSTREAM_COMMIT
+      - .github/workflows/build.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v6.1
+    steps:
+      - name: Checkout Rubi repo
+        uses: actions/checkout@v4
+
+      - name: Get upstream Xiaozhi source
+        shell: bash
+        run: |
+          git config --global --add safe.directory '*'
+          git clone https://github.com/78/xiaozhi-esp32.git upstream
+          git -C upstream checkout "$(cat UPSTREAM_COMMIT)"
+          cp -r overlay/. upstream/
+
+      - name: Build
+        shell: bash
+        working-directory: upstream
+        run: |
+          source "$IDF_PATH/export.sh"
+          python scripts/build.py freenove-esp32s3-display-2.8-lcd --name rubi --language vi-VN
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: rubi-firmware
+          path: upstream/build/merged-binary.bin
+          if-no-files-found: error
