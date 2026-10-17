@@ -4,7 +4,7 @@ Firmware cho bo màn hình ES3C28P (ESP32-S3, 2.8") của robot Rubi, xây dựn
 
 - Nền: bo `freenove-esp32s3-display-2.8-lcd` của Xiaozhi (cùng sơ đồ chân với ES3C28P).
 - Ngôn ngữ hệ thống: tiếng Việt (vi-VN).
-- Từ đánh thức tùy chỉnh: "Rubi" (đăng ký theo phiên âm `ru bi`).
+- Từ đánh thức tùy chỉnh: "Rubi ơi" (đăng ký theo phiên âm `ru bi ei`).
 - Cảm ứng: chạm 1 lần = bật/tắt trò chuyện, chạm 2 lần = bắt đầu nghe, giữ 3 giây = cấu hình Wi-Fi.
 
 ## Cách lấy file nạp

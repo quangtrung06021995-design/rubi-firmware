@@ -6,8 +6,8 @@
             "name": "rubi",
             "sdkconfig_append": [
                 "CONFIG_USE_CUSTOM_WAKE_WORD=y",
-                "CONFIG_CUSTOM_WAKE_WORD=\"ru bi\"",
-                "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"Rubi\"",
+                "CONFIG_CUSTOM_WAKE_WORD=\"ru bi ei\"",
+                "CONFIG_CUSTOM_WAKE_WORD_DISPLAY=\"Rubi ơi\"",
                 "CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=20",
                 "CONFIG_SR_MN_CN_MULTINET7_QUANT=y"
             ]
