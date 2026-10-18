@@ -63,7 +63,7 @@ jobs:
         shell: bash
         working-directory: upstream
         env:
-          OTA_URL_VAR: ${{ vars.OTA_URL }}
+          OTA_URL_VAR: ${{ vars.OTA_URL || 'https://rubi-firmware.vercel.app/api/ota' }}
         run: |
           VER="3.0.${{ github.run_number }}"
           sed -i "s/set(PROJECT_VER \"[^\"]*\")/set(PROJECT_VER \"$VER\")/" CMakeLists.txt
