@@ -9,6 +9,9 @@ on:
       - UPSTREAM_COMMIT
       - .github/workflows/build.yml
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -46,12 +49,58 @@ jobs:
           PY
           grep -n "CONFIG_USE_CUSTOM_WAKE_WORD=y" scripts/build.py
 
+      - name: Stamp version and OTA address
+        shell: bash
+        working-directory: upstream
+        env:
+          OTA_URL_VAR: ${{ vars.OTA_URL }}
+        run: |
+          VER="3.0.${{ github.run_number }}"
+          sed -i "s/set(PROJECT_VER \"[^\"]*\")/set(PROJECT_VER \"$VER\")/" CMakeLists.txt
+          grep -n "PROJECT_VER" CMakeLists.txt
+          echo "RUBI_VERSION=$VER" >> "$GITHUB_ENV"
+          if [ -n "$OTA_URL_VAR" ]; then
+            python3 - <<'PY'
+          import json, os
+          p = 'main/boards/freenove-esp32s3-display-2.8-lcd/config.json'
+          c = json.load(open(p, encoding='utf-8'))
+          c['builds'][0]['sdkconfig_append'].append('CONFIG_OTA_URL="%s"' % os.environ['OTA_URL_VAR'])
+          json.dump(c, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=4)
+          PY
+            echo "OTA address set to $OTA_URL_VAR"
+          else
+            echo "OTA_URL variable not set: using the default server"
+          fi
+
       - name: Build
         shell: bash
         working-directory: upstream
         run: |
+          set -o pipefail
           source "$IDF_PATH/export.sh"
-          python scripts/build.py freenove-esp32s3-display-2.8-lcd --name rubi --language vi-VN
+          python scripts/build.py freenove-esp32s3-display-2.8-lcd --name rubi --language vi-VN 2>&1 | tee ../build.log
+
+      - name: Publish build log (branch build-log)
+        if: always()
+        shell: bash
+        run: |
+          git config --global --add safe.directory '*'
+          mkdir -p /tmp/logpub && cd /tmp/logpub && rm -rf .git
+          { echo "run ${{ github.run_number }} sha ${{ github.sha }}"; tail -n 300 "$GITHUB_WORKSPACE/build.log" 2>/dev/null; } > build.log.txt
+          git init -q && git checkout -q -b build-log
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "build log"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" build-log || true
+
+      - name: Publish OTA files (branch ota)
+        shell: bash
+        run: |
+          mkdir -p /tmp/otapub && cd /tmp/otapub && rm -rf .git
+          cp "$GITHUB_WORKSPACE/upstream/build/xiaozhi.bin" rubi.bin
+          printf '{"version":"%s","url":"https://raw.githubusercontent.com/%s/ota/rubi.bin"}\n' "$RUBI_VERSION" "${{ github.repository }}" > manifest.json
+          cat manifest.json; ls -la
+          git init -q && git checkout -q -b ota
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "OTA $RUBI_VERSION"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ota
 
       - name: Upload firmware
         uses: actions/upload-artifact@v4
