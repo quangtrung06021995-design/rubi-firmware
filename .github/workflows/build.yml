@@ -49,6 +49,16 @@ jobs:
           PY
           grep -n "CONFIG_USE_CUSTOM_WAKE_WORD=y" scripts/build.py
 
+      - name: Install Rubi face (13 expressions)
+        shell: bash
+        working-directory: upstream
+        run: |
+          B=main/boards/freenove-esp32s3-display-2.8-lcd/freenove-esp32s3-display-2.8-lcd.cc
+          grep -c 'new SpiLcdDisplay(' "$B"
+          sed -i 's|#include "display/lcd_display.h"|#include "display/lcd_display.h"\n#include "display/rubi_face.h"|' "$B"
+          sed -i 's|new SpiLcdDisplay(|new RubiDisplay(|' "$B"
+          grep -n "rubi_face\|RubiDisplay" "$B"
+
       - name: Stamp version and OTA address
         shell: bash
         working-directory: upstream
