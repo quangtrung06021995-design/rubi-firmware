@@ -26,6 +26,26 @@ jobs:
           git -C upstream checkout "$(cat UPSTREAM_COMMIT)"
           cp -r overlay/. upstream/
 
+      - name: Keep custom wake word (build.py forces default wake word otherwise)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          p = 'scripts/build.py'
+          s = open(p, encoding='utf-8').read()
+          anchor = '        validation_symbols.append((wake_word_symbols, "--wake-word"))\n'
+          assert s.count(anchor) == 1, 'anchor not found'
+          patch = anchor + (
+              '        user_options[:] = [o for o in user_options if not o.startswith((\n'
+              '            "CONFIG_USE_AFE_WAKE_WORD", "CONFIG_USE_ESP_WAKE_WORD",\n'
+              '            "CONFIG_USE_CUSTOM_WAKE_WORD", "CONFIG_SR_WN_"))]\n'
+              '        user_options.append("CONFIG_USE_CUSTOM_WAKE_WORD=y")\n'
+              '        validation_symbols[-1] = (["CONFIG_USE_CUSTOM_WAKE_WORD"], "--wake-word")\n'
+          )
+          open(p, 'w', encoding='utf-8').write(s.replace(anchor, patch))
+          PY
+          grep -n "CONFIG_USE_CUSTOM_WAKE_WORD=y" scripts/build.py
+
       - name: Build
         shell: bash
         working-directory: upstream
