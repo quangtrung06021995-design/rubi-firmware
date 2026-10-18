@@ -156,12 +156,27 @@ private:
         if (emoji_label_) lv_obj_add_flag(emoji_label_, LV_OBJ_FLAG_HIDDEN);
         if (emoji_image_) lv_obj_add_flag(emoji_image_, LV_OBJ_FLAG_HIDDEN);
 
-        face_ = lv_obj_create(emoji_box_);
+        // Full-screen face: sits behind the status icons, which turn white on black.
+        auto screen = lv_screen_active();
+        lv_obj_set_style_bg_color(screen, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+        if (container_) lv_obj_set_style_bg_opa(container_, LV_OPA_TRANSP, 0);
+        if (top_bar_) lv_obj_set_style_bg_opa(top_bar_, LV_OPA_TRANSP, 0);
+        if (content_) lv_obj_add_flag(content_, LV_OBJ_FLAG_HIDDEN);
+        if (emoji_box_) lv_obj_add_flag(emoji_box_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_t* white_text[] = {network_label_, mute_label_, battery_label_, status_label_, notification_label_};
+        for (auto* t : white_text) {
+            if (t) lv_obj_set_style_text_color(t, lv_color_white(), 0);
+        }
+
+        face_ = lv_obj_create(screen);
         lv_obj_remove_style_all(face_);
-        lv_obj_set_size(face_, kPanelW, kPanelH);
+        lv_obj_set_size(face_, LV_HOR_RES, LV_VER_RES);
+        lv_obj_align(face_, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_move_background(face_);
         lv_obj_set_style_bg_opa(face_, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(face_, lv_color_hex(0x000000), 0);
-        lv_obj_set_style_radius(face_, 28, 0);
+        lv_obj_set_style_radius(face_, 0, 0);
         lv_obj_remove_flag(face_, LV_OBJ_FLAG_SCROLLABLE);
 
         for (int i = 0; i < 2; i++) {
