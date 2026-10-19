@@ -53,17 +53,21 @@ jobs:
         shell: bash
         working-directory: upstream
         run: |
+          # The device reads the wake phrases from index.json inside the assets
+          # partition (not from the C++ code), so the variants go there.
           python3 - <<'PY'
-          p = 'main/audio/wake_words/custom_wake_word.cc'
+          p = 'scripts/build_default_assets.py'
           s = open(p, encoding='utf-8').read()
-          anchor = '        commands_.push_back({CONFIG_CUSTOM_WAKE_WORD, CONFIG_CUSTOM_WAKE_WORD_DISPLAY, "wake"});\n'
+          anchor = "        print(f\"  custom wake word: {custom_wake_word_config['wake_word']} ({custom_wake_word_config['display']})\")\n"
           assert s.count(anchor) == 1, 'anchor not found'
-          extra = ''.join(
-              '        commands_.push_back({"%s", CONFIG_CUSTOM_WAKE_WORD_DISPLAY, "wake"});\n' % v
-              for v in ("hai ru bi", "hei lu bi", "hai lu bi", "hei ru bei"))
-          open(p, 'w', encoding='utf-8').write(s.replace(anchor, anchor + extra))
+          extra = (
+              "        for _v in ('hai ru bi', 'hei lu bi', 'hai lu bi', 'hei ru bei', 'ru bi ei'):\n"
+              "            multinet_model_info['commands'].append({'command': _v, 'text': custom_wake_word_config['display'], 'action': 'wake'})\n"
+              "        print('  wake word variants:', [c['command'] for c in multinet_model_info['commands']])\n"
+          )
+          open(p, 'w', encoding='utf-8').write(s.replace(anchor, extra + anchor))
           PY
-          grep -n '"hai ru bi"' main/audio/wake_words/custom_wake_word.cc
+          grep -n "wake word variants" scripts/build_default_assets.py
 
       - name: Install Rubi face (13 expressions)
         shell: bash
