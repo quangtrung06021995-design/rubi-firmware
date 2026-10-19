@@ -49,6 +49,22 @@ jobs:
           PY
           grep -n "CONFIG_USE_CUSTOM_WAKE_WORD=y" scripts/build.py
 
+      - name: Wake word pronunciation variants (hei/hai, ru/lu bi)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          p = 'main/audio/wake_words/custom_wake_word.cc'
+          s = open(p, encoding='utf-8').read()
+          anchor = '        commands_.push_back({CONFIG_CUSTOM_WAKE_WORD, CONFIG_CUSTOM_WAKE_WORD_DISPLAY, "wake"});\n'
+          assert s.count(anchor) == 1, 'anchor not found'
+          extra = ''.join(
+              '        commands_.push_back({"%s", CONFIG_CUSTOM_WAKE_WORD_DISPLAY, "wake"});\n' % v
+              for v in ("hai ru bi", "hei lu bi", "hai lu bi", "hei ru bei"))
+          open(p, 'w', encoding='utf-8').write(s.replace(anchor, anchor + extra))
+          PY
+          grep -n '"hai ru bi"' main/audio/wake_words/custom_wake_word.cc
+
       - name: Install Rubi face (13 expressions)
         shell: bash
         working-directory: upstream
