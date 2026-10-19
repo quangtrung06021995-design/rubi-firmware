@@ -1,0 +1,71 @@
+name: Build Rubi camera firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - camera/**
+      - .github/workflows/camera.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v5.4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stamp version
+        shell: bash
+        working-directory: camera
+        run: |
+          VER="1.0.${{ github.run_number }}"
+          sed -i "s/set(PROJECT_VER \"[^\"]*\")/set(PROJECT_VER \"$VER\")/" CMakeLists.txt
+          grep -n PROJECT_VER CMakeLists.txt
+          echo "CAM_VERSION=$VER" >> "$GITHUB_ENV"
+
+      - name: Build
+        shell: bash
+        working-directory: camera
+        run: |
+          set -o pipefail
+          git config --global --add safe.directory '*'
+          source "$IDF_PATH/export.sh"
+          idf.py set-target esp32s3 2>&1 | tee ../camera-build.log
+          idf.py build 2>&1 | tee -a ../camera-build.log
+          cd build && python -m esptool --chip esp32s3 merge_bin -o merged-binary.bin @flash_args 2>&1 | tee -a ../../camera-build.log
+          ls -la
+
+      - name: Publish build log (branch build-log-cam)
+        if: always()
+        shell: bash
+        run: |
+          git config --global --add safe.directory '*'
+          mkdir -p /tmp/logpub && cd /tmp/logpub && rm -rf .git
+          { echo "cam run ${{ github.run_number }} sha ${{ github.sha }}"; tail -n 300 "$GITHUB_WORKSPACE/camera-build.log" 2>/dev/null; } > build.log.txt
+          git init -q && git checkout -q -b build-log-cam
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "camera build log"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" build-log-cam || true
+
+      - name: Publish OTA files (branch ota-cam)
+        shell: bash
+        run: |
+          mkdir -p /tmp/otapub && cd /tmp/otapub && rm -rf .git
+          cp "$GITHUB_WORKSPACE/camera/build/rubi_cam.bin" camera.bin
+          printf '{"version":"%s","url":"https://raw.githubusercontent.com/%s/ota-cam/camera.bin"}\n' "$CAM_VERSION" "${{ github.repository }}" > manifest.json
+          cat manifest.json; ls -la
+          git init -q && git checkout -q -b ota-cam
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "Camera OTA $CAM_VERSION"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ota-cam
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: rubi-camera-firmware
+          path: camera/build/merged-binary.bin
+          if-no-files-found: error
