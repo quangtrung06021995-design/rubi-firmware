@@ -69,6 +69,20 @@ jobs:
           PY
           grep -n "wake word variants" scripts/build_default_assets.py
 
+      - name: Keep Rubi assets (ignore server-pushed assets that replace the wake word)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          p = 'main/application.cc'
+          s = open(p, encoding='utf-8').read()
+          old = '    std::string download_url = settings.GetString("download_url");\n'
+          assert s.count(old) == 1, 'anchor not found'
+          new = '    std::string download_url;\n    settings.EraseKey("download_url");\n'
+          open(p, 'w', encoding='utf-8').write(s.replace(old, new))
+          PY
+          grep -n 'settings.EraseKey("download_url")' main/application.cc
+
       - name: Install Rubi face (13 expressions)
         shell: bash
         working-directory: upstream
