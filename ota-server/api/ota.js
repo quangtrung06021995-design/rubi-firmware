@@ -23,6 +23,9 @@ module.exports = async (req, res) => {
     const m = await (await fetch(MANIFEST, { cache: 'no-store' })).json();
     if (m && m.version && m.url) data.firmware = { version: m.version, url: m.url };
   } catch (e) { /* no manifest yet: leave firmware as the upstream answered */ }
+  // Clock on the screen: always Korea time (UTC+9) unless TZ_OFFSET_MIN is set.
+  const tz = Number(process.env.TZ_OFFSET_MIN || 540);
+  data.server_time = { timestamp: Date.now(), timezone_offset: tz };
   res.setHeader('Content-Type', 'application/json');
   res.status(200).send(JSON.stringify(data));
 };
