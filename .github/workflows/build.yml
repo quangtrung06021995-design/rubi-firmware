@@ -144,22 +144,7 @@ jobs:
           s = open(p, encoding='utf-8').read()
           anchor = "    void InitializeTools() {\n    }"
           assert s.count(anchor) == 1
-          new = """    void InitializeTools() {
-        McpServer::GetInstance().AddTool("self.weather.get_current",
-            "Get the real current weather and today's forecast for the place where the device is now. "
-            "Always use this tool when the user asks about weather, temperature, rain or whether to bring an umbrella or coat. "
-            "Read the returned text to the user as is; do not guess the location.",
-            PropertyList(), [](const PropertyList&) -> ReturnValue {
-                auto http = Board::GetInstance().GetNetwork()->CreateHttp(0);
-                if (!http->Open("GET", "https://rubi-firmware.vercel.app/api/weather")) {
-                    return std::string("Khong lay duoc thoi tiet luc nay.");
-                }
-                std::string body = http->ReadAll();
-                http->Close();
-                return body;
-            });
-    }"""
-          s = s.replace(anchor, new)
+          s = s.replace(anchor, open('../patches/weather_tool.txt', encoding='utf-8').read().rstrip('\n'))
           open(p, 'w', encoding='utf-8').write(s)
           PY
 
