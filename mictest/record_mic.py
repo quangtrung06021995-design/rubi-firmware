@@ -29,10 +29,12 @@ while True:
     elif line.startswith("@BEGIN"):
         kv = dict(x.split("=") for x in line.split()[1:])
         cur = {"gain": int(kv["gain"]), "rate": int(kv["rate"])}; data = bytearray()
-        print("Receiving... (slow on a UART bridge, ~30 s)")
+        print("Receiving... (about 30-60 s, do not press Ctrl+C)")
     elif line.startswith("@D ") and cur is not None:
         try: data += base64.b64decode(line[3:])
         except Exception: print("bad line skipped")
+        if len(data) % 19200 < 192:
+            print(f"  received {len(data)//1024} KB of {cur['rate']*12//1024} KB", end="\r", flush=True)
     elif line.startswith("@END") and cur is not None:
         n += 1
         fn = f"mic_{a.label}_gain{cur['gain']}_{n:02d}.wav"
