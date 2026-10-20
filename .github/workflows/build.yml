@@ -83,7 +83,7 @@ jobs:
           PY
           grep -n 'settings.EraseKey("download_url")' main/application.cc
 
-      - name: Microphone gain 36 dB (far-field speech; upstream uses 30 dB, NS/AGC are off)
+      - name: Microphone gain 42 dB (far-field speech; upstream uses 30 dB, NS/AGC are off)
         shell: bash
         working-directory: upstream
         run: |
@@ -92,9 +92,9 @@ jobs:
           s = open(p, encoding='utf-8').read()
           old = '    input_gain_ = 30;\n'
           assert s.count(old) == 1, 'anchor not found'
-          open(p, 'w', encoding='utf-8').write(s.replace(old, '    input_gain_ = 36;\n'))
+          open(p, 'w', encoding='utf-8').write(s.replace(old, '    input_gain_ = 42;\n'))
           PY
-          grep -n "input_gain_ = 36" main/audio/codecs/es8311_audio_codec.cc
+          grep -n "input_gain_ = 42" main/audio/codecs/es8311_audio_codec.cc
 
       - name: Reboot watchdog (force a hardware reset if the normal reboot hangs after OTA)
         shell: bash
