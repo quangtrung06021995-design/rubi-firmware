@@ -96,6 +96,35 @@ jobs:
           PY
           grep -n "input_gain_ = 36" main/audio/codecs/es8311_audio_codec.cc
 
+      - name: Reboot watchdog (force a hardware reset if the normal reboot hangs after OTA)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          p = 'main/application.cc'
+          s = open(p, encoding='utf-8').read()
+          inc = '#include <esp_log.h>\n'
+          assert s.count(inc) == 1, 'include anchor not found'
+          s = s.replace(inc, inc + '#include <esp_timer.h>\n#include <esp_rom_sys.h>\n')
+          old = '    ESP_LOGI(TAG, "Rebooting...");\n'
+          assert s.count(old) == 1, 'reboot anchor not found'
+          new = old + (
+              '    {\n'
+              '        // Independent of every app task: if anything below blocks, hard-reset after 5 s.\n'
+              '        static esp_timer_handle_t reboot_wd = nullptr;\n'
+              '        if (reboot_wd == nullptr) {\n'
+              '            esp_timer_create_args_t wd_args = {};\n'
+              '            wd_args.callback = [](void*) { esp_rom_software_reset_system(); };\n'
+              '            wd_args.name = "reboot_wd";\n'
+              '            if (esp_timer_create(&wd_args, &reboot_wd) == ESP_OK) {\n'
+              '                esp_timer_start_once(reboot_wd, 5000000);\n'
+              '            }\n'
+              '        }\n'
+              '    }\n')
+          open(p, 'w', encoding='utf-8').write(s.replace(old, new))
+          PY
+          grep -n "reboot_wd" main/application.cc | head -3
+
       - name: Install Rubi face (13 expressions)
         shell: bash
         working-directory: upstream
