@@ -99,6 +99,7 @@ private:
     bool round_eyes_ = false;
     int eye_d_ = 62;
     int blink_countdown_ = 30;
+    int idle_countdown_ = 60;  // ticks of 100 ms until the next idle expression change
     int blink_phase_ = 0;
     bool speaking_ = false;
 
@@ -448,6 +449,24 @@ private:
         if (speaking_) {
             Apply(expr_);  // back to the resting mouth of the current expression
             return;
+        }
+        // While waiting (idle) Rubi keeps changing mood every 8-16 s. No angry/crying here, so
+        // a small child is never upset by the idle face. Other states keep the server's emotion.
+        if (Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+            if (--idle_countdown_ <= 0 && blink_phase_ == 0) {
+                static const Expr kIdle[] = {
+                    Expr::kNeutral, Expr::kHappy, Expr::kLaughing, Expr::kWinking, Expr::kLoving,
+                    Expr::kRelaxed, Expr::kCool, Expr::kThinking, Expr::kSurprised,
+                    Expr::kEmbarrassed, Expr::kSleepy, Expr::kNeutral};
+                Expr next = expr_;
+                for (int i = 0; i < 6 && next == expr_; i++) {
+                    next = kIdle[esp_random() % (sizeof(kIdle) / sizeof(kIdle[0]))];
+                }
+                Apply(next);
+                idle_countdown_ = 80 + (int)(esp_random() % 80);
+            }
+        } else {
+            idle_countdown_ = 50;
         }
         if (--blink_countdown_ <= 0) {
             if (blink_phase_ == 0) {
