@@ -125,6 +125,29 @@ jobs:
           PY
           grep -n "reboot_wd" main/application.cc | head -3
 
+      - name: Microphone filters (hum and whine)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          p = 'main/audio/codecs/es8311_audio_codec.cc'
+          s = open(p, encoding='utf-8').read()
+          inc = '#include "es8311_audio_codec.h"\n'
+          assert s.count(inc) == 1
+          old = ('int Es8311AudioCodec::Read(int16_t* dest, int samples) {\n'
+                 '    if (input_enabled_) {\n'
+                 '        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_codec_dev_read(dev_, (void*)dest, samples * sizeof(int16_t)));\n'
+                 '    }\n'
+                 '    return samples;\n'
+                 '}\n')
+          assert s.count(old) == 1
+          helpers = open('../patches/mic_filter_helpers.txt', encoding='utf-8').read()
+          newread = open('../patches/mic_filter_read.txt', encoding='utf-8').read()
+          s = s.replace(inc, inc + '\n' + helpers, 1).replace(old, newread, 1)
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+          grep -n "RubiBiquad\|g_filters_ready" main/audio/codecs/es8311_audio_codec.cc | head
+
       - name: Install Rubi face (13 expressions)
         shell: bash
         working-directory: upstream

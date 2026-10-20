@@ -1,0 +1,24 @@
+int Es8311AudioCodec::Read(int16_t* dest, int samples) {
+    if (input_enabled_) {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(esp_codec_dev_read(dev_, (void*)dest, samples * sizeof(int16_t)));
+        if (!g_filters_ready) {
+            const float fs = (float)input_sample_rate_;
+            g_hp[0].Design(true, 130.0f, fs, 0.5412f);
+            g_hp[1].Design(true, 130.0f, fs, 1.3066f);
+            g_lp[0].Design(false, 7000.0f, fs, 0.5412f);
+            g_lp[1].Design(false, 7000.0f, fs, 1.3066f);
+            g_filters_ready = true;
+        }
+        for (int i = 0; i < samples; i++) {
+            float x = (float)dest[i];
+            x = g_hp[0].Run(x);
+            x = g_hp[1].Run(x);
+            x = g_lp[0].Run(x);
+            x = g_lp[1].Run(x);
+            if (x > 32767.0f) x = 32767.0f;
+            if (x < -32768.0f) x = -32768.0f;
+            dest[i] = (int16_t)x;
+        }
+    }
+    return samples;
+}
