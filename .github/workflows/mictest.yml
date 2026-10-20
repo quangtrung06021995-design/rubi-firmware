@@ -33,7 +33,7 @@ jobs:
         run: |
           set -o pipefail
           source "$IDF_PATH/export.sh"
-          python scripts/build.py freenove-esp32s3-display-2.8-lcd --name mictest --language vi-VN 2>&1 | tee ../mictest.log
+          python scripts/build.py freenove-esp32s3-display-2.8-lcd --name rubi --language vi-VN 2>&1 | tee ../mictest.log
       - name: Publish build log
         if: always()
         shell: bash
