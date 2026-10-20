@@ -43,6 +43,15 @@ jobs:
           git init -q && git checkout -q -b build-log-mictest
           git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "mictest log"
           git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" build-log-mictest || true
+      - name: Publish files (branch mictest)
+        shell: bash
+        run: |
+          mkdir -p /tmp/mtpub && cd /tmp/mtpub && rm -rf .git
+          cp "$GITHUB_WORKSPACE/upstream/build/merged-binary.bin" rubi-mictest-merged.bin
+          cp "$GITHUB_WORKSPACE/mictest/record_mic.py" record_mic.py
+          git init -q && git checkout -q -b mictest
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "mictest files"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" mictest
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
