@@ -14,7 +14,7 @@ try:
     ser.dtr = False; ser.rts = False
 except Exception:
     pass
-print(f"Opened {a.port} @ {a.baud}. If nothing appears, press RESET on the board.")
+print(f"[script v3] Opened {a.port} @ {a.baud}. If nothing appears, press RESET on the board.")
 cur = None; data = bytearray(); n = 0
 
 def save():
@@ -35,6 +35,9 @@ while True:
     line = ser.readline().decode("ascii", "ignore").strip()
     if not line.startswith("@"):
         continue
+    if cur is not None and (line.startswith("@HELLO") or line.startswith("@CUE") or line.startswith("@BEGIN")):
+        print(f"\n!! board restarted or sent a new cue after only {len(data)} of {cur['bytes']} bytes; saving what arrived", flush=True)
+        save()
     if line.startswith("@HELLO"):
         print(line)
     elif line.startswith("@CUE"):
