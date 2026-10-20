@@ -1,0 +1,301 @@
+mictest run 6
+[2073/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/anim/gfx_anim_decoder_eaf.c.obj
+[2074/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/font/gfx_font_ft.c.obj
+[2075/2241] Building C object esp-idf/espressif__freetype/output/CMakeFiles/freetype.dir/src/sfnt/sfnt.c.obj
+[2076/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/basic/gfx_button.c.obj
+[2077/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/basic/gfx_qrcode.c.obj
+[2078/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/anim/gfx_anim.c.obj
+[2079/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/img/gfx_img_dec.c.obj
+[2080/2241] Building C object esp-idf/espressif__freetype/output/CMakeFiles/freetype.dir/src/truetype/truetype.c.obj
+[2081/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/img/gfx_img.c.obj
+[2082/2241] Linking CXX static library esp-idf/espressif__freetype/output/libfreetype.a
+[2083/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/motion/gfx_motion.c.obj
+[2084/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/font/gfx_font_lv.c.obj
+[2085/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/label/gfx_draw_label.c.obj
+[2086/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/label/gfx_label_obj.c.obj
+[2087/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/label/gfx_label.c.obj
+[2088/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/motion/gfx_motion_scene.c.obj
+[2089/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/motion/gfx_motion_style.c.obj
+[2090/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/motion/gfx_motion_player.c.obj
+[2091/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/img/gfx_mesh_img.c.obj
+[2092/2241] Building C object esp-idf/espressif2022__esp_emote_gfx/CMakeFiles/__idf_espressif2022__esp_emote_gfx.dir/src/widget/motion/gfx_motion_primitives.c.obj
+[2093/2241] Linking C static library esp-idf/espressif2022__esp_emote_gfx/libespressif2022__esp_emote_gfx.a
+[2094/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/default_assets/font_maison_neue_book_26.c.obj
+[2095/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/default_assets/font_maison_neue_book_12.c.obj
+[2096/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/default_assets/font_puhui_basic_20_4.c.obj
+[2097/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/emote_init.c.obj
+[2098/2241] Building C object esp-idf/espressif2022__image_player/CMakeFiles/__idf_espressif2022__image_player.dir/anim_dec.c.obj
+[2099/2241] Building C object esp-idf/espressif2022__image_player/CMakeFiles/__idf_espressif2022__image_player.dir/anim_vfs.c.obj
+[2100/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/emote_load.c.obj
+[2101/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/emote_setup.c.obj
+[2102/2241] Building C object esp-idf/espressif2022__image_player/CMakeFiles/__idf_espressif2022__image_player.dir/anim_player.c.obj
+[2103/2241] Building C object esp-idf/txp666__otto-emoji-gif-component/CMakeFiles/__idf_txp666__otto-emoji-gif-component.dir/src/otto_emoji_gif.c.obj
+[2104/2241] Linking C static library esp-idf/txp666__otto-emoji-gif-component/libtxp666__otto-emoji-gif-component.a
+[2105/2241] Linking C static library esp-idf/espressif2022__image_player/libespressif2022__image_player.a
+[2106/2241] Building C object esp-idf/espressif2022__esp_emote_expression/CMakeFiles/__idf_espressif2022__esp_emote_expression.dir/src/emote_op.c.obj
+[2107/2241] Linking C static library esp-idf/espressif2022__esp_emote_expression/libespressif2022__esp_emote_expression.a
+[2108/2241] Building C object esp-idf/tny-robotics__sh1106-esp-idf/CMakeFiles/__idf_tny-robotics__sh1106-esp-idf.dir/esp_lcd_panel_sh1106.c.obj
+[2109/2241] Linking C static library esp-idf/tny-robotics__sh1106-esp-idf/libtny-robotics__sh1106-esp-idf.a
+[2110/2241] Building C object esp-idf/waveshare__custom_io_expander_ch32v003/CMakeFiles/__idf_waveshare__custom_io_expander_ch32v003.dir/custom_io_expander_ch32v003.c.obj
+[2111/2241] Linking C static library esp-idf/waveshare__custom_io_expander_ch32v003/libwaveshare__custom_io_expander_ch32v003.a
+[2112/2241] Building C object esp-idf/waveshare__esp_lcd_sh8601/CMakeFiles/__idf_waveshare__esp_lcd_sh8601.dir/esp_lcd_sh8601.c.obj
+[2113/2241] Linking C static library esp-idf/waveshare__esp_lcd_sh8601/libwaveshare__esp_lcd_sh8601.a
+[2114/2241] Building C object esp-idf/waveshare__esp_lcd_touch_cst9217/CMakeFiles/__idf_waveshare__esp_lcd_touch_cst9217.dir/esp_lcd_touch_cst9217.c.obj
+[2115/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_io.c.obj
+[2116/2241] Linking C static library esp-idf/waveshare__esp_lcd_touch_cst9217/libwaveshare__esp_lcd_touch_cst9217.a
+[2117/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_io_i2c.c.obj
+[2118/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_flasher.c.obj
+[2119/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_io_uart.c.obj
+[2120/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_io_spi.c.obj
+[2121/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_ops.c.obj
+[2122/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_flasher_we2_uart.c.obj
+[2123/2241] Building C object esp-idf/wvirgil123__sscma_client/CMakeFiles/__idf_wvirgil123__sscma_client.dir/src/sscma_client_flasher_we2_spi.c.obj
+[2124/2241] Linking C static library esp-idf/wvirgil123__sscma_client/libwvirgil123__sscma_client.a
+[2125/2241] Building CXX object esp-idf/m5stack__m5ioe1/CMakeFiles/__idf_m5stack__m5ioe1.dir/src/M5IOE1.cpp.obj
+[2126/2241] Linking C static library esp-idf/m5stack__m5ioe1/libm5stack__m5ioe1.a
+[2127/2241] Building CXX object esp-idf/m5stack__m5pm1/CMakeFiles/__idf_m5stack__m5pm1.dir/src/M5PM1.cpp.obj
+[2128/2241] Linking C static library esp-idf/m5stack__m5pm1/libm5stack__m5pm1.a
+[2129/2241] Generating ../../0.ogg.S
+[2130/2241] Generating ../../1.ogg.S
+[2131/2241] Generating ../../2.ogg.S
+[2132/2241] Generating ../../5.ogg.S
+[2133/2241] Generating ../../4.ogg.S
+[2134/2241] Generating ../../6.ogg.S
+[2135/2241] Generating ../../3.ogg.S
+[2136/2241] Generating ../../8.ogg.S
+[2137/2241] Generating ../../7.ogg.S
+[2138/2241] Generating ../../9.ogg.S
+[2139/2241] Generating ../../welcome.ogg.S
+[2140/2241] Generating ../../err_pin.ogg.S
+[2141/2241] Generating ../../wificonfig.ogg.S
+[2142/2241] Generating ../../upgrade.ogg.S
+[2143/2241] Generating ../../low_battery.ogg.S
+[2144/2241] Generating ../../exclamation.ogg.S
+[2145/2241] Generating ../../popup.ogg.S
+[2146/2241] Generating ../../success.ogg.S
+[2147/2241] Generating ../../err_reg.ogg.S
+[2148/2241] Generating ../../vibration.ogg.S
+[2149/2241] Generating ../../activation.ogg.S
+[2150/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/audio_debugger.cc.obj
+[2151/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/demuxer/ogg_demuxer.cc.obj
+[2152/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/audio_codec.cc.obj
+[2153/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/no_audio_codec.cc.obj
+[2154/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/box_audio_codec.cc.obj
+[2155/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/es8311_audio_codec.cc.obj
+[2156/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/notify/notify_player.cc.obj
+[2157/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/es8374_audio_codec.cc.obj
+[2158/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/audio_service.cc.obj
+[2159/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/es8388_audio_codec.cc.obj
+[2160/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/es8389_audio_codec.cc.obj
+[2161/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/codecs/dummy_audio_codec.cc.obj
+[2162/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/text_glyph.cc.obj
+[2163/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/led/single_led.cc.obj
+[2164/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/led/circular_strip.cc.obj
+[2165/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/display.cc.obj
+[2166/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/led/gpio_led.cc.obj
+[2167/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/oled_display.cc.obj
+[2168/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/lvgl_font.cc.obj
+[2169/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lcd_display.cc.obj
+[2170/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/emoji_collection.cc.obj
+[2171/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/lvgl_image.cc.obj
+[2172/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/lvgl_theme.cc.obj
+[2173/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/lvgl_display.cc.obj
+[2174/2241] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/gif/gifdec.c.obj
+[2175/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/emote_display.cc.obj
+[2176/2241] Building C object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/jpg/jpeg_to_image.c.obj
+[2177/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/jpg/image_to_jpeg.cpp.obj
+[2178/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/gif/lvgl_gif.cc.obj
+[2179/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/display/lvgl_display/dynamic_glyph_cache.cc.obj
+[2180/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/protocols/text_glyph_payload.cc.obj
+[2181/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/protocols/protocol.cc.obj
+[2182/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/system_info.cc.obj
+[2183/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/settings.cc.obj
+[2184/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/protocols/websocket_protocol.cc.obj
+[2185/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/protocols/mqtt_protocol.cc.obj
+[2186/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/device_state_machine.cc.obj
+[2187/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/ota.cc.obj
+[2188/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/main.cc.obj
+[2189/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/mcp_server.cc.obj
+[2190/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/assets.cc.obj
+[2191/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/application.cc.obj
+[2192/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/board.cc.obj
+[2193/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/adc_battery_monitor.cc.obj
+[2194/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/wifi_board.cc.obj
+[2195/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/backlight.cc.obj
+[2196/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/ml307_board.cc.obj
+[2197/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/button.cc.obj
+[2198/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/nt26_board.cc.obj
+[2199/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/i2c_device.cc.obj
+[2200/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/axp2101.cc.obj
+[2201/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/knob.cc.obj
+[2202/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/dual_network_board.cc.obj
+[2203/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/system_reset.cc.obj
+[2204/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/press_to_talk_mcp_tool.cc.obj
+[2205/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/power_save_timer.cc.obj
+[2206/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/sleep_timer.cc.obj
+[2207/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/sy6970.cc.obj
+[2208/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/wake_words/wake_word_audio_cache.cc.obj
+[2209/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/freenove-esp32s3-display-2.8-lcd/freenove-esp32s3-display-2.8-lcd.cc.obj
+[2210/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/0.ogg.S.obj
+[2211/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/1.ogg.S.obj
+[2212/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/2.ogg.S.obj
+[2213/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/3.ogg.S.obj
+[2214/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/4.ogg.S.obj
+[2215/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/5.ogg.S.obj
+[2216/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/6.ogg.S.obj
+[2217/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/7.ogg.S.obj
+[2218/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/8.ogg.S.obj
+[2219/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/9.ogg.S.obj
+[2220/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/engines/afe_audio_engine.cc.obj
+[2221/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/activation.ogg.S.obj
+[2222/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/err_pin.ogg.S.obj
+[2223/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/err_reg.ogg.S.obj
+[2224/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/upgrade.ogg.S.obj
+[2225/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/welcome.ogg.S.obj
+[2226/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/wificonfig.ogg.S.obj
+[2227/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/exclamation.ogg.S.obj
+[2228/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/low_battery.ogg.S.obj
+[2229/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/popup.ogg.S.obj
+[2230/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/success.ogg.S.obj
+[2231/2241] Building ASM object esp-idf/main/CMakeFiles/__idf_main.dir/__/__/vibration.ogg.S.obj
+[2232/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/audio/wake_words/custom_wake_word.cc.obj
+[2233/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/esp32_camera.cc.obj
+[2234/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/rndis_board.cc.obj
+[2235/2241] Building CXX object esp-idf/main/CMakeFiles/__idf_main.dir/boards/common/esp_video.cc.obj
+[2236/2241] Linking C static library esp-idf/main/libmain.a
+[2237/2241] Generating esp-idf/esp_system/ld/sections.ld
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:58: SR_WN_WN9S_HILEXIN: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:62: SR_WN_WN9S_HIESP: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:66: SR_WN_WN9S_NIHAOXIAOZHI: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:70: SR_WN_WN9S_HIJASON: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:79: SR_WN_WN9_HILEXIN: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:83: SR_WN_WN9_HIESP: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:87: SR_WN_WN9L_JA_KONNICHIHAESP_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:91: SR_WN_WN9L_FR_BONJOURESP_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:95: SR_WN_WN9_NIHAOMIAOBAN_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:99: SR_WN_WN9_XIAOAITONGXUE: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:103: SR_WN_WN9L_XIAOAITONGXUE: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:107: SR_WN_WN9_NIHAOXIAOZHI_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:111: SR_WN_WN9L_NIHAOXIAOZHI_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:115: SR_WN_WN9_ALEXA: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:119: SR_WN_WN9_JARVIS_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:123: SR_WN_WN9_COMPUTER_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:127: SR_WN_WN9_HEYWILLOW_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:131: SR_WN_WN9_HIMFIVE: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:135: SR_WN_WN9_SOPHIA_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:139: SR_WN_WN9_HEYWANDA_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:143: SR_WN_WN9_HIJOLLY_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:147: SR_WN_WN9_HIFAIRY_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:151: SR_WN_WN9_HEYPRINTER_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:155: SR_WN_WN9_MYCROFT_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:159: SR_WN_WN9_HIJOY_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:163: SR_WN_WN9_HIJASON_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:167: SR_WN_WN9_ASTROLABE_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:171: SR_WN_WN9_HEYILY_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:175: SR_WN_WN9_BLUECHIP_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:179: SR_WN_WN9_HIANDY_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:183: SR_WN_WN9_HEYIVY_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:187: SR_WN_WN9L_HISTACKCHAN_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:191: SR_WN_WN9_HEYKIRA_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:195: SR_WN_WN9L_HEYGIGI_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:199: SR_WN_WN9_XIAOLONGXIAOLONG_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:203: SR_WN_WN9_HIMIAOMIAO_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:207: SR_WN_WN9_MIAOMIAOTONGXUE_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:211: SR_WN_WN9_NIHAOXIAOXIN_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:215: SR_WN_WN9_XIAOMEITONGXUE_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:219: SR_WN_WN9_HILILI_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:223: SR_WN_WN9_HITELLY_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:227: SR_WN_WN9_XIAOBINXIAOBIN_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:231: SR_WN_WN9_HAIXIAOWU_TTS: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:235: SR_WN_WN9_XIAOYAXIAOYA_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:239: SR_WN_WN9_LINAIBAN_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:243: SR_WN_WN9_XIAOSUROU_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:247: SR_WN_WN9_XIAOYUTONGXUE_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:251: SR_WN_WN9_XIAOMINGTONGXUE_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:255: SR_WN_WN9_XIAOKANGTONGXUE_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:259: SR_WN_WN9_XIAOJIANXIAOJIAN_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:263: SR_WN_WN9_XIAOTEXIAOTE_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:267: SR_WN_WN9_NIHAOXIAOYI_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:271: SR_WN_WN9_NIHAOBAIYING_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:275: SR_WN_WN9_NIHAODONGDONG_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:279: SR_WN_WN9_HIWALLE_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:283: SR_WN_WN9_XIAOLUXIAOLU_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:287: SR_WN_WN9_NIHAOXIAOAN_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:291: SR_WN_WN9_NI3HAO3XIAO3MAI4_TTS2: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:295: SR_WN_WN9_NI3HAO3XIAO3RUI4_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:299: SR_WN_WN9_HAI1XIAO3OU1_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:303: SR_WN_WN9_XIAO3JIA1XIAO3JIA1_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:307: SR_WN_WN9_XIAO3FENG1XIAO3FENG1_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:311: SR_WN_WN9_HAI1XIAO3XIANG4_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+NOTE: /__w/rubi-firmware/rubi-firmware/upstream/managed_components/espressif__esp-sr/Kconfig.projbuild:315: SR_WN_WN9L_NI3HAO3XING1BAO3_TTS3: 'default False' is not a valid bool value (only 'y' and 'n' are allowed). Value is treated as 'n'.
+[2238/2241] Building C object CMakeFiles/xiaozhi.elf.dir/project_elf_src_esp32s3.c.obj
+[2239/2241] Linking CXX executable xiaozhi.elf
+[2240/2241] Generating binary image from built executable
+esptool v5.4.0
+Creating ESP32-S3 image...
+Merged 3 ELF sections.
+Successfully created ESP32-S3 image.
+Generated /__w/rubi-firmware/rubi-firmware/upstream/build/xiaozhi.bin
+[2241/2241] cd /__w/rubi-firmware/rubi-firmware/upstream/build && /opt/esp/python_env/idf6.1_py3.12_env/bin/python /opt/esp/idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /__w/rubi-firmware/rubi-firmware/upstream/build/partition_table/partition-table.bin /__w/rubi-firmware/rubi-firmware/upstream/build/xiaozhi.bin
+xiaozhi.bin binary size 0x1cd610 bytes. Smallest app partition is 0x3f0000 bytes. 0x2229f0 bytes (54%) free.
+Executing action: all (aliases: build)
+Running ninja in directory /__w/rubi-firmware/rubi-firmware/upstream/build
+Executing "ninja all"...
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default-reset --after hard-reset write-flash --flash-mode dio --flash-size 16MB --flash-freq 80m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0xd000 build/ota_data_initial.bin 0x20000 build/xiaozhi.bin 0x800000 build/generated_assets.bin
+or from the "/__w/rubi-firmware/rubi-firmware/upstream/build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default-reset --after hard-reset write-flash "@flash_args"
+[0/2] Re-checking globbed directories...
+[1/4] cd /__w/rubi-firmware/rubi-firmware/upstream/build && /opt/esp/python_env/idf6.1_py3.12_env/bin/python /opt/esp/idf/components/partition_table/check_sizes.py --offset 0x8000 partition --type app /__w/rubi-firmware/rubi-firmware/upstream/build/partition_table/partition-table.bin /__w/rubi-firmware/rubi-firmware/upstream/build/xiaozhi.bin
+xiaozhi.bin binary size 0x1cd610 bytes. Smallest app partition is 0x3f0000 bytes. 0x2229f0 bytes (54%) free.
+[2/4] Performing build step for 'bootloader'
+[1/1] cd /__w/rubi-firmware/rubi-firmware/upstream/build/bootloader && /opt/esp/python_env/idf6.1_py3.12_env/bin/python /opt/esp/idf/components/partition_table/check_sizes.py --offset 0x8000 bootloader 0x0 /__w/rubi-firmware/rubi-firmware/upstream/build/bootloader/bootloader.bin
+Bootloader binary size 0x40a0 bytes. 0x3f60 bytes (50%) free.
+[3/4] No install step for 'bootloader'
+[4/4] Completed 'bootloader'
+esptool --chip esp32s3 merge-bin -o merged-binary.bin -f raw --flash-mode dio --flash-freq 80m --flash-size 16MB 0x0 bootloader/bootloader.bin 0x8000 partition_table/partition-table.bin 0xd000 ota_data_initial.bin 0x800000 generated_assets.bin 0x20000 xiaozhi.bin
+esptool v5.4.0
+HINT: Consider using --format hex to avoid flashing unused 0xFF padding between input regions.
+SHA digest in image updated.
+Wrote 0x99650d bytes to file 'merged-binary.bin', ready to flash to offset 0x0.
+Adding "merge-bin"'s dependency "all" to list of commands with default set of options.
+Executing action: all (aliases: build)
+Running ninja in directory /__w/rubi-firmware/rubi-firmware/upstream/build
+Executing "ninja all"...
+Executing action: merge-bin
+Merged binary merged-binary.bin will be created in the build directory...
+Running merge-bin in directory /__w/rubi-firmware/rubi-firmware/upstream/build
+Executing "/opt/esp/python_env/idf6.1_py3.12_env/bin/python -m esptool --chip esp32s3 merge-bin -o merged-binary.bin -f raw @flash_args"...
+
+Project build complete. To flash, run:
+ idf.py flash
+or
+ idf.py -p PORT flash
+or
+ python -m esptool --chip esp32s3 -b 460800 --before default-reset --after hard-reset write-flash --flash-mode dio --flash-size 16MB --flash-freq 80m 0x0 build/bootloader/bootloader.bin 0x8000 build/partition_table/partition-table.bin 0xd000 build/ota_data_initial.bin 0x20000 build/xiaozhi.bin 0x800000 build/generated_assets.bin
+or from the "/__w/rubi-firmware/rubi-firmware/upstream/build" directory
+ python -m esptool --chip esp32s3 -b 460800 --before default-reset --after hard-reset write-flash "@flash_args"
+Project Version: 2.5.3 (main/boards/freenove-esp32s3-display-2.8-lcd/config.json)
+--------------------------------------------------------------------------------
+name: rubi
+reported_type: freenove-esp32s3-display-2.8-lcd
+target: esp32s3
+language: vi-VN
+wake_word: wn9_hiesp
+sdkconfig_append: CONFIG_BOARD_TYPE_Freenove_ESP32S3_DISPLAY_2_8_LCD=y
+sdkconfig_append: CONFIG_USE_CUSTOM_WAKE_WORD=n
+sdkconfig_append: CONFIG_CUSTOM_WAKE_WORD="hei ru bi"
+sdkconfig_append: CONFIG_CUSTOM_WAKE_WORD_DISPLAY="Hey Rubi"
+sdkconfig_append: CONFIG_CUSTOM_WAKE_WORD_THRESHOLD=15
+sdkconfig_append: CONFIG_SR_MN_CN_MULTINET7_QUANT=y
+sdkconfig_append: CONFIG_LANGUAGE_VI_VN=y
+sdkconfig_append: CONFIG_WAKE_WORD_DISABLED=n
+sdkconfig_append: CONFIG_USE_ESP_WAKE_WORD=n
+sdkconfig_append: CONFIG_USE_AFE_WAKE_WORD=y
+sdkconfig_append: CONFIG_SR_WN_WN9_HIESP=y
+[INFO] Configuring target esp32s3.
