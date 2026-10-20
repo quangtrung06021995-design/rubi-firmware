@@ -10,6 +10,7 @@
 
 #include "application.h"
 #include "display/lcd_display.h"
+#include "assets/lang_config.h"
 
 class RubiDisplay : public SpiLcdDisplay {
 public:
@@ -24,6 +25,25 @@ public:
         BuildFace();
         Apply(Expr::kNeutral);
         timer_ = lv_timer_create(&RubiDisplay::TimerCb, 100, this);
+    }
+
+    // No scrolling subtitles for what the child or Rubi says. "system" messages (activation code,
+    // Wi-Fi setup, errors, upgrade) still show because the parents need them.
+    void SetChatMessage(const char* role, const char* content) override {
+        if (role != nullptr && strcmp(role, "system") == 0) {
+            SpiLcdDisplay::SetChatMessage(role, content);
+        }
+    }
+
+    // Hide the "Listening / Speaking / Standby" status words; every other status stays.
+    void SetStatus(const char* status) override {
+        if (status != nullptr && (strcmp(status, Lang::Strings::LISTENING) == 0 ||
+                                  strcmp(status, Lang::Strings::SPEAKING) == 0 ||
+                                  strcmp(status, Lang::Strings::STANDBY) == 0)) {
+            SpiLcdDisplay::SetStatus("");
+            return;
+        }
+        SpiLcdDisplay::SetStatus(status);
     }
 
     void SetEmotion(const char* emotion) override {
