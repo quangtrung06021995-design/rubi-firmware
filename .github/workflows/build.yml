@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - overlay/**
+      - patches/**
       - UPSTREAM_COMMIT
       - .github/workflows/build.yml
 
