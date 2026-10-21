@@ -332,7 +332,7 @@ private:
         playing_ = false;
         if (finished_by_itself) {
             std::lock_guard<std::recursive_mutex> lk(mutex_);
-            if (screen_ == Screen::kPlaying) ShowMusic(now_index_);
+            if (screen_ == Screen::kPlaying) { page_ = now_index_ / kSongsPerPage; ShowMusic(); }
         }
     }
 
