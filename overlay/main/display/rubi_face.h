@@ -76,6 +76,9 @@ public:
         lv_obj_set_size(photo_, 320, 240);
         lv_obj_align(photo_, LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_remove_flag(photo_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(photo_, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_remove_flag(screen, LV_OBJ_FLAG_SCROLLABLE);   // no scroll bar when the picture bobs
+        lv_obj_set_scrollbar_mode(screen, LV_SCROLLBAR_MODE_OFF);
         lv_obj_move_background(photo_);
         lv_obj_move_background(face_);   // drawn face at the very back, hidden
         lv_obj_add_flag(face_, LV_OBJ_FLAG_HIDDEN);
@@ -618,7 +621,7 @@ private:
         }
         photo_slot_ = slot;
         lv_image_set_src(photo_, &photo_dsc_[slot]);
-        lv_obj_set_y(photo_, 0);
+        lv_obj_set_style_translate_y(photo_, 0, 0);
     }
 
     void Apply(Expr e) {
@@ -771,12 +774,12 @@ private:
             if (speak_now) {
                 speaking_ = true;
                 static const int8_t kBob[] = {0, -2, -4, -2, 0, 2, 3, 2};
-                lv_obj_set_y(photo_, kBob[(bob_tick_++) & 7]);
+                lv_obj_set_style_translate_y(photo_, kBob[(bob_tick_++) & 7], 0);
                 return;
             }
             if (speaking_) {
                 speaking_ = false;
-                lv_obj_set_y(photo_, 0);
+                lv_obj_set_style_translate_y(photo_, 0, 0);
             }
             if (has_pending_) ShowPhoto(pending_);   // a mood that arrived during the 2.5 s hold
             if (face_ && !lv_obj_has_flag(face_, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(face_, LV_OBJ_FLAG_HIDDEN);
