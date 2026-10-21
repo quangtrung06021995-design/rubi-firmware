@@ -52,6 +52,10 @@ public:
 
     // Called when a finger is lifted. raw_x/raw_y = last raw touch point. Returns true if consumed.
     bool HandleTouch(uint32_t press_ms, uint16_t raw_x, uint16_t raw_y) {
+        if (voice_mode_ && playing_ && !IsOpen()) {   // music started by voice: any touch stops it
+            VoiceStop();
+            return true;
+        }
         if (!IsOpen()) return false;
         std::lock_guard<std::recursive_mutex> lk(mutex_);
         switch (screen_) {
@@ -99,6 +103,67 @@ public:
         return true;
     }
 
+    // ---------------- voice control (called from MCP tools) ----------------
+    std::string VoiceList() {
+        std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
+        if (IsOpen()) return "Menu đang mở trên màn hình, chưa dùng được lệnh nhạc.";
+        if (!playing_) {
+            LoadSongs();
+            UnmountSd();
+        }
+        if (songs_.empty()) return "Thẻ nhớ chưa có bài nhạc nào hoặc chưa đọc được thẻ.";
+        std::string r = "Có " + std::to_string(songs_.size()) + " bài: ";
+        for (size_t i = 0; i < songs_.size() && i < 30; i++) {
+            std::string n = songs_[i];
+            if (n.size() > 4) n.resize(n.size() - 4);
+            if (i) r += ", ";
+            r += n;
+        }
+        return r;
+    }
+
+    std::string VoicePlay(const std::string& query) {
+        std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
+        if (IsOpen()) return "Menu đang mở trên màn hình, chưa dùng được lệnh nhạc.";
+        if (playing_) VoiceStopLocked();
+        LoadSongs();
+        if (songs_.empty()) {
+            UnmountSd();
+            return "Thẻ nhớ chưa có bài nhạc nào hoặc chưa đọc được thẻ.";
+        }
+        int idx = 0;
+        if (!query.empty()) {
+            idx = FindSong(query);
+            if (idx < 0) {
+                UnmountSd();
+                return "Không tìm thấy bài nào giống \"" + query + "\". Hãy dùng công cụ liệt kê bài rồi hỏi bé chọn bài.";
+            }
+        }
+        VoiceStartAt(idx);
+        std::string n = songs_[idx];
+        if (n.size() > 4) n.resize(n.size() - 4);
+        return "Đã bắt đầu phát bài: " + n + ". Chỉ nói ngắn gọn một câu rồi im lặng để nhạc phát.";
+    }
+
+    std::string VoiceStop() {
+        std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
+        if (!playing_) return "Hiện không có nhạc nào đang phát.";
+        VoiceStopLocked();
+        return "Đã dừng nhạc.";
+    }
+
+    std::string VoiceStep(int delta) {
+        std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
+        if (!playing_ || !voice_mode_ || songs_.empty()) return "Hiện không có nhạc nào đang phát.";
+        int n = (int)songs_.size();
+        int idx = ((now_index_ + delta) % n + n) % n;
+        StopPlayback();
+        VoiceStartAt(idx);
+        std::string nm = songs_[idx];
+        if (nm.size() > 4) nm.resize(nm.size() - 4);
+        return "Đã chuyển sang bài: " + nm + ". Chỉ nói ngắn gọn một câu.";
+    }
+
 private:
     enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying };
     static constexpr const char* kTag = "RubiMedia";
@@ -124,7 +189,83 @@ private:
     sdmmc_card_t* card_ = nullptr;
     Calib cal_;
     bool cal_loaded_ = false;
+    std::recursive_mutex voice_mutex_;
+    std::atomic<bool> voice_mode_{false};
     uint16_t raw1_x_ = 0, raw1_y_ = 0;
+
+    // ---------------- voice helpers ----------------
+    void VoiceStartAt(int idx) {
+        MountSd();
+        voice_mode_ = true;
+        stop_ = false;
+        playing_ = true;
+        now_index_ = idx;
+        xTaskCreatePinnedToCore(&RubiMedia::PlayTask, "rubi_play", 8192, this, 4, nullptr, 1);
+    }
+
+    void VoiceStopLocked() {
+        StopPlayback();
+        UnmountSd();
+        voice_mode_ = false;
+    }
+
+    // lower-case ASCII with Vietnamese accents removed
+    static std::string Fold(const std::string& in) {
+        static const struct { const char* chars; char base; } kGroups[] = {
+            {"àáảãạăằắẳẵặâầấẩẫậÀÁẢÃẠĂẰẮẲẴẶÂẦẤẨẪẬ", 'a'},
+            {"èéẻẽẹêềếểễệÈÉẺẼẸÊỀẾỂỄỆ", 'e'},
+            {"ìíỉĩịÌÍỈĨỊ", 'i'},
+            {"òóỏõọôồốổỗộơờớởỡợÒÓỎÕỌÔỒỐỔỖỘƠỜỚỞỠỢ", 'o'},
+            {"ùúủũụưừứửữựÙÚỦŨỤƯỪỨỬỮỰ", 'u'},
+            {"ỳýỷỹỵỲÝỶỸỴ", 'y'},
+            {"đĐ", 'd'},
+        };
+        std::string out;
+        for (size_t i = 0; i < in.size();) {
+            unsigned char c = in[i];
+            size_t len = c < 0x80 ? 1 : (c >> 5) == 6 ? 2 : (c >> 4) == 14 ? 3 : 4;
+            if (len == 1) {
+                out += (char)tolower(c);
+            } else {
+                std::string ch = in.substr(i, len);
+                char base = 0;
+                for (auto& g : kGroups) {
+                    if (std::string(g.chars).find(ch) != std::string::npos) { base = g.base; break; }
+                }
+                out += base ? base : ' ';
+            }
+            i += len;
+        }
+        return out;
+    }
+
+    static std::vector<std::string> Words(const std::string& folded) {
+        std::vector<std::string> w;
+        std::string cur;
+        for (char c : folded) {
+            if (isalnum((unsigned char)c)) cur += c;
+            else if (!cur.empty()) { w.push_back(cur); cur.clear(); }
+        }
+        if (!cur.empty()) w.push_back(cur);
+        return w;
+    }
+
+    int FindSong(const std::string& query) {
+        std::vector<std::string> qw = Words(Fold(query));
+        if (qw.empty()) return -1;
+        int best = -1;
+        float best_score = 0;
+        for (size_t i = 0; i < songs_.size(); i++) {
+            std::string n = songs_[i];
+            if (n.size() > 4) n.resize(n.size() - 4);
+            std::string fn = Fold(n);
+            int hit = 0;
+            for (auto& w : qw) if (fn.find(w) != std::string::npos) hit++;
+            float score = (float)hit / (float)qw.size();
+            if (score > best_score) { best_score = score; best = (int)i; }
+        }
+        return best_score >= 0.5f ? best : -1;
+    }
 
     // ---------------- calibration ----------------
     void LoadCalibration() {
@@ -318,6 +459,13 @@ private:
     void PlayLoop() {
         auto& as = Application::GetInstance().GetAudioService();
         int out_rate = Board::GetInstance().GetAudioCodec()->output_sample_rate();
+        if (voice_mode_) {
+            // wait until Rubi has finished answering (Idle) before the music starts
+            for (int w = 0; w < 1000 && !stop_ && Application::GetInstance().GetDeviceState() != kDeviceStateIdle; w++) {
+                vTaskDelay(pdMS_TO_TICKS(20));
+            }
+            if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) stop_ = true;
+        }
         for (int i = now_index_; i < (int)songs_.size() && !stop_; i++) {
             {
                 if (stop_) break;
@@ -329,8 +477,12 @@ private:
             PlayFile(std::string(kMusicDir) + "/" + songs_[i], out_rate, as);
         }
         bool finished_by_itself = !stop_;
+        if (voice_mode_) {
+            UnmountSd();
+            voice_mode_ = false;
+        }
         playing_ = false;
-        if (finished_by_itself) {
+        if (finished_by_itself && !voice_mode_ && screen_ == Screen::kPlaying) {
             std::lock_guard<std::recursive_mutex> lk(mutex_);
             if (screen_ == Screen::kPlaying) { page_ = now_index_ / kSongsPerPage; ShowMusic(); }
         }
@@ -384,6 +536,10 @@ private:
         double pos = 0;
         uint32_t remaining = data_size;
         while (!stop_ && remaining > 0) {
+            if (voice_mode_ && Application::GetInstance().GetDeviceState() != kDeviceStateIdle) {
+                stop_ = true;   // Rubi was woken up or is talking: stop the music
+                break;
+            }
             size_t want = std::min<size_t>(raw.size() * 2, remaining);
             size_t got = fread(raw.data(), 1, want, f);
             if (got == 0) break;

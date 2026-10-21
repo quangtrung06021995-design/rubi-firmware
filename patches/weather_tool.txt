@@ -38,4 +38,38 @@
                          t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
                 return std::string(buf);
             });
+        McpServer::GetInstance().AddTool("self.music.list",
+            "List the songs stored on the device's SD card. Use this when the user asks what songs or music Rubi has, "
+            "or when you need the exact song names before playing one. Read the names to the user briefly.",
+            PropertyList(), [](const PropertyList&) -> ReturnValue {
+                return RubiMedia::Get().VoiceList();
+            });
+
+        McpServer::GetInstance().AddTool("self.music.play",
+            "Play music from the device's SD card. Use this whenever the user asks to play, open or listen to music or a song. "
+            "Pass the song name as the user said it (any words from the title are fine, accents are optional). "
+            "If the user does not name a song, leave name empty to play from the first song. "
+            "After calling, say only one short sentence and then stay silent so the music can play.",
+            PropertyList({Property("name", kPropertyTypeString, std::string(""))}),
+            [](const PropertyList& properties) -> ReturnValue {
+                return RubiMedia::Get().VoicePlay(properties["name"].value<std::string>());
+            });
+
+        McpServer::GetInstance().AddTool("self.music.stop",
+            "Stop the music that is playing. Use this when the user asks to stop, pause or turn off the music.",
+            PropertyList(), [](const PropertyList&) -> ReturnValue {
+                return RubiMedia::Get().VoiceStop();
+            });
+
+        McpServer::GetInstance().AddTool("self.music.next",
+            "Skip to the next song while music is playing.",
+            PropertyList(), [](const PropertyList&) -> ReturnValue {
+                return RubiMedia::Get().VoiceStep(1);
+            });
+
+        McpServer::GetInstance().AddTool("self.music.previous",
+            "Go back to the previous song while music is playing.",
+            PropertyList(), [](const PropertyList&) -> ReturnValue {
+                return RubiMedia::Get().VoiceStep(-1);
+            });
     }
