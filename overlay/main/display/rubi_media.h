@@ -395,7 +395,7 @@ private:
     // ---------------- bilingual learning ----------------
     struct Topic { const char* dir; const char* name; const lv_image_dsc_t* icon; };
     struct Word { std::string file, en, vi; };
-    static constexpr int kCardPx = 140;
+    static constexpr int kCardMaxPx = 200;
     std::vector<Word> words_;
     int topic_ = 0;
     int word_ = 0;
@@ -459,18 +459,29 @@ private:
         ShowCard();
     }
 
+    // The picture file is a raw RGB565 square (128x128 or 140x140 ...); its side is worked out from the file size.
     bool LoadCardImage(const Word& w) {
         int next = 1 - card_cur_;
-        const size_t bytes = kCardPx * kCardPx * 2;
+        const size_t max_bytes = kCardMaxPx * kCardMaxPx * 2;
+        card_err_.clear();
         if (card_buf_[next] == nullptr) {
-            card_buf_[next] = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (card_buf_[next] == nullptr) card_buf_[next] = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
+            card_buf_[next] = (uint8_t*)heap_caps_malloc(max_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (card_buf_[next] == nullptr) card_buf_[next] = (uint8_t*)heap_caps_malloc(max_bytes, MALLOC_CAP_8BIT);
             if (card_buf_[next] == nullptr) { card_err_ = "hết bộ nhớ"; return false; }
         }
         std::string path = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file + ".bin";
-        card_err_.clear();
         FILE* f = fopen(path.c_str(), "rb");
         if (f == nullptr) { card_err_ = "không mở được"; return false; }
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        int side = (int)(sqrt((double)size / 2.0) + 0.5);
+        if (side < 32 || side > kCardMaxPx || (size_t)side * side * 2 != (size_t)size) {
+            fclose(f);
+            card_err_ = "sai kích thước " + std::to_string(size);
+            return false;
+        }
+        size_t bytes = (size_t)size;
         size_t got = fread(card_buf_[next], 1, bytes, f);
         fclose(f);
         if (got != bytes) { card_err_ = "đọc " + std::to_string(got) + "/" + std::to_string(bytes); return false; }
@@ -478,9 +489,9 @@ private:
         memset(&d, 0, sizeof(d));
         d.header.magic = LV_IMAGE_HEADER_MAGIC;
         d.header.cf = LV_COLOR_FORMAT_RGB565;
-        d.header.w = kCardPx;
-        d.header.h = kCardPx;
-        d.header.stride = kCardPx * 2;
+        d.header.w = side;
+        d.header.h = side;
+        d.header.stride = side * 2;
         d.data_size = bytes;
         d.data = card_buf_[next];
         card_cur_ = next;
