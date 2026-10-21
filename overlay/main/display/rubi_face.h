@@ -353,6 +353,10 @@ private:
     bool photo_on_ = false;
     int photo_cur_ = -1;
     int bob_tick_ = 0;
+    Expr photo_expr_ = Expr::kNeutral;
+    Expr pending_ = Expr::kNeutral;
+    bool has_pending_ = false;
+    int64_t photo_time_ = 0;
     lv_obj_t* eye_[2] = {};      // white eyeball (or dark lid for the "cool" face)
     lv_obj_t* pupil_[2] = {};
     lv_obj_t* shine_[2] = {};
@@ -573,6 +577,15 @@ private:
 
     // Which pictures (0-based, from the user's 5x4 sheet) fit each expression; one is picked at random.
     void ShowPhoto(Expr e) {
+        // Same mood again (or changed less than 2.5 s ago): keep the current picture, so the face never flickers.
+        int64_t now = lv_tick_get();
+        if (photo_cur_ >= 0 && (e == photo_expr_ || now - photo_time_ < 2500)) {
+            if (e != photo_expr_) pending_ = e, has_pending_ = true;
+            return;
+        }
+        photo_expr_ = e;
+        photo_time_ = now;
+        has_pending_ = false;
         static const int8_t kMap[][4] = {
             /*Neutral*/ {0, -1}, /*Happy*/ {2, 3, 4, -1}, /*Laughing*/ {7, 19, -1},
             /*Winking*/ {1, 6, 15, -1}, /*Loving*/ {8, 9, -1}, /*Surprised*/ {5, -1},
@@ -741,14 +754,16 @@ private:
             // Speaking: the picture bobs up and down. Idle: a new mood every 8-16 s (never angry/crying).
             if (speak_now) {
                 speaking_ = true;
-                static const int8_t kBob[] = {-5, 0, 4, 0};
-                lv_obj_set_y(photo_, kBob[(bob_tick_++) & 3]);
+                static const int8_t kBob[] = {0, -2, -4, -2, 0, 2, 3, 2};
+                lv_obj_set_y(photo_, kBob[(bob_tick_++) & 7]);
                 return;
             }
             if (speaking_) {
                 speaking_ = false;
                 lv_obj_set_y(photo_, 0);
             }
+            if (has_pending_) ShowPhoto(pending_);   // a mood that arrived during the 2.5 s hold
+            if (face_ && !lv_obj_has_flag(face_, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(face_, LV_OBJ_FLAG_HIDDEN);
             if (Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
                 if (--idle_countdown_ <= 0) {
                     static const Expr kIdle[] = {
