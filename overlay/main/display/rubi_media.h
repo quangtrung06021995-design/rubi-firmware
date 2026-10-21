@@ -402,6 +402,7 @@ private:
     uint8_t* card_buf_[2] = {nullptr, nullptr};
     lv_image_dsc_t card_dsc_[2] = {};
     int card_cur_ = 0;
+    std::string card_err_;
 
     static const Topic* Topics() {
         static const Topic t[4] = {
@@ -464,14 +465,15 @@ private:
         if (card_buf_[next] == nullptr) {
             card_buf_[next] = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             if (card_buf_[next] == nullptr) card_buf_[next] = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
-            if (card_buf_[next] == nullptr) return false;
+            if (card_buf_[next] == nullptr) { card_err_ = "hết bộ nhớ"; return false; }
         }
         std::string path = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file + ".bin";
+        card_err_.clear();
         FILE* f = fopen(path.c_str(), "rb");
-        if (f == nullptr) return false;
+        if (f == nullptr) { card_err_ = "không mở được"; return false; }
         size_t got = fread(card_buf_[next], 1, bytes, f);
         fclose(f);
-        if (got != bytes) return false;
+        if (got != bytes) { card_err_ = "đọc " + std::to_string(got) + "/" + std::to_string(bytes); return false; }
         lv_image_dsc_t& d = card_dsc_[next];
         memset(&d, 0, sizeof(d));
         d.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -493,7 +495,7 @@ private:
         char cnt[24];
         snprintf(cnt, sizeof(cnt), "%d/%d", word_ + 1, (int)words_.size());
         std::string title = Topics()[topic_].name;
-        if (!ok) title += std::string(" - thiếu ") + w.file + ".bin";   // shows which picture file is missing
+        if (!ok) title += std::string(" - ") + w.file + ".bin: " + card_err_;   // shows which picture file is missing
         display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, title, w.en, w.vi, cnt);
     }
 
