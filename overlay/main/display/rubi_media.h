@@ -506,7 +506,6 @@ private:
         char cnt[24];
         snprintf(cnt, sizeof(cnt), "%d/%d", word_ + 1, (int)words_.size());
         std::string title = Topics()[topic_].name;
-        if (!ok) title += std::string(" - ") + w.file + ".bin: " + card_err_;   // shows which picture file is missing
         display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, title, w.en, w.vi, cnt);
     }
 
