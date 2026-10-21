@@ -19,6 +19,7 @@
 #include <vector>
 
 #include <driver/sdmmc_host.h>
+#include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
@@ -74,11 +75,29 @@ public:
         Map(raw_x, raw_y, sx, sy);
         switch (screen_) {
         case Screen::kMain: {
-            int t = RubiDisplay::TileAt(sx, sy, 4);
+            int t = RubiDisplay::TileAt(sx, sy, 5);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
-            else if (t == 1) { Close(); if (wifi_cb_) wifi_cb_(); }
-            else if (t == 2) { StartCalibration(); }
-            else if (t == 3) { Close(); }
+            else if (t == 1) { ShowLearnTopics(); }
+            else if (t == 2) { Close(); if (wifi_cb_) wifi_cb_(); }
+            else if (t == 3) { StartCalibration(); }
+            else if (t == 4) { Close(); }
+            break;
+        }
+        case Screen::kLearnTopics: {
+            int t = RubiDisplay::TileAt(sx, sy, 5);
+            if (t >= 0 && t < 4) OpenTopic(t);
+            else if (t == 4) ShowMain();
+            break;
+        }
+        case Screen::kLearnEmpty:
+            ShowLearnTopics();
+            break;
+        case Screen::kLearnCard: {
+            int b = RubiDisplay::CardAt(sx, sy);
+            if (b == 0 && !words_.empty()) { word_ = (word_ + (int)words_.size() - 1) % (int)words_.size(); ShowCard(); }
+            else if (b == 2 && !words_.empty()) { word_ = (word_ + 1) % (int)words_.size(); ShowCard(); }
+            else if (b == 1) { ShowLearnTopics(); }
+            else if (b == 3) { SpeakWord(); }
             break;
         }
         case Screen::kMusic: {
@@ -165,7 +184,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying };
+    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -331,6 +350,7 @@ private:
         if (!display_) return;
         display_->MenuShowTiles({
             {&rubi_icon_nghe_nhac, "Nghe nhạc"},
+            {&rubi_icon_song_ngu, "Học song ngữ"},
             {&rubi_icon_wifi, "Wi-Fi"},
             {&rubi_icon_chinh_cam_ung, "Chỉnh cảm ứng"},
             {&rubi_icon_dong, "Thoát"},
@@ -371,11 +391,127 @@ private:
         if (display_) display_->MenuShowMessage(msg.c_str(), -1, -1);
     }
 
+    // ---------------- bilingual learning ----------------
+    struct Topic { const char* dir; const char* name; const lv_image_dsc_t* icon; };
+    struct Word { std::string file, en, vi; };
+    static constexpr int kCardPx = 140;
+    std::vector<Word> words_;
+    int topic_ = 0;
+    int word_ = 0;
+    uint8_t* card_buf_[2] = {nullptr, nullptr};
+    lv_image_dsc_t card_dsc_[2] = {};
+    int card_cur_ = 0;
+
+    static const Topic* Topics() {
+        static const Topic t[4] = {
+            {"trai_cay", "Trái cây", &rubi_icon_hoc_trai_cay},
+            {"dong_vat", "Động vật", &rubi_icon_hoc_dong_vat},
+            {"do_vat", "Đồ vật", &rubi_icon_hoc_do_vat},
+            {"hinh_khoi", "Hình khối", &rubi_icon_hoc_hinh_khoi},
+        };
+        return t;
+    }
+
+    void ShowLearnTopics() {
+        screen_ = Screen::kLearnTopics;
+        if (!display_) return;
+        const Topic* t = Topics();
+        display_->MenuShowTiles({
+            {t[0].icon, t[0].name}, {t[1].icon, t[1].name}, {t[2].icon, t[2].name}, {t[3].icon, t[3].name},
+            {&rubi_icon_dong, "Quay lại"},
+        });
+    }
+
+    static std::string Trim(std::string s) {
+        while (!s.empty() && (s.back() == '\r' || s.back() == '\n' || s.back() == ' ')) s.pop_back();
+        size_t i = 0;
+        if (s.size() >= 3 && (uint8_t)s[0] == 0xEF && (uint8_t)s[1] == 0xBB && (uint8_t)s[2] == 0xBF) i = 3;
+        while (i < s.size() && s[i] == ' ') i++;
+        return s.substr(i);
+    }
+
+    void OpenTopic(int t) {
+        topic_ = t;
+        word_ = 0;
+        words_.clear();
+        if (MountSd()) {
+            std::string path = std::string("/sdcard/rubi/hoc/") + Topics()[t].dir + "/tu.txt";
+            FILE* f = fopen(path.c_str(), "rb");
+            if (f != nullptr) {
+                char line[256];
+                while (fgets(line, sizeof(line), f)) {
+                    std::string l = Trim(line);
+                    size_t a = l.find('|');
+                    size_t b = a == std::string::npos ? a : l.find('|', a + 1);
+                    if (b == std::string::npos) continue;
+                    words_.push_back({Trim(l.substr(0, a)), Trim(l.substr(a + 1, b - a - 1)), Trim(l.substr(b + 1))});
+                }
+                fclose(f);
+            }
+        }
+        if (words_.empty()) {
+            screen_ = Screen::kLearnEmpty;
+            if (display_) display_->MenuShowMessage("Chưa có hình cho chủ đề này\n(chép thư mục rubi/hoc vào thẻ nhớ)\n\nChạm để quay lại", -1, -1);
+            return;
+        }
+        ShowCard();
+    }
+
+    bool LoadCardImage(const Word& w) {
+        int next = 1 - card_cur_;
+        const size_t bytes = kCardPx * kCardPx * 2;
+        if (card_buf_[next] == nullptr) {
+            card_buf_[next] = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (card_buf_[next] == nullptr) card_buf_[next] = (uint8_t*)heap_caps_malloc(bytes, MALLOC_CAP_8BIT);
+            if (card_buf_[next] == nullptr) return false;
+        }
+        std::string path = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file + ".bin";
+        FILE* f = fopen(path.c_str(), "rb");
+        if (f == nullptr) return false;
+        size_t got = fread(card_buf_[next], 1, bytes, f);
+        fclose(f);
+        if (got != bytes) return false;
+        lv_image_dsc_t& d = card_dsc_[next];
+        memset(&d, 0, sizeof(d));
+        d.header.magic = LV_IMAGE_HEADER_MAGIC;
+        d.header.cf = LV_COLOR_FORMAT_RGB565;
+        d.header.w = kCardPx;
+        d.header.h = kCardPx;
+        d.header.stride = kCardPx * 2;
+        d.data_size = bytes;
+        d.data = card_buf_[next];
+        card_cur_ = next;
+        return true;
+    }
+
+    void ShowCard() {
+        screen_ = Screen::kLearnCard;
+        if (words_.empty() || !display_) return;
+        const Word& w = words_[word_];
+        bool ok = LoadCardImage(w);
+        char cnt[24];
+        snprintf(cnt, sizeof(cnt), "%d/%d", word_ + 1, (int)words_.size());
+        display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, Topics()[topic_].name, w.en, w.vi, cnt);
+    }
+
+    void SpeakWord() {
+        if (words_.empty()) return;
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() != kDeviceStateIdle) return;   // Rubi is busy: ignore this tap
+        const Word& w = words_[word_];
+        // The cloud assistant reads this out loud (see the line to add to the agent prompt)
+        app.WakeWordInvoke("Hãy đọc to: " + w.en + ". Tiếng Việt: " + w.vi);
+    }
+
     void Close() {
         StopPlayback();
         UnmountSd();
         screen_ = Screen::kNone;
         if (display_) display_->MenuHide();
+        vTaskDelay(pdMS_TO_TICKS(100));
+        for (int i = 0; i < 2; i++) {
+            if (card_buf_[i] != nullptr) { heap_caps_free(card_buf_[i]); card_buf_[i] = nullptr; }
+        }
         Application::GetInstance().GetAudioService().EnableWakeWordDetection(true);
     }
 

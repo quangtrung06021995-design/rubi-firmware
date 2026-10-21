@@ -1,0 +1,8 @@
+banana|banana|quả chuối
+apple|apple|quả táo
+orange|orange|quả cam
+grapes|grapes|quả nho
+watermelon|watermelon|quả dưa hấu
+strawberry|strawberry|quả dâu tây
+mango|mango|quả xoài
+pineapple|pineapple|quả thơm

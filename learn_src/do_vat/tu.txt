@@ -1,0 +1,8 @@
+ball|ball|quả bóng
+book|book|quyển sách
+cup|cup|cái cốc
+chair|chair|cái ghế
+table|table|cái bàn
+bed|bed|cái giường
+spoon|spoon|cái thìa
+shoe|shoe|chiếc giày

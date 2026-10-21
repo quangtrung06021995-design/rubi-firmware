@@ -83,6 +83,40 @@ public:
         return -1;
     }
 
+    // Learning card: picture on the left, English and Vietnamese words on the right, 3 buttons below.
+    // CardAt: 0 = previous, 1 = back, 2 = next, 3 = picture/words area (tap to hear), -1 = nothing.
+    static int CardAt(int x, int y) {
+        if (y >= 190 && y < 240) {
+            if (x >= 8 && x < 106) return 0;
+            if (x >= 111 && x < 209) return 1;
+            if (x >= 214 && x < 312) return 2;
+            return -1;
+        }
+        if (y >= 30 && y < 190) return 3;
+        return -1;
+    }
+
+    void MenuShowCard(const lv_image_dsc_t* img, const std::string& title, const std::string& en,
+                      const std::string& vi, const std::string& counter) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        lv_label_set_text(menu_title_, title.c_str());
+        lv_obj_clear_flag(menu_title_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(card_count_, counter.c_str());
+        lv_obj_clear_flag(card_count_, LV_OBJ_FLAG_HIDDEN);
+        if (img != nullptr) {
+            lv_image_set_src(card_img_, img);
+            lv_obj_clear_flag(card_img_, LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_label_set_text(card_en_, en.c_str());
+        lv_label_set_text(card_vi_, vi.c_str());
+        lv_obj_clear_flag(card_en_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(card_vi_, LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < 3; i++) lv_obj_clear_flag(card_btn_[i], LV_OBJ_FLAG_HIDDEN);
+        ShowMenuLayer();
+    }
+
     void MenuShowTiles(const std::vector<MenuTile>& tiles) {
         DisplayLockGuard lock(this);
         EnsureMenu();
@@ -147,6 +181,11 @@ private:
     lv_obj_t* tile_box_[kMaxTiles] = {};
     lv_obj_t* tile_img_[kMaxTiles] = {};
     lv_obj_t* tile_lbl_[kMaxTiles] = {};
+    lv_obj_t* card_img_ = nullptr;
+    lv_obj_t* card_en_ = nullptr;
+    lv_obj_t* card_vi_ = nullptr;
+    lv_obj_t* card_count_ = nullptr;
+    lv_obj_t* card_btn_[3] = {};
 
     void ShowMenuLayer() {
         lv_obj_clear_flag(menu_, LV_OBJ_FLAG_HIDDEN);
@@ -161,6 +200,11 @@ private:
         lv_obj_add_flag(menu_msg_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(cross_h_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(cross_v_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(card_img_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(card_en_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(card_vi_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(card_count_, LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < 3; i++) lv_obj_add_flag(card_btn_[i], LV_OBJ_FLAG_HIDDEN);
     }
 
     lv_obj_t* MakeLabel(lv_obj_t* parent, const lv_font_t* font, uint32_t color) {
@@ -220,6 +264,27 @@ private:
         lv_obj_align(menu_msg_, LV_ALIGN_CENTER, 0, 0);
         cross_h_ = MakeRect(menu_, 32, 4, 0xE53935, 2);
         cross_v_ = MakeRect(menu_, 4, 32, 0xE53935, 2);
+        card_img_ = lv_image_create(menu_);
+        lv_obj_set_pos(card_img_, 10, 40);
+        card_en_ = MakeLabel(menu_, font, 0x1565C0);
+        lv_label_set_long_mode(card_en_, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(card_en_, 150);
+        lv_obj_set_pos(card_en_, 160, 70);
+        card_vi_ = MakeLabel(menu_, font, 0xD81B60);
+        lv_label_set_long_mode(card_vi_, LV_LABEL_LONG_WRAP);
+        lv_obj_set_width(card_vi_, 150);
+        lv_obj_set_pos(card_vi_, 160, 120);
+        card_count_ = MakeLabel(menu_, font, 0x5A6B80);
+        lv_obj_align(card_count_, LV_ALIGN_TOP_RIGHT, -8, 10);
+        static const char* kBtn[3] = {"< Trước", "Về", "Sau >"};
+        static const int kBtnX[3] = {8, 111, 214};
+        for (int i = 0; i < 3; i++) {
+            card_btn_[i] = MakeRect(menu_, 98, 44, i == 1 ? 0xFFE0E0 : 0xE6F0FF, 10);
+            lv_obj_set_pos(card_btn_[i], kBtnX[i], 192);
+            lv_obj_t* l = MakeLabel(card_btn_[i], font, 0x1E2A3A);
+            lv_label_set_text(l, kBtn[i]);
+            lv_obj_center(l);
+        }
         MenuClearAll();
     }
 

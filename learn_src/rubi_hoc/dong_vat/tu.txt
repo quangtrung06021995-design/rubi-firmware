@@ -1,0 +1,8 @@
+cat|cat|con mèo
+dog|dog|con chó
+fish|fish|con cá
+bird|bird|con chim
+rabbit|rabbit|con thỏ
+elephant|elephant|con voi
+duck|duck|con vịt
+cow|cow|con bò

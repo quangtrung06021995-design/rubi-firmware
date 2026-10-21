@@ -1,0 +1,8 @@
+circle|circle|hình tròn
+square|square|hình vuông
+triangle|triangle|hình tam giác
+rectangle|rectangle|hình chữ nhật
+star|star|ngôi sao
+heart|heart|trái tim
+oval|oval|hình bầu dục
+diamond|diamond|hình thoi
