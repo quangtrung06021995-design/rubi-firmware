@@ -30,7 +30,6 @@
 #include "board.h"
 #include "rubi_face.h"
 #include "rubi_icons.h"
-#include "rubi_mat_data.h"
 #include "settings.h"
 
 class RubiMedia {
@@ -40,10 +39,7 @@ public:
         return m;
     }
 
-    void SetDisplay(RubiDisplay* d) {
-        display_ = d;
-        xTaskCreatePinnedToCore(&RubiMedia::FaceTask, "rubi_faces", 6144, this, 2, nullptr, 1);
-    }
+    void SetDisplay(RubiDisplay* d) { display_ = d; }
     void SetWifiCallback(std::function<void()> cb) { wifi_cb_ = std::move(cb); }
     bool IsOpen() const { return screen_ != Screen::kNone; }
 
@@ -215,41 +211,6 @@ private:
     std::recursive_mutex voice_mutex_;
     std::atomic<bool> voice_mode_{false};
     uint16_t raw1_x_ = 0, raw1_y_ = 0;
-
-    // ---------------- photo faces: 20 pictures built into the firmware (RLE), decoded once into PSRAM ----------------
-    static void FaceTask(void* arg) {
-        static_cast<RubiMedia*>(arg)->LoadFaces();
-        vTaskDelete(nullptr);
-    }
-
-    void LoadFaces() {
-        for (int i = 0; i < 40 && !(display_ && display_->FaceReady()); i++) vTaskDelay(pdMS_TO_TICKS(250));
-        if (!(display_ && display_->FaceReady())) return;
-        constexpr int kN = RubiDisplay::kPhotoCount;
-        constexpr size_t kPix = 320 * 240;
-        uint16_t* bufs[kN] = {};
-        bool ok = true;
-        for (int i = 0; i < kN && ok; i++) {
-            bufs[i] = (uint16_t*)heap_caps_malloc(kPix * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-            if (bufs[i] == nullptr) { ok = false; break; }
-            const uint8_t* p = kRubiMatData[i];
-            const uint8_t* end = p + kRubiMatSize[i];
-            size_t o = 0;
-            while (p + 3 <= end && o < kPix) {
-                size_t c = p[0];
-                uint16_t v = (uint16_t)(p[1] | (p[2] << 8));
-                p += 3;
-                while (c-- && o < kPix) bufs[i][o++] = v;
-            }
-            if (o != kPix) ok = false;
-        }
-        if (ok) {
-            display_->SetPhotoFaces(bufs);
-            ESP_LOGI(kTag, "photo faces ready");
-        } else {
-            for (auto*& b : bufs) { if (b) { heap_caps_free(b); b = nullptr; } }
-        }
-    }
 
     // ---------------- voice helpers ----------------
     void VoiceStartAt(int idx) {

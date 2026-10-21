@@ -15,6 +15,8 @@
 #include "assets/lang_config.h"
 
 #include "rubi_vi_font.h"
+#include "rubi_mat_data.h"
+#include <esp_heap_caps.h>
 
 class RubiDisplay : public SpiLcdDisplay {
 public:
@@ -27,6 +29,7 @@ public:
         }
         DisplayLockGuard lock(this);
         BuildFace();
+        InitPhoto();
         Apply(Expr::kNeutral);
         timer_ = lv_timer_create(&RubiDisplay::TimerCb, 100, this);
     }
@@ -50,17 +53,14 @@ public:
         SpiLcdDisplay::SetStatus(status);
     }
 
-    // Photo faces: kPhotoCount RGB565 320x240 pictures loaded from the SD card (see RubiMedia).
-    // While they are set, the picture replaces the code-drawn face (which stays as the fallback).
+    // Photo faces: 20 pictures built into the firmware (RLE). Only the one on screen is decoded
+    // (into one of two 150 KB PSRAM buffers), so the memory use stays small. If the buffers cannot be
+    // allocated, the drawn face is used instead.
     static constexpr int kPhotoCount = 20;
-    bool FaceReady() const { return face_ != nullptr; }
-    void SetPhotoFaces(uint16_t* const* bufs) {
-        DisplayLockGuard lock(this);
-        if (face_ == nullptr || photo_ != nullptr) return;
-        for (int i = 0; i < kPhotoCount; i++) {
-            if (bufs[i] == nullptr) return;   // incomplete pack: keep the code face
-        }
-        for (int i = 0; i < kPhotoCount; i++) {
+    bool InitPhoto() {
+        for (int i = 0; i < 2; i++) {
+            photo_buf_[i] = (uint16_t*)heap_caps_malloc(320 * 240 * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (photo_buf_[i] == nullptr) return false;
             lv_image_dsc_t& d = photo_dsc_[i];
             memset(&d, 0, sizeof(d));
             d.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -69,7 +69,7 @@ public:
             d.header.h = 240;
             d.header.stride = 640;
             d.data_size = 320 * 240 * 2;
-            d.data = reinterpret_cast<const uint8_t*>(bufs[i]);
+            d.data = reinterpret_cast<const uint8_t*>(photo_buf_[i]);
         }
         auto screen = lv_screen_active();
         photo_ = lv_image_create(screen);
@@ -77,15 +77,17 @@ public:
         lv_obj_align(photo_, LV_ALIGN_TOP_LEFT, 0, 0);
         lv_obj_remove_flag(photo_, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_move_background(photo_);
-        lv_obj_move_background(face_);   // code face stays at the very back, hidden
+        lv_obj_move_background(face_);   // drawn face at the very back, hidden
         lv_obj_add_flag(face_, LV_OBJ_FLAG_HIDDEN);
+        // Park the stock emoji inside the hidden drawn face so nothing of it can ever show again.
+        if (emoji_box_) lv_obj_set_parent(emoji_box_, face_);
         lv_obj_set_style_bg_color(screen, lv_color_hex(0xFFFFFF), 0);
         lv_obj_t* dark_text[] = {network_label_, mute_label_, battery_label_, status_label_, notification_label_};
         for (auto* t : dark_text) {
             if (t) lv_obj_set_style_text_color(t, lv_color_hex(0x333333), 0);
         }
         photo_on_ = true;
-        Apply(expr_);
+        return true;
     }
 
     void SetEmotion(const char* emotion) override {
@@ -349,7 +351,9 @@ private:
 
     lv_obj_t* face_ = nullptr;
     lv_obj_t* photo_ = nullptr;
-    lv_image_dsc_t photo_dsc_[kPhotoCount] = {};
+    lv_image_dsc_t photo_dsc_[2] = {};
+    uint16_t* photo_buf_[2] = {};
+    int photo_slot_ = 0;
     bool photo_on_ = false;
     int photo_cur_ = -1;
     int bob_tick_ = 0;
@@ -601,7 +605,19 @@ private:
             }
         }
         photo_cur_ = pick;
-        lv_image_set_src(photo_, &photo_dsc_[pick]);
+        int slot = 1 - photo_slot_;
+        uint16_t* dst = photo_buf_[slot];
+        const uint8_t* q = kRubiMatData[pick];
+        const uint8_t* qe = q + kRubiMatSize[pick];
+        size_t o = 0;
+        while (q + 3 <= qe && o < 320 * 240) {
+            size_t c = q[0];
+            uint16_t v = (uint16_t)(q[1] | (q[2] << 8));
+            q += 3;
+            while (c-- && o < 320 * 240) dst[o++] = v;
+        }
+        photo_slot_ = slot;
+        lv_image_set_src(photo_, &photo_dsc_[slot]);
         lv_obj_set_y(photo_, 0);
     }
 
