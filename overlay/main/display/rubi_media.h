@@ -39,7 +39,10 @@ public:
         return m;
     }
 
-    void SetDisplay(RubiDisplay* d) { display_ = d; }
+    void SetDisplay(RubiDisplay* d) {
+        display_ = d;
+        xTaskCreatePinnedToCore(&RubiMedia::FaceTask, "rubi_faces", 6144, this, 2, nullptr, 1);
+    }
     void SetWifiCallback(std::function<void()> cb) { wifi_cb_ = std::move(cb); }
     bool IsOpen() const { return screen_ != Screen::kNone; }
 
@@ -211,6 +214,47 @@ private:
     std::recursive_mutex voice_mutex_;
     std::atomic<bool> voice_mode_{false};
     uint16_t raw1_x_ = 0, raw1_y_ = 0;
+
+    // ---------------- photo faces: /rubi/mat/01.bin .. 20.bin (raw RGB565 320x240) ----------------
+    // Read once at boot into PSRAM, then the SD card is released again (music / learning mount it on demand).
+    static void FaceTask(void* arg) {
+        static_cast<RubiMedia*>(arg)->LoadFaces();
+        vTaskDelete(nullptr);
+    }
+
+    void LoadFaces() {
+        for (int i = 0; i < 40 && !(display_ && display_->FaceReady()); i++) vTaskDelay(pdMS_TO_TICKS(250));
+        if (!(display_ && display_->FaceReady())) return;
+        vTaskDelay(pdMS_TO_TICKS(4000));   // let boot (Wi-Fi, OTA check) settle first
+        constexpr int kN = RubiDisplay::kPhotoCount;
+        constexpr size_t kBytes = 320 * 240 * 2;
+        uint16_t* bufs[kN] = {};
+        bool ok = false;
+        {
+            std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
+            bool was_mounted = card_ != nullptr;
+            if (MountSd()) {
+                ok = true;
+                for (int i = 0; i < kN && ok; i++) {
+                    char path[48];
+                    snprintf(path, sizeof(path), "/sdcard/rubi/mat/%02d.bin", i + 1);
+                    FILE* f = fopen(path, "rb");
+                    if (f == nullptr) { ok = false; break; }
+                    bufs[i] = (uint16_t*)heap_caps_malloc(kBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+                    if (bufs[i] == nullptr || fread(bufs[i], 1, kBytes, f) != kBytes) ok = false;
+                    fclose(f);
+                }
+                if (!was_mounted && !playing_ && !IsOpen()) UnmountSd();
+            }
+        }
+        if (ok) {
+            display_->SetPhotoFaces(bufs);
+            ESP_LOGI(kTag, "photo faces loaded");
+        } else {
+            for (auto*& b : bufs) { if (b) { heap_caps_free(b); b = nullptr; } }
+            ESP_LOGI(kTag, "no photo faces on the SD card, keeping the drawn face");
+        }
+    }
 
     // ---------------- voice helpers ----------------
     void VoiceStartAt(int idx) {

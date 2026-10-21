@@ -50,6 +50,44 @@ public:
         SpiLcdDisplay::SetStatus(status);
     }
 
+    // Photo faces: kPhotoCount RGB565 320x240 pictures loaded from the SD card (see RubiMedia).
+    // While they are set, the picture replaces the code-drawn face (which stays as the fallback).
+    static constexpr int kPhotoCount = 20;
+    bool FaceReady() const { return face_ != nullptr; }
+    void SetPhotoFaces(uint16_t* const* bufs) {
+        DisplayLockGuard lock(this);
+        if (face_ == nullptr || photo_ != nullptr) return;
+        for (int i = 0; i < kPhotoCount; i++) {
+            if (bufs[i] == nullptr) return;   // incomplete pack: keep the code face
+        }
+        for (int i = 0; i < kPhotoCount; i++) {
+            lv_image_dsc_t& d = photo_dsc_[i];
+            memset(&d, 0, sizeof(d));
+            d.header.magic = LV_IMAGE_HEADER_MAGIC;
+            d.header.cf = LV_COLOR_FORMAT_RGB565;
+            d.header.w = 320;
+            d.header.h = 240;
+            d.header.stride = 640;
+            d.data_size = 320 * 240 * 2;
+            d.data = reinterpret_cast<const uint8_t*>(bufs[i]);
+        }
+        auto screen = lv_screen_active();
+        photo_ = lv_image_create(screen);
+        lv_obj_set_size(photo_, 320, 240);
+        lv_obj_align(photo_, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_remove_flag(photo_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_move_background(photo_);
+        lv_obj_move_background(face_);   // code face stays at the very back, hidden
+        lv_obj_add_flag(face_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_bg_color(screen, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_t* dark_text[] = {network_label_, mute_label_, battery_label_, status_label_, notification_label_};
+        for (auto* t : dark_text) {
+            if (t) lv_obj_set_style_text_color(t, lv_color_hex(0x333333), 0);
+        }
+        photo_on_ = true;
+        Apply(expr_);
+    }
+
     void SetEmotion(const char* emotion) override {
         if (face_ == nullptr) {
             SpiLcdDisplay::SetEmotion(emotion);
@@ -290,7 +328,7 @@ private:
 
     enum class Expr {
         kNeutral, kHappy, kLaughing, kWinking, kLoving, kSurprised, kCrying,
-        kAngry, kRelaxed, kCool, kEmbarrassed, kSleepy, kThinking
+        kAngry, kRelaxed, kCool, kEmbarrassed, kSleepy, kThinking, kSilly
     };
 
     static constexpr int kPanelW = 300;
@@ -310,6 +348,11 @@ private:
     static constexpr uint32_t kAnger = 0xFF3B30;
 
     lv_obj_t* face_ = nullptr;
+    lv_obj_t* photo_ = nullptr;
+    lv_image_dsc_t photo_dsc_[kPhotoCount] = {};
+    bool photo_on_ = false;
+    int photo_cur_ = -1;
+    int bob_tick_ = 0;
     lv_obj_t* eye_[2] = {};      // white eyeball (or dark lid for the "cool" face)
     lv_obj_t* pupil_[2] = {};
     lv_obj_t* shine_[2] = {};
@@ -340,7 +383,8 @@ private:
         auto is = [&](const char* s) { return strcmp(e, s) == 0; };
         if (is("happy") || is("delicious")) return Expr::kHappy;
         if (is("laughing") || is("funny")) return Expr::kLaughing;
-        if (is("winking") || is("silly")) return Expr::kWinking;
+        if (is("winking")) return Expr::kWinking;
+        if (is("silly")) return Expr::kSilly;
         if (is("loving") || is("kissy")) return Expr::kLoving;
         if (is("surprised") || is("shocked")) return Expr::kSurprised;
         if (is("crying") || is("sad")) return Expr::kCrying;
@@ -527,9 +571,34 @@ private:
         Put(mouth_, 0, y + 1, w - 10, h - 12, 0, LV_RADIUS_CIRCLE);
     }
 
+    // Which pictures (0-based, from the user's 5x4 sheet) fit each expression; one is picked at random.
+    void ShowPhoto(Expr e) {
+        static const int8_t kMap[][4] = {
+            /*Neutral*/ {0, -1}, /*Happy*/ {2, 3, 4, -1}, /*Laughing*/ {7, 19, -1},
+            /*Winking*/ {1, 6, 15, -1}, /*Loving*/ {8, 9, -1}, /*Surprised*/ {5, -1},
+            /*Crying*/ {10, 11, -1}, /*Angry*/ {12, -1}, /*Relaxed*/ {3, 17, -1}, /*Cool*/ {18, -1},
+            /*Embarrassed*/ {3, -1}, /*Sleepy*/ {13, -1}, /*Thinking*/ {14, -1}, /*Silly*/ {16, -1}};
+        const int8_t* list = kMap[static_cast<int>(e)];
+        int n = 0;
+        while (list[n] >= 0) n++;
+        int pick = list[esp_random() % n];
+        if (n > 1 && pick == photo_cur_) {
+            for (int i = 0; i < n; i++) {
+                if (list[i] == pick) { pick = list[(i + 1) % n]; break; }
+            }
+        }
+        photo_cur_ = pick;
+        lv_image_set_src(photo_, &photo_dsc_[pick]);
+        lv_obj_set_y(photo_, 0);
+    }
+
     void Apply(Expr e) {
         expr_ = e;
         speaking_ = false;
+        if (photo_on_) {
+            ShowPhoto(e);
+            return;
+        }
         HideAll();
         round_eyes_ = false;
         switch (e) {
@@ -552,6 +621,7 @@ private:
                 Cheeks();
                 break;
             case Expr::kWinking:
+            case Expr::kSilly:
                 Eye(0, 62, -4, 0); ClosedArc(1, 58, true);
                 Brow(0); Brow(1, 0, 6);
                 BeakOpen(54, 32);
@@ -667,6 +737,36 @@ private:
     void Tick() {
         if (face_ == nullptr) return;
         bool speak_now = Application::GetInstance().GetDeviceState() == kDeviceStateSpeaking;
+        if (photo_on_) {
+            // Speaking: the picture bobs up and down. Idle: a new mood every 8-16 s (never angry/crying).
+            if (speak_now) {
+                speaking_ = true;
+                static const int8_t kBob[] = {-5, 0, 4, 0};
+                lv_obj_set_y(photo_, kBob[(bob_tick_++) & 3]);
+                return;
+            }
+            if (speaking_) {
+                speaking_ = false;
+                lv_obj_set_y(photo_, 0);
+            }
+            if (Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+                if (--idle_countdown_ <= 0) {
+                    static const Expr kIdle[] = {
+                        Expr::kNeutral, Expr::kHappy, Expr::kLaughing, Expr::kWinking, Expr::kLoving,
+                        Expr::kRelaxed, Expr::kCool, Expr::kThinking, Expr::kSurprised,
+                        Expr::kEmbarrassed, Expr::kSleepy, Expr::kSilly, Expr::kNeutral};
+                    Expr next = expr_;
+                    for (int i = 0; i < 6 && next == expr_; i++) {
+                        next = kIdle[esp_random() % (sizeof(kIdle) / sizeof(kIdle[0]))];
+                    }
+                    Apply(next);
+                    idle_countdown_ = 80 + (int)(esp_random() % 80);
+                }
+            } else {
+                idle_countdown_ = 50;
+            }
+            return;
+        }
         if (speak_now) {
             // lip-sync: the beak opens and closes at random while speech is playing
             if (!speaking_) {
