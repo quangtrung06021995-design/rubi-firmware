@@ -5,6 +5,8 @@
 // red cheeks. Blinks now and then and moves the mouth while the robot is speaking.
 
 #include <cstring>
+#include <string>
+#include <vector>
 #include <esp_random.h>
 #include <lvgl.h>
 
@@ -55,7 +57,80 @@ public:
         Apply(Parse(emotion));
     }
 
+    // ---- Rubi menu overlay (touch menu, music list). Drawn on lv_layer_top(). ----
+    void MenuShow(const char* title, const std::vector<std::string>& items, int sel, const char* hint) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        lv_label_set_text(menu_title_, title);
+        lv_label_set_text(menu_hint_, hint);
+        int n = (int)items.size();
+        int start = sel >= kMenuRows ? sel - kMenuRows + 1 : 0;
+        for (int i = 0; i < kMenuRows; i++) {
+            int idx = start + i;
+            if (idx < n) {
+                lv_label_set_text(menu_text_[i], items[idx].c_str());
+                lv_obj_set_style_bg_color(menu_row_[i], lv_color_hex(idx == sel ? 0x2B6CB0 : 0x16385E), 0);
+                lv_obj_clear_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+        lv_obj_clear_flag(menu_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(menu_);
+    }
+
+    void MenuHide() {
+        DisplayLockGuard lock(this);
+        if (menu_ != nullptr) {
+            lv_obj_add_flag(menu_, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+
 private:
+    static constexpr int kMenuRows = 5;
+    lv_obj_t* menu_ = nullptr;
+    lv_obj_t* menu_title_ = nullptr;
+    lv_obj_t* menu_hint_ = nullptr;
+    lv_obj_t* menu_row_[kMenuRows] = {};
+    lv_obj_t* menu_text_[kMenuRows] = {};
+
+    void EnsureMenu() {
+        if (menu_ != nullptr) {
+            return;
+        }
+        const lv_font_t* font = status_label_ != nullptr ? lv_obj_get_style_text_font(status_label_, LV_PART_MAIN) : nullptr;
+        menu_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(menu_);
+        lv_obj_set_size(menu_, LV_HOR_RES, LV_VER_RES);
+        lv_obj_align(menu_, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_set_style_bg_opa(menu_, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(menu_, lv_color_hex(0x0E2A4A), 0);
+        lv_obj_clear_flag(menu_, LV_OBJ_FLAG_SCROLLABLE);
+        menu_title_ = lv_label_create(menu_);
+        if (font) lv_obj_set_style_text_font(menu_title_, font, 0);
+        lv_obj_set_style_text_color(menu_title_, lv_color_hex(0xFFC61A), 0);
+        lv_obj_align(menu_title_, LV_ALIGN_TOP_MID, 0, 8);
+        for (int i = 0; i < kMenuRows; i++) {
+            menu_row_[i] = lv_obj_create(menu_);
+            lv_obj_remove_style_all(menu_row_[i]);
+            lv_obj_set_size(menu_row_[i], 296, 34);
+            lv_obj_align(menu_row_[i], LV_ALIGN_TOP_MID, 0, 36 + i * 38);
+            lv_obj_set_style_bg_opa(menu_row_[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_radius(menu_row_[i], 8, 0);
+            lv_obj_clear_flag(menu_row_[i], LV_OBJ_FLAG_SCROLLABLE);
+            menu_text_[i] = lv_label_create(menu_row_[i]);
+            if (font) lv_obj_set_style_text_font(menu_text_[i], font, 0);
+            lv_obj_set_style_text_color(menu_text_[i], lv_color_white(), 0);
+            lv_label_set_long_mode(menu_text_[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_set_width(menu_text_[i], 276);
+            lv_obj_align(menu_text_[i], LV_ALIGN_LEFT_MID, 10, 0);
+        }
+        menu_hint_ = lv_label_create(menu_);
+        if (font) lv_obj_set_style_text_font(menu_hint_, font, 0);
+        lv_obj_set_style_text_color(menu_hint_, lv_color_hex(0x9FC4E8), 0);
+        lv_obj_align(menu_hint_, LV_ALIGN_BOTTOM_MID, 0, -4);
+    }
+
     enum class Expr {
         kNeutral, kHappy, kLaughing, kWinking, kLoving, kSurprised, kCrying,
         kAngry, kRelaxed, kCool, kEmbarrassed, kSleepy, kThinking

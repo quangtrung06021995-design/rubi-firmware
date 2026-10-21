@@ -172,6 +172,12 @@ jobs:
           open(p, 'w', encoding='utf-8').write(s)
           PY
 
+      - name: Touch menu and music player (SD card)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 ../patches/apply_media.py
+
       - name: Stamp version and OTA address
         shell: bash
         working-directory: upstream
