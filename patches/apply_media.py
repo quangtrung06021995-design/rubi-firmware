@@ -12,9 +12,13 @@ def patch(path, pairs, append=None):
 B = 'main/boards/freenove-esp32s3-display-2.8-lcd/freenove-esp32s3-display-2.8-lcd.cc'
 patch(B, [
     ('#include "display/rubi_face.h"\n', '#include "display/rubi_face.h"\n#include "display/rubi_media.h"\n'),
+    ('        bool down = false;\n',
+     '        bool down = false;\n        uint16_t lx = 0, ly = 0;\n'),
+    ('                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n',
+     '                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n                lx = x;\n                ly = y;\n'),
     ('                // long tap\n                if (press > 3000) {\n                    self->EnterWifiConfigMode();\n                } else {',
-     '                // Rubi: menu gestures first; a hold of 1 s opens the menu\n'
-     '                if (RubiMedia::Get().HandleTouch(press)) {\n'
+     '                // Rubi: icon menu first; a hold of 1 s opens the menu\n'
+     '                if (RubiMedia::Get().HandleTouch(press, lx, ly)) {\n'
      '                    last_tap = 0;\n'
      '                } else if (press >= 3000 && app.GetDeviceState() != kDeviceStateIdle) {\n'
      '                    self->EnterWifiConfigMode();\n'

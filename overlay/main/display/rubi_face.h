@@ -57,26 +57,73 @@ public:
         Apply(Parse(emotion));
     }
 
-    // ---- Rubi menu overlay (touch menu, music list). Drawn on lv_layer_top(). ----
-    void MenuShow(const char* title, const std::vector<std::string>& items, int sel, const char* hint) {
+    // ---- Rubi menu overlay (icon tiles, music list, calibration). Drawn on lv_layer_top(). ----
+    struct MenuTile {
+        const lv_image_dsc_t* icon;
+        std::string label;
+    };
+    static constexpr int kMaxTiles = 6;
+    static constexpr int kMenuRows = 5;
+
+    // Hit tests in screen coordinates (320x240). Return the index or -1.
+    static int TileAt(int x, int y, int count) {
+        for (int i = 0; i < count && i < kMaxTiles; i++) {
+            int x0 = 8 + (i % 3) * 102, y0 = 4 + (i / 3) * 118;
+            if (x >= x0 && x < x0 + 100 && y >= y0 && y < y0 + 114) return i;
+        }
+        return -1;
+    }
+    static int RowAt(int x, int y, int count) {
+        for (int i = 0; i < count && i < kMenuRows; i++) {
+            int y0 = 40 + i * 38;
+            if (x >= 8 && x < 312 && y >= y0 && y < y0 + 36) return i;
+        }
+        return -1;
+    }
+
+    void MenuShowTiles(const std::vector<MenuTile>& tiles) {
         DisplayLockGuard lock(this);
         EnsureMenu();
-        lv_label_set_text(menu_title_, title);
-        lv_label_set_text(menu_hint_, hint);
-        int n = (int)items.size();
-        int start = sel >= kMenuRows ? sel - kMenuRows + 1 : 0;
-        for (int i = 0; i < kMenuRows; i++) {
-            int idx = start + i;
-            if (idx < n) {
-                lv_label_set_text(menu_text_[i], items[idx].c_str());
-                lv_obj_set_style_bg_color(menu_row_[i], lv_color_hex(idx == sel ? 0x2B6CB0 : 0x16385E), 0);
-                lv_obj_clear_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
-            } else {
-                lv_obj_add_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
+        MenuClearAll();
+        for (int i = 0; i < kMaxTiles; i++) {
+            if (i < (int)tiles.size()) {
+                lv_image_set_src(tile_img_[i], tiles[i].icon);
+                lv_label_set_text(tile_lbl_[i], tiles[i].label.c_str());
+                lv_obj_clear_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
-        lv_obj_clear_flag(menu_, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_move_foreground(menu_);
+        ShowMenuLayer();
+    }
+
+    void MenuShowList(const char* title, const std::vector<std::string>& rows, const char* hint) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        lv_label_set_text(menu_title_, title);
+        lv_obj_clear_flag(menu_title_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(menu_hint_, hint);
+        lv_obj_clear_flag(menu_hint_, LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < kMenuRows && i < (int)rows.size(); i++) {
+            lv_label_set_text(menu_text_[i], rows[i].c_str());
+            lv_obj_clear_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
+        }
+        ShowMenuLayer();
+    }
+
+    // A message in the middle; cross_x >= 0 also draws a red + target at (cross_x, cross_y).
+    void MenuShowMessage(const char* msg, int cross_x, int cross_y) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        lv_label_set_text(menu_msg_, msg);
+        lv_obj_clear_flag(menu_msg_, LV_OBJ_FLAG_HIDDEN);
+        if (cross_x >= 0) {
+            lv_obj_set_pos(cross_h_, cross_x - 16, cross_y - 2);
+            lv_obj_set_pos(cross_v_, cross_x - 2, cross_y - 16);
+            lv_obj_clear_flag(cross_h_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(cross_v_, LV_OBJ_FLAG_HIDDEN);
+        }
+        ShowMenuLayer();
     }
 
     void MenuHide() {
@@ -87,48 +134,91 @@ public:
     }
 
 private:
-    static constexpr int kMenuRows = 5;
     lv_obj_t* menu_ = nullptr;
     lv_obj_t* menu_title_ = nullptr;
     lv_obj_t* menu_hint_ = nullptr;
+    lv_obj_t* menu_msg_ = nullptr;
+    lv_obj_t* cross_h_ = nullptr;
+    lv_obj_t* cross_v_ = nullptr;
     lv_obj_t* menu_row_[kMenuRows] = {};
     lv_obj_t* menu_text_[kMenuRows] = {};
+    lv_obj_t* tile_box_[kMaxTiles] = {};
+    lv_obj_t* tile_img_[kMaxTiles] = {};
+    lv_obj_t* tile_lbl_[kMaxTiles] = {};
+
+    void ShowMenuLayer() {
+        lv_obj_clear_flag(menu_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(menu_);
+    }
+
+    void MenuClearAll() {
+        for (int i = 0; i < kMaxTiles; i++) lv_obj_add_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < kMenuRows; i++) lv_obj_add_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(menu_title_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(menu_hint_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(menu_msg_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(cross_h_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(cross_v_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    lv_obj_t* MakeLabel(lv_obj_t* parent, const lv_font_t* font, uint32_t color) {
+        lv_obj_t* l = lv_label_create(parent);
+        if (font) lv_obj_set_style_text_font(l, font, 0);
+        lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
+        return l;
+    }
+
+    lv_obj_t* MakeRect(lv_obj_t* parent, int w, int h, uint32_t color, int radius) {
+        lv_obj_t* r = lv_obj_create(parent);
+        lv_obj_remove_style_all(r);
+        lv_obj_set_size(r, w, h);
+        lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(r, lv_color_hex(color), 0);
+        lv_obj_set_style_radius(r, radius, 0);
+        lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+        return r;
+    }
 
     void EnsureMenu() {
         if (menu_ != nullptr) {
             return;
         }
         const lv_font_t* font = status_label_ != nullptr ? lv_obj_get_style_text_font(status_label_, LV_PART_MAIN) : nullptr;
-        menu_ = lv_obj_create(lv_layer_top());
-        lv_obj_remove_style_all(menu_);
-        lv_obj_set_size(menu_, LV_HOR_RES, LV_VER_RES);
+        menu_ = MakeRect(lv_layer_top(), LV_HOR_RES, LV_VER_RES, 0xFFFFFF, 0);
         lv_obj_align(menu_, LV_ALIGN_TOP_LEFT, 0, 0);
-        lv_obj_set_style_bg_opa(menu_, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(menu_, lv_color_hex(0x0E2A4A), 0);
-        lv_obj_clear_flag(menu_, LV_OBJ_FLAG_SCROLLABLE);
-        menu_title_ = lv_label_create(menu_);
-        if (font) lv_obj_set_style_text_font(menu_title_, font, 0);
-        lv_obj_set_style_text_color(menu_title_, lv_color_hex(0xFFC61A), 0);
-        lv_obj_align(menu_title_, LV_ALIGN_TOP_MID, 0, 8);
+        for (int i = 0; i < kMaxTiles; i++) {
+            tile_box_[i] = lv_obj_create(menu_);
+            lv_obj_remove_style_all(tile_box_[i]);
+            lv_obj_set_size(tile_box_[i], 100, 112);
+            lv_obj_set_pos(tile_box_[i], 8 + (i % 3) * 102, 4 + (i / 3) * 118);
+            lv_obj_clear_flag(tile_box_[i], LV_OBJ_FLAG_SCROLLABLE);
+            tile_img_[i] = lv_image_create(tile_box_[i]);
+            lv_obj_align(tile_img_[i], LV_ALIGN_TOP_MID, 0, 0);
+            tile_lbl_[i] = MakeLabel(tile_box_[i], font, 0x1E2A3A);
+            lv_obj_set_width(tile_lbl_[i], 100);
+            lv_obj_set_style_text_align(tile_lbl_[i], LV_TEXT_ALIGN_CENTER, 0);
+            lv_label_set_long_mode(tile_lbl_[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
+            lv_obj_align(tile_lbl_[i], LV_ALIGN_TOP_MID, 0, 92);
+        }
+        menu_title_ = MakeLabel(menu_, font, 0xD81B60);
+        lv_obj_align(menu_title_, LV_ALIGN_TOP_MID, 0, 10);
         for (int i = 0; i < kMenuRows; i++) {
-            menu_row_[i] = lv_obj_create(menu_);
-            lv_obj_remove_style_all(menu_row_[i]);
-            lv_obj_set_size(menu_row_[i], 296, 34);
-            lv_obj_align(menu_row_[i], LV_ALIGN_TOP_MID, 0, 36 + i * 38);
-            lv_obj_set_style_bg_opa(menu_row_[i], LV_OPA_COVER, 0);
-            lv_obj_set_style_radius(menu_row_[i], 8, 0);
-            lv_obj_clear_flag(menu_row_[i], LV_OBJ_FLAG_SCROLLABLE);
-            menu_text_[i] = lv_label_create(menu_row_[i]);
-            if (font) lv_obj_set_style_text_font(menu_text_[i], font, 0);
-            lv_obj_set_style_text_color(menu_text_[i], lv_color_white(), 0);
+            menu_row_[i] = MakeRect(menu_, 304, 36, 0xE6F0FF, 8);
+            lv_obj_set_pos(menu_row_[i], 8, 40 + i * 38);
+            menu_text_[i] = MakeLabel(menu_row_[i], font, 0x1E2A3A);
             lv_label_set_long_mode(menu_text_[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
-            lv_obj_set_width(menu_text_[i], 276);
+            lv_obj_set_width(menu_text_[i], 284);
             lv_obj_align(menu_text_[i], LV_ALIGN_LEFT_MID, 10, 0);
         }
-        menu_hint_ = lv_label_create(menu_);
-        if (font) lv_obj_set_style_text_font(menu_hint_, font, 0);
-        lv_obj_set_style_text_color(menu_hint_, lv_color_hex(0x9FC4E8), 0);
-        lv_obj_align(menu_hint_, LV_ALIGN_BOTTOM_MID, 0, -4);
+        menu_hint_ = MakeLabel(menu_, font, 0x5A6B80);
+        lv_obj_align(menu_hint_, LV_ALIGN_BOTTOM_MID, 0, -2);
+        menu_msg_ = MakeLabel(menu_, font, 0x1E2A3A);
+        lv_obj_set_width(menu_msg_, 280);
+        lv_obj_set_style_text_align(menu_msg_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_align(menu_msg_, LV_ALIGN_CENTER, 0, 0);
+        cross_h_ = MakeRect(menu_, 32, 4, 0xE53935, 2);
+        cross_v_ = MakeRect(menu_, 4, 32, 0xE53935, 2);
+        MenuClearAll();
     }
 
     enum class Expr {
