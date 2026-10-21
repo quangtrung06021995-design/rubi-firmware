@@ -30,6 +30,7 @@
 #include "board.h"
 #include "rubi_face.h"
 #include "rubi_icons.h"
+#include "rubi_mat_data.h"
 #include "settings.h"
 
 class RubiMedia {
@@ -215,8 +216,7 @@ private:
     std::atomic<bool> voice_mode_{false};
     uint16_t raw1_x_ = 0, raw1_y_ = 0;
 
-    // ---------------- photo faces: /rubi/mat/01.bin .. 20.bin (raw RGB565 320x240) ----------------
-    // Read once at boot into PSRAM, then the SD card is released again (music / learning mount it on demand).
+    // ---------------- photo faces: 20 pictures built into the firmware (RLE), decoded once into PSRAM ----------------
     static void FaceTask(void* arg) {
         static_cast<RubiMedia*>(arg)->LoadFaces();
         vTaskDelete(nullptr);
@@ -225,34 +225,29 @@ private:
     void LoadFaces() {
         for (int i = 0; i < 40 && !(display_ && display_->FaceReady()); i++) vTaskDelay(pdMS_TO_TICKS(250));
         if (!(display_ && display_->FaceReady())) return;
-        vTaskDelay(pdMS_TO_TICKS(4000));   // let boot (Wi-Fi, OTA check) settle first
         constexpr int kN = RubiDisplay::kPhotoCount;
-        constexpr size_t kBytes = 320 * 240 * 2;
+        constexpr size_t kPix = 320 * 240;
         uint16_t* bufs[kN] = {};
-        bool ok = false;
-        {
-            std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
-            bool was_mounted = card_ != nullptr;
-            if (MountSd()) {
-                ok = true;
-                for (int i = 0; i < kN && ok; i++) {
-                    char path[48];
-                    snprintf(path, sizeof(path), "/sdcard/rubi/mat/%02d.bin", i + 1);
-                    FILE* f = fopen(path, "rb");
-                    if (f == nullptr) { ok = false; break; }
-                    bufs[i] = (uint16_t*)heap_caps_malloc(kBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-                    if (bufs[i] == nullptr || fread(bufs[i], 1, kBytes, f) != kBytes) ok = false;
-                    fclose(f);
-                }
-                if (!was_mounted && !playing_ && !IsOpen()) UnmountSd();
+        bool ok = true;
+        for (int i = 0; i < kN && ok; i++) {
+            bufs[i] = (uint16_t*)heap_caps_malloc(kPix * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (bufs[i] == nullptr) { ok = false; break; }
+            const uint8_t* p = kRubiMatData[i];
+            const uint8_t* end = p + kRubiMatSize[i];
+            size_t o = 0;
+            while (p + 3 <= end && o < kPix) {
+                size_t c = p[0];
+                uint16_t v = (uint16_t)(p[1] | (p[2] << 8));
+                p += 3;
+                while (c-- && o < kPix) bufs[i][o++] = v;
             }
+            if (o != kPix) ok = false;
         }
         if (ok) {
             display_->SetPhotoFaces(bufs);
-            ESP_LOGI(kTag, "photo faces loaded");
+            ESP_LOGI(kTag, "photo faces ready");
         } else {
             for (auto*& b : bufs) { if (b) { heap_caps_free(b); b = nullptr; } }
-            ESP_LOGI(kTag, "no photo faces on the SD card, keeping the drawn face");
         }
     }
 
