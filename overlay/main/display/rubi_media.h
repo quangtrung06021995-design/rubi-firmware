@@ -94,6 +94,7 @@ public:
             break;
         case Screen::kLearnCard: {
             int b = RubiDisplay::CardAt(sx, sy);
+            if (b == 0 || b == 1 || b == 2) StopPlayback();   // stop a word that is still being read
             if (b == 0 && !words_.empty()) { word_ = (word_ + (int)words_.size() - 1) % (int)words_.size(); ShowCard(); }
             else if (b == 2 && !words_.empty()) { word_ = (word_ + 1) % (int)words_.size(); ShowCard(); }
             else if (b == 1) { ShowLearnTopics(); }
@@ -496,13 +497,45 @@ private:
         display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, title, w.en, w.vi, cnt);
     }
 
+    // Tap on a card: play <word>_en.wav then <word>_vi.wav from the topic folder (made with tao_giong.py).
+    // If those files are not there, fall back to asking the cloud assistant to read the words.
     void SpeakWord() {
-        if (words_.empty()) return;
-        auto& app = Application::GetInstance();
-        if (app.GetDeviceState() != kDeviceStateIdle) return;   // Rubi is busy: ignore this tap
+        if (words_.empty() || playing_) return;
         const Word& w = words_[word_];
-        // The cloud assistant reads this out loud (see the line to add to the agent prompt)
+        std::string base = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file;
+        speak_paths_.clear();
+        for (const char* suffix : {"_en.wav", "_vi.wav"}) {
+            std::string p = base + suffix;
+            FILE* f = fopen(p.c_str(), "rb");
+            if (f != nullptr) { fclose(f); speak_paths_.push_back(p); }
+        }
+        if (!speak_paths_.empty()) {
+            stop_ = false;
+            playing_ = true;
+            xTaskCreatePinnedToCore(&RubiMedia::SpeakTask, "rubi_say", 8192, this, 4, nullptr, 1);
+            return;
+        }
+        auto& app = Application::GetInstance();
+        if (app.GetDeviceState() != kDeviceStateIdle) return;
         app.WakeWordInvoke("Hãy đọc to: " + w.en + ". Tiếng Việt: " + w.vi);
+    }
+
+    std::vector<std::string> speak_paths_;
+
+    static void SpeakTask(void* arg) {
+        static_cast<RubiMedia*>(arg)->SpeakLoop();
+        vTaskDelete(nullptr);
+    }
+
+    void SpeakLoop() {
+        auto& as = Application::GetInstance().GetAudioService();
+        int out_rate = Board::GetInstance().GetAudioCodec()->output_sample_rate();
+        std::vector<std::string> paths = speak_paths_;
+        for (size_t i = 0; i < paths.size() && !stop_; i++) {
+            PlayFile(paths[i], out_rate, as);
+            if (i + 1 < paths.size() && !stop_) vTaskDelay(pdMS_TO_TICKS(300));
+        }
+        playing_ = false;
     }
 
     void Close() {
