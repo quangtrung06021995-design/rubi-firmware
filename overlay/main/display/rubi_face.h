@@ -14,6 +14,8 @@
 #include "display/lcd_display.h"
 #include "assets/lang_config.h"
 
+#include "rubi_vi_font.h"
+
 class RubiDisplay : public SpiLcdDisplay {
 public:
     using SpiLcdDisplay::SpiLcdDisplay;
@@ -183,7 +185,7 @@ private:
         if (menu_ != nullptr) {
             return;
         }
-        const lv_font_t* font = status_label_ != nullptr ? lv_obj_get_style_text_font(status_label_, LV_PART_MAIN) : nullptr;
+        const lv_font_t* font = &rubi_vi_font;
         menu_ = MakeRect(lv_layer_top(), LV_HOR_RES, LV_VER_RES, 0xFFFFFF, 0);
         lv_obj_align(menu_, LV_ALIGN_TOP_LEFT, 0, 0);
         for (int i = 0; i < kMaxTiles; i++) {
