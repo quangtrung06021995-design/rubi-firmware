@@ -491,7 +491,9 @@ private:
         bool ok = LoadCardImage(w);
         char cnt[24];
         snprintf(cnt, sizeof(cnt), "%d/%d", word_ + 1, (int)words_.size());
-        display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, Topics()[topic_].name, w.en, w.vi, cnt);
+        std::string title = Topics()[topic_].name;
+        if (!ok) title += std::string(" - thiếu ") + w.file + ".bin";   // shows which picture file is missing
+        display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, title, w.en, w.vi, cnt);
     }
 
     void SpeakWord() {
