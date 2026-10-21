@@ -177,9 +177,7 @@ jobs:
         shell: bash
         working-directory: upstream
         run: |
-          pip install --quiet --break-system-packages pillow 2>&1 | tail -1 || true
           python3 ../patches/apply_media.py
-          python3 ../patches/make_icons.py ../icons
 
       - name: Stamp version and OTA address
         shell: bash
