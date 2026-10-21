@@ -395,7 +395,8 @@ private:
     // ---------------- bilingual learning ----------------
     struct Topic { const char* dir; const char* name; const lv_image_dsc_t* icon; };
     struct Word { std::string file, en, vi; };
-    static constexpr int kCardMaxPx = 200;
+    static constexpr int kCardPx = 140;
+    static constexpr int kCardMaxPx = kCardPx;
     std::vector<Word> words_;
     int topic_ = 0;
     int word_ = 0;
@@ -475,8 +476,8 @@ private:
         fseek(f, 0, SEEK_END);
         long size = ftell(f);
         fseek(f, 0, SEEK_SET);
-        int side = (int)(sqrt((double)size / 2.0) + 0.5);
-        if (side < 32 || side > kCardMaxPx || (size_t)side * side * 2 != (size_t)size) {
+        const int side = kCardPx;
+        if ((size_t)size != (size_t)side * side * 2) {   // damaged or wrong picture file: never draw it
             fclose(f);
             card_err_ = "sai kích thước " + std::to_string(size);
             return false;
@@ -504,7 +505,7 @@ private:
         const Word& w = words_[word_];
         bool ok = LoadCardImage(w);
         char cnt[24];
-        snprintf(cnt, sizeof(cnt), "%d/%d", word_ + 1, (int)words_.size());
+        snprintf(cnt, sizeof(cnt), ok ? "%d/%d" : "%d/%d  (hình lỗi)", word_ + 1, (int)words_.size());
         std::string title = Topics()[topic_].name;
         display_->MenuShowCard(ok ? &card_dsc_[card_cur_] : nullptr, title, w.en, w.vi, cnt);
     }
