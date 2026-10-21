@@ -129,13 +129,13 @@ public:
     // Learning card: picture on the left, English and Vietnamese words on the right, 3 buttons below.
     // CardAt: 0 = previous, 1 = back, 2 = next, 3 = picture/words area (tap to hear), -1 = nothing.
     static int CardAt(int x, int y) {
-        if (y >= 190 && y < 240) {
-            if (x >= 8 && x < 106) return 0;
-            if (x >= 111 && x < 209) return 1;
-            if (x >= 214 && x < 312) return 2;
-            return -1;
+        // generous hit zones: the whole bottom strip is split into three, with no gaps
+        if (y >= 176) {
+            if (x < 107) return 0;
+            if (x < 214) return 1;
+            return 2;
         }
-        if (y >= 30 && y < 190) return 3;
+        if (y >= 30) return 3;
         return -1;
     }
 
