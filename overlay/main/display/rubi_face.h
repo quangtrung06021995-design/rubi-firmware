@@ -610,15 +610,7 @@ private:
         photo_cur_ = pick;
         int slot = 1 - photo_slot_;
         uint16_t* dst = photo_buf_[slot];
-        const uint8_t* q = kRubiMatData[pick];
-        const uint8_t* qe = q + kRubiMatSize[pick];
-        size_t o = 0;
-        while (q + 3 <= qe && o < 320 * 240) {
-            size_t c = q[0];
-            uint16_t v = (uint16_t)(q[1] | (q[2] << 8));
-            q += 3;
-            while (c-- && o < 320 * 240) dst[o++] = v;
-        }
+        RubiDecodePal(kRubiMatData[pick], kRubiMatSize[pick], dst, 320 * 240);
         photo_slot_ = slot;
         lv_image_set_src(photo_, &photo_dsc_[slot]);
         lv_obj_set_style_translate_y(photo_, 0, 0);

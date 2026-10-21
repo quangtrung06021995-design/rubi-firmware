@@ -476,18 +476,9 @@ private:
             std::string key = std::string(Topics()[topic_].dir) + "/" + w.file;
             for (int i = 0; i < kRubiLearnPicCount; i++) {
                 if (key != kRubiLearnPics[i].key) continue;
-                uint16_t* dst = reinterpret_cast<uint16_t*>(card_buf_[next]);
-                const uint8_t* q = kRubiLearnPics[i].data;
-                const uint8_t* qe = q + kRubiLearnPics[i].size;
                 const size_t px = (size_t)kCardPx * kCardPx;
-                size_t o = 0;
-                while (q + 3 <= qe && o < px) {
-                    size_t c = q[0];
-                    uint16_t v = (uint16_t)(q[1] | (q[2] << 8));
-                    q += 3;
-                    while (c-- && o < px) dst[o++] = v;
-                }
-                if (o != px) break;
+                if (!RubiDecodePal(kRubiLearnPics[i].data, kRubiLearnPics[i].size,
+                                   reinterpret_cast<uint16_t*>(card_buf_[next]), px)) break;
                 lv_image_dsc_t& d = card_dsc_[next];
                 memset(&d, 0, sizeof(d));
                 d.header.magic = LV_IMAGE_HEADER_MAGIC;
