@@ -30,6 +30,7 @@
 #include "board.h"
 #include "rubi_face.h"
 #include "rubi_icons.h"
+#include "rubi_learn_data.h"
 #include "settings.h"
 
 class RubiMedia {
@@ -470,6 +471,37 @@ private:
             if (card_buf_[next] == nullptr) card_buf_[next] = (uint8_t*)heap_caps_malloc(max_bytes, MALLOC_CAP_8BIT);
             if (card_buf_[next] == nullptr) { card_err_ = "hết bộ nhớ"; return false; }
         }
+        // 1) picture built into the firmware
+        {
+            std::string key = std::string(Topics()[topic_].dir) + "/" + w.file;
+            for (int i = 0; i < kRubiLearnPicCount; i++) {
+                if (key != kRubiLearnPics[i].key) continue;
+                uint16_t* dst = reinterpret_cast<uint16_t*>(card_buf_[next]);
+                const uint8_t* q = kRubiLearnPics[i].data;
+                const uint8_t* qe = q + kRubiLearnPics[i].size;
+                const size_t px = (size_t)kCardPx * kCardPx;
+                size_t o = 0;
+                while (q + 3 <= qe && o < px) {
+                    size_t c = q[0];
+                    uint16_t v = (uint16_t)(q[1] | (q[2] << 8));
+                    q += 3;
+                    while (c-- && o < px) dst[o++] = v;
+                }
+                if (o != px) break;
+                lv_image_dsc_t& d = card_dsc_[next];
+                memset(&d, 0, sizeof(d));
+                d.header.magic = LV_IMAGE_HEADER_MAGIC;
+                d.header.cf = LV_COLOR_FORMAT_RGB565;
+                d.header.w = kCardPx;
+                d.header.h = kCardPx;
+                d.header.stride = kCardPx * 2;
+                d.data_size = px * 2;
+                d.data = card_buf_[next];
+                card_cur_ = next;
+                return true;
+            }
+        }
+        // 2) otherwise a picture file on the SD card (exactly 140x140)
         std::string path = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file + ".bin";
         FILE* f = fopen(path.c_str(), "rb");
         if (f == nullptr) { card_err_ = "không mở được"; return false; }
