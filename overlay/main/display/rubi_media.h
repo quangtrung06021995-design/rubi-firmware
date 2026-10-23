@@ -21,6 +21,7 @@
 #include <driver/sdmmc_host.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -146,6 +147,10 @@ public:
     std::string VoicePlay(const std::string& query) {
         std::lock_guard<std::recursive_mutex> lk(voice_mutex_);
         if (IsOpen()) return "Menu đang mở trên màn hình, chưa dùng được lệnh nhạc.";
+        if (playing_ && voice_mode_ && (esp_timer_get_time() / 1000 - voice_start_ms_) < 15000) {
+            // the same request arrived twice (spoken command + assistant tool): keep the first one
+            if (query.empty() || FindSong(query) == now_index_) return "Nhạc đang phát rồi. Không cần nói gì thêm.";
+        }
         if (playing_) VoiceStopLocked();
         LoadSongs();
         if (songs_.empty()) {
@@ -185,6 +190,50 @@ public:
         return "Đã chuyển sang bài: " + nm + ". Chỉ nói ngắn gọn một câu.";
     }
 
+    // Called with every speech-to-text result, so "mở nhạc" works even if the cloud assistant
+    // does not call the music tool. Runs the action in its own small task.
+    void HandleSpeech(const std::string& text) {
+        std::string f = Fold(text);
+        auto has = [&](const char* w) { return f.find(w) != std::string::npos; };
+        int cmd = 0;
+        std::string q;
+        if (has("tat nhac") || has("dung nhac") || has("ngung nhac") || has("thoi nhac") ||
+            has("tat bai") || has("dung bai")) {
+            cmd = 2;
+        } else if (has("mo nhac") || has("bat nhac") || has("phat nhac") || has("nghe nhac") ||
+                   has("mo bai") || has("bat bai") || has("phat bai")) {
+            cmd = 1;
+            // words after "nhac" / "bai" are the song name
+            size_t p = std::string::npos;
+            for (const char* k : {"nhac ", "bai "}) {
+                size_t x = f.find(k);
+                if (x != std::string::npos && (p == std::string::npos || x < p)) p = x + strlen(k);
+            }
+            if (p != std::string::npos) {
+                static const char* kFiller[] = {"di", "nhe", "nha", "len", "voi", "ne", "nao", "cho", "be",
+                                                "minh", "toi", "nghe", "duoc", "khong", "a"};
+                bool first = true;
+                for (auto& w : Words(f.substr(p))) {
+                    bool filler = first && w == "hat";   // "mở bài hát X"
+                    first = false;
+                    for (auto* k : kFiller) if (w == k) { filler = true; break; }
+                    if (!filler) q += (q.empty() ? "" : " ") + w;
+                }
+            }
+        }
+        if (cmd == 0) return;
+        ESP_LOGI(kTag, "voice command %d, song query '%s'", cmd, q.c_str());
+        struct Job { RubiMedia* self; int cmd; std::string q; };
+        auto* job = new Job{this, cmd, q};
+        BaseType_t ok = xTaskCreate([](void* a) {
+            auto* j = static_cast<Job*>(a);
+            if (j->cmd == 1) j->self->VoicePlay(j->q); else j->self->VoiceStop();
+            delete j;
+            vTaskDelete(nullptr);
+        }, "rubi_voice", 6144, job, 3, nullptr);
+        if (ok != pdPASS) delete job;
+    }
+
 private:
     enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty };
     static constexpr const char* kTag = "RubiMedia";
@@ -212,6 +261,7 @@ private:
     bool cal_loaded_ = false;
     std::recursive_mutex voice_mutex_;
     std::atomic<bool> voice_mode_{false};
+    int64_t voice_start_ms_ = 0;
     uint16_t raw1_x_ = 0, raw1_y_ = 0;
 
     // ---------------- voice helpers ----------------
@@ -221,6 +271,7 @@ private:
         stop_ = false;
         playing_ = true;
         now_index_ = idx;
+        voice_start_ms_ = esp_timer_get_time() / 1000;
         xTaskCreatePinnedToCore(&RubiMedia::PlayTask, "rubi_play", 8192, this, 4, nullptr, 1);
     }
 
@@ -668,7 +719,18 @@ private:
         int out_rate = Board::GetInstance().GetAudioCodec()->output_sample_rate();
         if (voice_mode_) {
             // wait until Rubi has finished answering (Idle) before the music starts
-            for (int w = 0; w < 1000 && !stop_ && Application::GetInstance().GetDeviceState() != kDeviceStateIdle; w++) {
+            // After answering, the assistant normally stays in "listening". Once it has finished
+            // speaking (or nothing was said for 8 s) stop listening so the state becomes Idle.
+            bool seen_speaking = false, asked_stop = false;
+            for (int w = 0; w < 1000 && !stop_; w++) {
+                auto st = Application::GetInstance().GetDeviceState();
+                if (st == kDeviceStateIdle) break;
+                if (st == kDeviceStateSpeaking) seen_speaking = true;
+                if (st == kDeviceStateListening && !asked_stop && w >= 25 &&
+                    ((seen_speaking && as.IsPlaybackIdle()) || w >= 400)) {
+                    asked_stop = true;
+                    Application::GetInstance().StopListening();
+                }
                 vTaskDelay(pdMS_TO_TICKS(20));
             }
             if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) stop_ = true;

@@ -179,6 +179,23 @@ jobs:
         run: |
           python3 ../patches/apply_media.py
 
+      - name: Spoken music commands (speech-to-text hook)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 - <<'PY'
+          p = 'main/application.cc'
+          s = open(p, encoding='utf-8').read()
+          old = '                ESP_LOGI(TAG, ">> %s", text->valuestring);\n'
+          assert s.count(old) == 1, 'stt anchor not found'
+          s = s.replace(old, old + '                rubi_handle_speech(text->valuestring);\n')
+          inc = '#include "application.h"\n'
+          assert s.count(inc) == 1, 'include anchor not found'
+          s = s.replace(inc, inc + 'void rubi_handle_speech(const char* text);  // defined in the board file\n')
+          open(p, 'w', encoding='utf-8').write(s)
+          PY
+          grep -n "rubi_handle_speech" main/application.cc
+
       - name: Stamp version and OTA address
         shell: bash
         working-directory: upstream
