@@ -55,7 +55,7 @@ public:
 
     // Called when a finger is lifted. raw_x/raw_y = last raw touch point. Returns true if consumed.
     bool HandleTouch(uint32_t press_ms, uint16_t raw_x, uint16_t raw_y) {
-        if (voice_mode_ && playing_ && !IsOpen()) {   // music started by voice: any touch stops it
+        if (voice_mode_ && playing_) {   // music started by voice: any touch stops it
             VoiceStop();
             return true;
         }
@@ -279,6 +279,16 @@ private:
         StopPlayback();
         UnmountSd();
         voice_mode_ = false;
+        VoiceHideScreen();
+    }
+
+    // voice music must never leave the touch menu "open" (that would block touch and later voice commands)
+    void VoiceHideScreen() {
+        std::lock_guard<std::recursive_mutex> lk(mutex_);
+        if (screen_ == Screen::kPlaying || screen_ == Screen::kMusic) {
+            screen_ = Screen::kNone;
+            if (display_) display_->MenuHide();
+        }
     }
 
     // lower-case ASCII with Vietnamese accents removed
@@ -746,12 +756,14 @@ private:
             PlayFile(std::string(kMusicDir) + "/" + songs_[i], out_rate, as);
         }
         bool finished_by_itself = !stop_;
-        if (voice_mode_) {
+        bool was_voice = voice_mode_;
+        if (was_voice) {
             UnmountSd();
             voice_mode_ = false;
+            VoiceHideScreen();
         }
         playing_ = false;
-        if (finished_by_itself && !voice_mode_ && screen_ == Screen::kPlaying) {
+        if (finished_by_itself && !was_voice && screen_ == Screen::kPlaying) {
             std::lock_guard<std::recursive_mutex> lk(mutex_);
             if (screen_ == Screen::kPlaying) { page_ = now_index_ / kSongsPerPage; ShowMusic(); }
         }
