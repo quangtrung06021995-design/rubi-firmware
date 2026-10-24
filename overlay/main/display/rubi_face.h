@@ -4,6 +4,7 @@
 // Rubi's face (13 expressions) drawn with LVGL shapes: glowing white eyes, duck-bill mouth,
 // red cheeks. Blinks now and then and moves the mouth while the robot is speaking.
 
+#include <cstdio>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -16,6 +17,7 @@
 
 #include "rubi_vi_font.h"
 #include "rubi_mat_data.h"
+#include "rubi_battery.h"
 #include <esp_heap_caps.h>
 
 class RubiDisplay : public SpiLcdDisplay {
@@ -32,6 +34,25 @@ public:
         InitPhoto();
         Apply(Expr::kNeutral);
         timer_ = lv_timer_create(&RubiDisplay::TimerCb, 100, this);
+        bat_label_ = lv_label_create(lv_layer_top());
+        lv_obj_set_style_text_color(bat_label_, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_bg_color(bat_label_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(bat_label_, LV_OPA_60, 0);
+        lv_obj_set_style_pad_all(bat_label_, 2, 0);
+        lv_obj_align(bat_label_, LV_ALIGN_TOP_RIGHT, -4, 4);
+        lv_label_set_text(bat_label_, "");
+        RubiBattery::Start([this](int pct) { SetBatteryPercent(pct); });
+    }
+
+    // Permanent battery percentage, top-right corner (always visible, also in the menu).
+    void SetBatteryPercent(int pct) {
+        DisplayLockGuard lock(this);
+        if (bat_label_ == nullptr) return;
+        if (pct < 0) { lv_label_set_text(bat_label_, "--%"); return; }
+        char t[12];
+        snprintf(t, sizeof(t), "%d%%", pct);
+        lv_label_set_text(bat_label_, t);
+        lv_obj_set_style_text_color(bat_label_, lv_color_hex(pct <= 15 ? 0xFF5050 : (pct <= 30 ? 0xFFC83C : 0xFFFFFF)), 0);
     }
 
     // No scrolling subtitles for what the child or Rubi says. "system" messages (activation code,
@@ -379,6 +400,7 @@ private:
     lv_obj_t* tongue_ = nullptr;
     lv_obj_t* frown_ = nullptr;
     lv_obj_t* tag_ = nullptr;
+    lv_obj_t* bat_label_ = nullptr;
     lv_timer_t* timer_ = nullptr;
 
     Expr expr_ = Expr::kNeutral;
