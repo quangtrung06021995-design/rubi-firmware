@@ -40,7 +40,7 @@ public:
         lv_obj_set_style_bg_opa(bat_label_, LV_OPA_60, 0);
         lv_obj_set_style_pad_all(bat_label_, 2, 0);
         lv_obj_align(bat_label_, LV_ALIGN_TOP_RIGHT, -4, 4);
-        lv_label_set_text(bat_label_, "");
+        lv_label_set_text(bat_label_, "--%");   // show "--%" until the DevKit sends data (an empty label drew a thin dark bar)
         RubiBattery::Start([this](int pct) { SetBatteryPercent(pct); });
     }
 
