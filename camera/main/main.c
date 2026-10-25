@@ -526,7 +526,26 @@ void app_main(void) {
 
     camera_start();
     wifi_start_sta();
-    xEventGroupWaitBits(g_wifi_events, WIFI_GOT_IP, pdFALSE, pdTRUE, portMAX_DELAY);
+    // Saved Wi-Fi unreachable (router changed / switched off)? Do not wait forever: after 45 s open the
+    // setup network "Rubi-Cam-Setup" so the Wi-Fi can be changed from a phone WITHOUT opening the head.
+    // If nothing is saved within 10 minutes, restart and try the saved Wi-Fi again.
+    EventBits_t got = xEventGroupWaitBits(g_wifi_events, WIFI_GOT_IP, pdFALSE, pdTRUE, pdMS_TO_TICKS(45000));
+    if (!(got & WIFI_GOT_IP)) {
+        ESP_LOGW(TAG, "Saved Wi-Fi not reachable: opening setup network for 10 minutes");
+        esp_netif_create_default_wifi_ap();
+        wifi_config_t ap = {0};
+        strcpy((char *)ap.ap.ssid, AP_SSID);
+        strcpy((char *)ap.ap.password, AP_PASS);
+        ap.ap.ssid_len = strlen(AP_SSID);
+        ap.ap.max_connection = 2;
+        ap.ap.authmode = WIFI_AUTH_WPA2_PSK;
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+        ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &ap));
+        start_servers(true);
+        vTaskDelay(pdMS_TO_TICKS(10 * 60 * 1000));
+        esp_restart();
+        return;
+    }
 
     mdns_init();
     mdns_hostname_set("rubi-cam");
