@@ -35,7 +35,7 @@ public:
         Apply(Expr::kNeutral);
         timer_ = lv_timer_create(&RubiDisplay::TimerCb, 100, this);
         // Phone-style battery icon, top-right: outline + nub, 4 colour level segments, percentage inside.
-        const lv_font_t* bf = lv_obj_get_style_text_font(lv_screen_active(), 0);
+        const lv_font_t* bf = lv_obj_get_style_text_font(lv_screen_active(), LV_PART_MAIN);
         int lh = (bf != nullptr) ? lv_font_get_line_height(bf) : 16;
         bat_w_ = 46; bat_h_ = lh + 6;
         bat_box_ = lv_obj_create(lv_layer_top());
