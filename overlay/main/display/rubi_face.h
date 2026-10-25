@@ -34,7 +34,7 @@ public:
         InitPhoto();
         Apply(Expr::kNeutral);
         timer_ = lv_timer_create(&RubiDisplay::TimerCb, 100, this);
-        // Phone-style battery icon, top-right: outline + nub, colour fill showing the level, percentage inside.
+        // Phone-style battery icon, top-right: outline + nub, 4 colour level segments, percentage inside.
         const lv_font_t* bf = lv_obj_get_style_text_font(lv_screen_active(), 0);
         int lh = (bf != nullptr) ? lv_font_get_line_height(bf) : 16;
         bat_w_ = 46; bat_h_ = lh + 6;
@@ -50,13 +50,18 @@ public:
         lv_obj_set_style_clip_corner(bat_box_, true, 0);
         lv_obj_remove_flag(bat_box_, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_remove_flag(bat_box_, LV_OBJ_FLAG_SCROLLABLE);
-        bat_fill_ = lv_obj_create(bat_box_);
-        lv_obj_remove_style_all(bat_fill_);
-        lv_obj_set_size(bat_fill_, 0, bat_h_ - 4);
-        lv_obj_align(bat_fill_, LV_ALIGN_LEFT_MID, 0, 0);
-        lv_obj_set_style_bg_opa(bat_fill_, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(bat_fill_, lv_color_hex(0x9E9E9E), 0);
-        lv_obj_remove_flag(bat_fill_, LV_OBJ_FLAG_CLICKABLE);
+        // 4 level segments (like a phone): each is lit by SetBatteryPercent()
+        const int seg_w = (bat_w_ - 4 - 4 - 3 * 2) / 4, seg_h = bat_h_ - 4 - 4;
+        for (int i = 0; i < 4; i++) {
+            bat_seg_[i] = lv_obj_create(bat_box_);
+            lv_obj_remove_style_all(bat_seg_[i]);
+            lv_obj_set_size(bat_seg_[i], seg_w, seg_h);
+            lv_obj_align(bat_seg_[i], LV_ALIGN_LEFT_MID, 2 + i * (seg_w + 2), 0);
+            lv_obj_set_style_radius(bat_seg_[i], 2, 0);
+            lv_obj_set_style_bg_opa(bat_seg_[i], LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(bat_seg_[i], lv_color_hex(0x5A5A5A), 0);
+            lv_obj_remove_flag(bat_seg_[i], LV_OBJ_FLAG_CLICKABLE);
+        }
         bat_label_ = lv_label_create(bat_box_);
         lv_obj_set_style_text_color(bat_label_, lv_color_hex(0xFFFFFF), 0);
         lv_label_set_text(bat_label_, "--%");   // "--%" until the DevKit sends data
@@ -75,21 +80,22 @@ public:
     // Permanent battery percentage, top-right corner (always visible, also in the menu).
     void SetBatteryPercent(int pct) {
         DisplayLockGuard lock(this);
-        if (bat_label_ == nullptr || bat_box_ == nullptr || bat_fill_ == nullptr) return;
-        uint32_t col = 0x9E9E9E;
-        int w = 0;
+        if (bat_label_ == nullptr || bat_box_ == nullptr) return;
+        int lit = 0;
+        uint32_t col = 0x5A5A5A;
         if (pct < 0) {
             lv_label_set_text(bat_label_, "--%");
         } else {
             char t[12];
             snprintf(t, sizeof(t), "%d%%", pct);
             lv_label_set_text(bat_label_, t);
-            w = (pct * (bat_w_ - 4) + 50) / 100;        // inner width = box width - 2 x border
-            if (pct > 0 && w < 3) w = 3;
-            col = pct <= 15 ? 0xE53935 : (pct <= 30 ? 0xF9A825 : 0x2E9E3E);
+            lit = pct > 75 ? 4 : (pct > 50 ? 3 : (pct > 25 ? 2 : (pct > 2 ? 1 : 0)));
+            col = pct > 50 ? 0x2FBF3F : (pct > 25 ? 0xFFC21A : (pct > 10 ? 0xFF7A00 : 0xE53935));
         }
-        lv_obj_set_width(bat_fill_, w);
-        lv_obj_set_style_bg_color(bat_fill_, lv_color_hex(col), 0);
+        for (int i = 0; i < 4; i++) {
+            if (bat_seg_[i] == nullptr) continue;
+            lv_obj_set_style_bg_color(bat_seg_[i], lv_color_hex(i < lit ? col : 0x5A5A5A), 0);
+        }
         lv_obj_center(bat_label_);
     }
 
@@ -440,7 +446,7 @@ private:
     lv_obj_t* tag_ = nullptr;
     lv_obj_t* bat_label_ = nullptr;
     lv_obj_t* bat_box_ = nullptr;
-    lv_obj_t* bat_fill_ = nullptr;
+    lv_obj_t* bat_seg_[4] = {nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* bat_nub_ = nullptr;
     int bat_w_ = 46, bat_h_ = 22;
     lv_timer_t* timer_ = nullptr;
