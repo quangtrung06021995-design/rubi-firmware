@@ -1,6 +1,6 @@
 // DevKit ESP32 30 chan: do dien ap pin 2S qua module do ap (chia 5:1) va gui cho bo man hinh qua UART2.
 //   Module do ap:  S -> GPIO36 (VP);  "-" -> GND;  "+" de trong;  hai dau vit -> +VSW / GND (sau cong tac)
-//   UART2: GPIO17 (TX) -> GPIO14 bo man hinh;  GPIO16 (RX) <- GPIO21 bo man hinh;  chung GND
+//   UART2: GPIO17 (TX) -> o UART bo man hinh chan RX0;  GPIO16 (RX) <- o UART bo man hinh chan TX0;  chung GND (khong noi chan 5V)
 // Gui moi giay mot dong "B<mV>\n", vi du "B7620\n" = 7,62 V.
 // HE SO_HIEU_CHINH: do pin bang dong ho van nang, sua so nay cho khop (mac dinh 1.000).
 const int PIN_ADC = 36;

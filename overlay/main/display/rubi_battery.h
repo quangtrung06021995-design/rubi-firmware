@@ -3,7 +3,8 @@
 
 // Battery level from the motor DevKit. The DevKit measures the 2S pack through the 5:1 voltage module and
 // sends one text line per second over UART1:  "B<millivolts>\n"  (e.g. "B7620\n" = 7.62 V).
-// Wiring: DevKit GPIO17 (TX) -> screen board GPIO14 (RX);  DevKit GPIO16 (RX) <- screen board GPIO21 (TX);  common GND.
+// Wiring: DevKit GPIO17 (TX) -> screen board UART socket pin RX0 (GPIO44);  DevKit GPIO16 (RX) <- screen board UART socket pin TX0 (GPIO43);  common GND.
+// (Moved off GPIO14/21 so the 4-pin expansion socket stays free for the external I2S microphone.)
 #include <algorithm>
 #include <cstdlib>
 #include <functional>
@@ -15,7 +16,7 @@
 
 class RubiBattery {
 public:
-    static constexpr gpio_num_t kRx = GPIO_NUM_14, kTx = GPIO_NUM_21;
+    static constexpr gpio_num_t kRx = GPIO_NUM_44, kTx = GPIO_NUM_43;
 
     // cb(percent): 0..100, or -1 when no data has arrived for a while.
     static void Start(std::function<void(int)> cb) {
