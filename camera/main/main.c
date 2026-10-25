@@ -17,6 +17,7 @@
 #include "freertos/task.h"
 
 #include "driver/gpio.h"
+#include "driver/uart.h"
 #include "esp_app_desc.h"
 #include "esp_camera.h"
 #include "esp_crt_bundle.h"
@@ -328,6 +329,68 @@ static esp_err_t stream_get(httpd_req_t *req) {
     return res;
 }
 
+
+// ---------------------------------------------------------------- Wi-Fi sync from the screen board (UART)
+// The screen board sends  W<ssid>\t<password>\t<checksum>\n  every 5 s while it is online. If the Wi-Fi differs from
+// the saved one, store it and restart, so the camera follows the Wi-Fi chosen on the screen.
+// Wiring: screen board IO21 (TX) -> camera GPIO42;  common GND.
+#define SYNC_RX_PIN GPIO_NUM_42
+
+static void wifisync_handle(char *line) {
+    if (line[0] != 'W') return;
+    char *ssid = line + 1;
+    char *t1 = strchr(ssid, '\t');
+    if (!t1) return;
+    *t1 = 0;
+    char *pass = t1 + 1;
+    char *t2 = strchr(pass, '\t');
+    if (!t2) return;
+    *t2 = 0;
+    unsigned sum = 0;
+    for (char *p = ssid; *p; p++) sum += (unsigned char)*p;
+    sum += '\t';
+    for (char *p = pass; *p; p++) sum += (unsigned char)*p;
+    if (strtoul(t2 + 1, NULL, 16) != (sum & 0xFF)) return;           // damaged line
+    if (ssid[0] == 0 || strlen(ssid) > 32 || strlen(pass) > 64) return;
+    if (strcmp(ssid, g_ssid) == 0 && strcmp(pass, g_pass) == 0) return;   // already the same
+    ESP_LOGW(TAG, "Wi-Fi changed on the screen board -> saving '%s' and restarting", ssid);
+    save_settings(ssid, pass, g_key);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+}
+
+static void wifisync_task(void *arg) {
+    uart_config_t c = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    if (uart_driver_install(UART_NUM_1, 512, 0, 0, NULL, 0) != ESP_OK || uart_param_config(UART_NUM_1, &c) != ESP_OK ||
+        uart_set_pin(UART_NUM_1, UART_PIN_NO_CHANGE, SYNC_RX_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE) != ESP_OK) {
+        ESP_LOGW(TAG, "wifi sync uart init failed");
+        vTaskDelete(NULL);
+        return;
+    }
+    char line[160];
+    int n = 0;
+    for (;;) {
+        uint8_t b;
+        if (uart_read_bytes(UART_NUM_1, &b, 1, pdMS_TO_TICKS(500)) != 1) continue;
+        if (b == '\n' || b == '\r') {
+            line[n] = 0;
+            if (n > 3) wifisync_handle(line);
+            n = 0;
+        } else if (n < (int)sizeof(line) - 1) {
+            line[n++] = (char)b;
+        } else {
+            n = 0;
+        }
+    }
+}
+
 // ---------------------------------------------------------------- web servers
 
 static void start_servers(bool setup_mode) {
@@ -524,6 +587,7 @@ void app_main(void) {
         return;
     }
 
+    xTaskCreate(wifisync_task, "wsync", 4096, NULL, 3, NULL);
     camera_start();
     wifi_start_sta();
     // Saved Wi-Fi unreachable (router changed / switched off)? Do not wait forever: after 45 s open the

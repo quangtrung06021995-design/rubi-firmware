@@ -18,6 +18,7 @@
 #include "rubi_vi_font.h"
 #include "rubi_mat_data.h"
 #include "rubi_battery.h"
+#include "rubi_wifisync.h"
 #include <esp_heap_caps.h>
 
 class RubiDisplay : public SpiLcdDisplay {
@@ -75,6 +76,7 @@ public:
         lv_obj_set_style_bg_color(bat_nub_, lv_color_hex(0xFFFFFF), 0);
         if (battery_label_ != nullptr) lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);   // use our own icon only
         RubiBattery::Start([this](int pct) { SetBatteryPercent(pct); });
+        RubiWifiSync::Start();
     }
 
     // Permanent battery percentage, top-right corner (always visible, also in the menu).
