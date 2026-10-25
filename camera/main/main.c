@@ -172,7 +172,7 @@ static void camera_start(void) {
         .ledc_timer = LEDC_TIMER_0,
         .ledc_channel = LEDC_CHANNEL_0,
         .pixel_format = PIXFORMAT_JPEG,
-        .frame_size = FRAMESIZE_VGA,  // 640x480
+        .frame_size = FRAMESIZE_CIF,  // 400x296: much faster over Wi-Fi than VGA; fine on a phone
         .jpeg_quality = 12,
         .fb_count = 2,
         .fb_location = CAMERA_FB_IN_PSRAM,
@@ -413,6 +413,7 @@ static void wifi_start_sta(void) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &sta));
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_set_ps(WIFI_PS_NONE);  // smoother video
+    esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);  // 20 MHz channel: more stable than 40 MHz next to other networks
 }
 
 // ---------------------------------------------------------------- OTA
