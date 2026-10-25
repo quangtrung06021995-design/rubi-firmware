@@ -38,7 +38,7 @@ public:
         // Phone-style battery icon, top-right: outline + nub, 4 colour level segments, percentage inside.
         const lv_font_t* bf = lv_obj_get_style_text_font(lv_screen_active(), LV_PART_MAIN);
         int lh = (bf != nullptr) ? lv_font_get_line_height(bf) : 16;
-        bat_w_ = 46; bat_h_ = lh + 6;
+        bat_w_ = 36; bat_h_ = lh * 5 / 8 + 6;   // smaller icon: text is drawn at 62% scale
         bat_box_ = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(bat_box_);
         lv_obj_set_size(bat_box_, bat_w_, bat_h_);
@@ -66,6 +66,9 @@ public:
         bat_label_ = lv_label_create(bat_box_);
         lv_obj_set_style_text_color(bat_label_, lv_color_hex(0xFFFFFF), 0);
         lv_label_set_text(bat_label_, "--%");   // "--%" until the DevKit sends data
+        lv_obj_set_style_transform_pivot_x(bat_label_, LV_PCT(50), 0);
+        lv_obj_set_style_transform_pivot_y(bat_label_, LV_PCT(50), 0);
+        lv_obj_set_style_transform_scale(bat_label_, 160, 0);   // 256 = 100%
         lv_obj_center(bat_label_);
         bat_nub_ = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(bat_nub_);
