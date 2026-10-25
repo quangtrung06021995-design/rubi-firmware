@@ -34,25 +34,65 @@ public:
         InitPhoto();
         Apply(Expr::kNeutral);
         timer_ = lv_timer_create(&RubiDisplay::TimerCb, 100, this);
+        // Battery icon (outline + terminal nub + level bar) with the percentage on its left, top-right corner.
+        bat_box_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(bat_box_);
+        lv_obj_set_size(bat_box_, 32, 16);
+        lv_obj_align(bat_box_, LV_ALIGN_TOP_RIGHT, -9, 5);
+        lv_obj_set_style_border_width(bat_box_, 2, 0);
+        lv_obj_set_style_border_color(bat_box_, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_radius(bat_box_, 3, 0);
+        lv_obj_set_style_bg_color(bat_box_, lv_color_hex(0x000000), 0);
+        lv_obj_set_style_bg_opa(bat_box_, LV_OPA_50, 0);
+        lv_obj_remove_flag(bat_box_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(bat_box_, LV_OBJ_FLAG_SCROLLABLE);
+        bat_fill_ = lv_obj_create(bat_box_);
+        lv_obj_remove_style_all(bat_fill_);
+        lv_obj_set_size(bat_fill_, 0, 8);
+        lv_obj_align(bat_fill_, LV_ALIGN_LEFT_MID, 1, 0);
+        lv_obj_set_style_radius(bat_fill_, 1, 0);
+        lv_obj_set_style_bg_opa(bat_fill_, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(bat_fill_, lv_color_hex(0x9E9E9E), 0);
+        bat_nub_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(bat_nub_);
+        lv_obj_set_size(bat_nub_, 3, 7);
+        lv_obj_align_to(bat_nub_, bat_box_, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+        lv_obj_set_style_radius(bat_nub_, 1, 0);
+        lv_obj_set_style_bg_opa(bat_nub_, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(bat_nub_, lv_color_hex(0xFFFFFF), 0);
         bat_label_ = lv_label_create(lv_layer_top());
         lv_obj_set_style_text_color(bat_label_, lv_color_hex(0xFFFFFF), 0);
         lv_obj_set_style_bg_color(bat_label_, lv_color_hex(0x000000), 0);
-        lv_obj_set_style_bg_opa(bat_label_, LV_OPA_60, 0);
+        lv_obj_set_style_bg_opa(bat_label_, LV_OPA_50, 0);
+        lv_obj_set_style_radius(bat_label_, 3, 0);
         lv_obj_set_style_pad_all(bat_label_, 2, 0);
-        lv_obj_align(bat_label_, LV_ALIGN_TOP_RIGHT, -4, 4);
-        lv_label_set_text(bat_label_, "--%");   // show "--%" until the DevKit sends data (an empty label drew a thin dark bar)
+        lv_label_set_text(bat_label_, "--%");   // "--%" until the DevKit sends data
+        lv_obj_align_to(bat_label_, bat_box_, LV_ALIGN_OUT_LEFT_MID, -4, 0);
+        if (battery_label_ != nullptr) lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);   // use our own icon only
         RubiBattery::Start([this](int pct) { SetBatteryPercent(pct); });
     }
 
     // Permanent battery percentage, top-right corner (always visible, also in the menu).
     void SetBatteryPercent(int pct) {
         DisplayLockGuard lock(this);
-        if (bat_label_ == nullptr) return;
-        if (pct < 0) { lv_label_set_text(bat_label_, "--%"); return; }
-        char t[12];
-        snprintf(t, sizeof(t), "%d%%", pct);
-        lv_label_set_text(bat_label_, t);
-        lv_obj_set_style_text_color(bat_label_, lv_color_hex(pct <= 15 ? 0xFF5050 : (pct <= 30 ? 0xFFC83C : 0xFFFFFF)), 0);
+        if (bat_label_ == nullptr || bat_box_ == nullptr || bat_fill_ == nullptr) return;
+        uint32_t col = 0xFFFFFF;
+        int w = 0;
+        if (pct < 0) {
+            lv_label_set_text(bat_label_, "--%");
+            col = 0x9E9E9E;
+        } else {
+            char t[12];
+            snprintf(t, sizeof(t), "%d%%", pct);
+            lv_label_set_text(bat_label_, t);
+            w = (pct * 24 + 50) / 100;                 // inside width 24 px
+            if (pct > 0 && w < 2) w = 2;
+            col = pct <= 15 ? 0xFF5050 : (pct <= 30 ? 0xFFC83C : 0x5CD65C);
+        }
+        lv_obj_set_width(bat_fill_, w);
+        lv_obj_set_style_bg_color(bat_fill_, lv_color_hex(col), 0);
+        lv_obj_set_style_text_color(bat_label_, lv_color_hex(pct >= 0 && pct <= 15 ? 0xFF5050 : 0xFFFFFF), 0);
+        lv_obj_align_to(bat_label_, bat_box_, LV_ALIGN_OUT_LEFT_MID, -4, 0);
     }
 
     // No scrolling subtitles for what the child or Rubi says. "system" messages (activation code,
@@ -401,6 +441,9 @@ private:
     lv_obj_t* frown_ = nullptr;
     lv_obj_t* tag_ = nullptr;
     lv_obj_t* bat_label_ = nullptr;
+    lv_obj_t* bat_box_ = nullptr;
+    lv_obj_t* bat_fill_ = nullptr;
+    lv_obj_t* bat_nub_ = nullptr;
     lv_timer_t* timer_ = nullptr;
 
     Expr expr_ = Expr::kNeutral;
