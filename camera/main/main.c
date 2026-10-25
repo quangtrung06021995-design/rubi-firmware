@@ -30,6 +30,7 @@
 #include "esp_ota_ops.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
+#include "esp_timer.h"
 #include "mdns.h"
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -69,6 +70,8 @@ static EventGroupHandle_t g_wifi_events;
 #define WIFI_GOT_IP BIT0
 static httpd_handle_t g_srv_main = NULL;
 static httpd_handle_t g_srv_stream = NULL;
+static volatile int g_fps = 0;        // frames sent per second (last second)
+static volatile int g_frame_kb = 0;   // size of the last JPEG frame in KB
 
 // ---------------------------------------------------------------- storage
 
@@ -297,9 +300,13 @@ static esp_err_t snap_get(httpd_req_t *req) {
 
 static esp_err_t status_get(httpd_req_t *req) {
     if (!key_ok(req)) return deny(req);
-    char out[200];
-    snprintf(out, sizeof(out), "{\"version\":\"%s\",\"camera\":%s,\"updating\":%s,\"free_heap\":%u}", version(),
-             g_cam_ok ? "true" : "false", g_updating ? "true" : "false", (unsigned)esp_get_free_heap_size());
+    char out[300];
+    wifi_ap_record_t ap;
+    int rssi = (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) ? ap.rssi : 0;
+    snprintf(out, sizeof(out),
+             "{\"version\":\"%s\",\"camera\":%s,\"updating\":%s,\"free_heap\":%u,\"rssi\":%d,\"fps\":%d,\"frame_kb\":%d}",
+             version(), g_cam_ok ? "true" : "false", g_updating ? "true" : "false", (unsigned)esp_get_free_heap_size(), rssi,
+             g_fps, g_frame_kb);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
 }
@@ -314,6 +321,8 @@ static esp_err_t stream_get(httpd_req_t *req) {
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     char part[80];
     esp_err_t res = ESP_OK;
+    int frames = 0;
+    int64_t t0 = esp_timer_get_time();
     while (res == ESP_OK && !g_updating) {
         camera_fb_t *fb = esp_camera_fb_get();
         if (!fb) {
@@ -324,8 +333,17 @@ static esp_err_t stream_get(httpd_req_t *req) {
                          (unsigned)fb->len);
         res = httpd_resp_send_chunk(req, part, n);
         if (res == ESP_OK) res = httpd_resp_send_chunk(req, (const char *)fb->buf, fb->len);
+        g_frame_kb = (int)(fb->len / 1024);
         esp_camera_fb_return(fb);
+        frames++;
+        int64_t now = esp_timer_get_time();
+        if (now - t0 >= 1000000) {
+            g_fps = frames;
+            frames = 0;
+            t0 = now;
+        }
     }
+    g_fps = 0;
     return res;
 }
 
