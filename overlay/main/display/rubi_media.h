@@ -2,7 +2,7 @@
 #define RUBI_MEDIA_H
 
 // Rubi touch menu + music player from the SD card (WAV files in /rubi/music).
-// Hold the screen about 1 s to open the menu, then tap an icon (like on a phone).
+// Tap the menu button (bottom-right) to open the menu, then tap an icon (like on a phone).
 // The touch panel is calibrated once (two taps) and the result is saved.
 // While the menu is open the wake word is switched off so the music cannot wake Rubi.
 
@@ -44,6 +44,7 @@ public:
     void SetDisplay(RubiDisplay* d) { display_ = d; }
     void SetWifiCallback(std::function<void()> cb) { wifi_cb_ = std::move(cb); }
     bool IsOpen() const { return screen_ != Screen::kNone; }
+    bool CalibrationValid() { LoadCalibration(); return cal_.valid; }
 
     void OpenMenu() {
         if (display_ == nullptr || IsOpen()) return;
@@ -59,7 +60,18 @@ public:
             VoiceStop();
             return true;
         }
-        if (!IsOpen()) return false;
+        if (!IsOpen()) {
+            // Closed: a tap on the menu button (bottom-right) opens the menu. Needs the touch calibration.
+            if (!CalibrationValid() || display_ == nullptr) return false;
+            int bx = 0, by = 0;
+            Map(raw_x, raw_y, bx, by);
+            if (RubiDisplay::InMenuButton(bx, by) &&
+                Application::GetInstance().GetDeviceState() == kDeviceStateIdle) {
+                OpenMenu();
+                return true;
+            }
+            return false;
+        }
         std::lock_guard<std::recursive_mutex> lk(mutex_);
         switch (screen_) {
         case Screen::kCalib1:

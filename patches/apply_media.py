@@ -17,10 +17,10 @@ patch(B, [
     ('                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n',
      '                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n                lx = x;\n                ly = y;\n'),
     ('                // long tap\n                if (press > 3000) {\n                    self->EnterWifiConfigMode();\n                } else {',
-     '                // Rubi: icon menu first; a hold of 1 s opens the menu\n'
+     '                // Rubi: icon menu first; tap the bottom-right button opens the menu; a hold of 1 s only before calibration\n'
      '                if (RubiMedia::Get().HandleTouch(press, lx, ly)) {\n'
      '                    last_tap = 0;\n'
-     '                } else if (press >= 1000) {\n'
+     '                } else if (press >= 1000 && !RubiMedia::Get().CalibrationValid()) {\n'
      '                    RubiMedia::Get().OpenMenu();\n'
      '                    last_tap = 0;\n'
      '                } else {'),

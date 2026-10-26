@@ -70,6 +70,28 @@ public:
         lv_obj_set_style_transform_pivot_y(bat_label_, LV_PCT(50), 0);
         lv_obj_set_style_transform_scale(bat_label_, 160, 0);   // 256 = 100%
         lv_obj_center(bat_label_);
+        // Menu button, bottom-right: a tap opens the Rubi menu (no more press-and-hold).
+        menu_btn_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(menu_btn_);
+        lv_obj_set_size(menu_btn_, 36, 36);
+        lv_obj_align(menu_btn_, LV_ALIGN_BOTTOM_RIGHT, -8, -8);
+        lv_obj_set_style_radius(menu_btn_, 18, 0);
+        lv_obj_set_style_bg_opa(menu_btn_, LV_OPA_50, 0);
+        lv_obj_set_style_bg_color(menu_btn_, lv_color_hex(0x1E88E5), 0);
+        lv_obj_set_style_border_width(menu_btn_, 2, 0);
+        lv_obj_set_style_border_color(menu_btn_, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(menu_btn_, LV_OBJ_FLAG_SCROLLABLE);
+        for (int i = 0; i < 3; i++) {
+            lv_obj_t* bar = lv_obj_create(menu_btn_);
+            lv_obj_remove_style_all(bar);
+            lv_obj_set_size(bar, 18, 3);
+            lv_obj_align(bar, LV_ALIGN_CENTER, 0, (i - 1) * 7);
+            lv_obj_set_style_radius(bar, 2, 0);
+            lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+            lv_obj_set_style_bg_color(bar, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_remove_flag(bar, LV_OBJ_FLAG_CLICKABLE);
+        }
         bat_nub_ = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(bat_nub_);
         lv_obj_set_size(bat_nub_, 4, bat_h_ / 2);
@@ -181,6 +203,9 @@ public:
     static constexpr int kMenuRows = 5;
 
     // Hit tests in screen coordinates (320x240). Return the index or -1.
+    // Touch area of the menu button (screen coordinates, 320x240 landscape); a bit bigger than the drawn button.
+    static bool InMenuButton(int x, int y) { return x >= 258 && y >= 178; }
+
     static int TileAt(int x, int y, int count) {
         for (int i = 0; i < count && i < kMaxTiles; i++) {
             int x0 = 8 + (i % 3) * 102, y0 = 4 + (i / 3) * 118;
@@ -453,6 +478,7 @@ private:
     lv_obj_t* bat_box_ = nullptr;
     lv_obj_t* bat_seg_[4] = {nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* bat_nub_ = nullptr;
+    lv_obj_t* menu_btn_ = nullptr;
     int bat_w_ = 46, bat_h_ = 22;
     lv_timer_t* timer_ = nullptr;
 
