@@ -28,6 +28,9 @@
 #include <sdmmc_cmd.h>
 
 #include "application.h"
+#include <esp_wifi.h>
+#include <ssid_manager.h>
+#include <wifi_manager.h>
 #include "board.h"
 #include "rubi_face.h"
 #include "rubi_icons.h"
@@ -93,11 +96,34 @@ public:
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
             else if (t == 2) { ShowVolume(); }
-            else if (t == 3) { Close(); if (wifi_cb_) wifi_cb_(); }
+            else if (t == 3) { StartWifiScan(); }
             else if (t == 4) { StartCalibration(); }
             else if (t == 5) { Close(); }
             break;
         }
+        case Screen::kWifiBusy:
+            break;   // working: ignore touches
+        case Screen::kWifiList: {
+            int r = RubiDisplay::RowAt(sx, sy, (int)wifi_row_action_.size());
+            if (r < 0) break;
+            int act = wifi_row_action_[r];
+            if (act >= 0 && act < (int)nets_.size()) {
+                sel_ssid_ = nets_[act].ssid;
+                sel_open_ = nets_[act].open;
+                pass_.clear();
+                kb_layer_ = 0;
+                show_pw_ = false;
+                if (sel_open_) ConnectWifi(); else RenderKeyboard("");
+            }
+            else if (act == -1) { wpage_++; ShowWifiList(); }
+            else if (act == -2) { StartWifiScan(); }
+            else if (act == -3) { ShowMain(); }
+            else if (act == -4) { Close(); if (wifi_cb_) wifi_cb_(); }
+            break;
+        }
+        case Screen::kWifiKeys:
+            HandleKeyboardTouch(sx, sy);
+            break;
         case Screen::kVolume: {
             int r = RubiDisplay::RowAt(sx, sy, 4);
             auto* codec = Board::GetInstance().GetAudioCodec();
@@ -257,7 +283,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume };
+    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -441,6 +467,211 @@ private:
             {&rubi_icon_chinh_cam_ung, "Chỉnh cảm ứng"},
             {&rubi_icon_dong, "Thoát"},
         });
+    }
+
+    // ---------------- Wi-Fi: scan, pick a network, type the password ----------------
+    struct WifiNet { std::string ssid; int rssi; bool open; };
+    std::vector<WifiNet> nets_;
+    std::vector<int> wifi_row_action_;   // per row: net index, -1 next page, -2 rescan, -3 back, -4 phone setup
+    int wpage_ = 0;
+    bool scan_failed_ = false;
+    std::string sel_ssid_, pass_;
+    bool sel_open_ = false, show_pw_ = false;
+    int kb_layer_ = 0;   // 0 lower, 1 upper (one letter), 2 symbols
+    std::vector<RubiDisplay::KbKey> keys_;
+
+    static void RunTask(std::function<void()> fn, const char* name) {
+        auto* f = new std::function<void()>(std::move(fn));
+        if (xTaskCreate([](void* a) {
+                auto* g = static_cast<std::function<void()>*>(a);
+                (*g)();
+                delete g;
+                vTaskDelete(nullptr);
+            }, name, 6144, f, 4, nullptr) != pdPASS) {
+            delete f;
+        }
+    }
+
+    void StartWifiScan() {
+        screen_ = Screen::kWifiBusy;
+        if (display_) display_->MenuShowMessage("Đang quét Wi-Fi...", -1, -1);
+        RunTask([this]() {
+            wifi_scan_config_t cfg = {};
+            cfg.show_hidden = false;
+            esp_err_t e = ESP_FAIL;
+            for (int i = 0; i < 3 && e != ESP_OK; i++) {
+                e = esp_wifi_scan_start(&cfg, true);
+                if (e != ESP_OK) vTaskDelay(pdMS_TO_TICKS(1500));
+            }
+            std::vector<WifiNet> out;
+            if (e == ESP_OK) {
+                uint16_t n = 0;
+                esp_wifi_scan_get_ap_num(&n);
+                if (n > 24) n = 24;
+                std::vector<wifi_ap_record_t> rec(n);
+                if (n > 0 && esp_wifi_scan_get_ap_records(&n, rec.data()) == ESP_OK) {
+                    for (int i = 0; i < n; i++) {
+                        std::string name = reinterpret_cast<const char*>(rec[i].ssid);
+                        if (name.empty()) continue;
+                        bool dup = false;
+                        for (auto& o : out) {
+                            if (o.ssid == name) { dup = true; if (rec[i].rssi > o.rssi) o.rssi = rec[i].rssi; }
+                        }
+                        if (!dup) out.push_back({name, rec[i].rssi, rec[i].authmode == WIFI_AUTH_OPEN});
+                    }
+                }
+                std::sort(out.begin(), out.end(), [](const WifiNet& a, const WifiNet& b) { return a.rssi > b.rssi; });
+            }
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            nets_ = out;
+            wpage_ = 0;
+            scan_failed_ = (e != ESP_OK);
+            ShowWifiList();
+        }, "wifi_scan");
+    }
+
+    void ShowWifiList() {
+        screen_ = Screen::kWifiList;
+        wifi_row_action_.clear();
+        std::vector<std::string> rows;
+        if (nets_.empty()) {
+            rows.push_back(scan_failed_ ? "Không quét được Wi-Fi" : "Không thấy Wi-Fi nào");
+            wifi_row_action_.push_back(-2);
+            rows.push_back("Quét lại");
+            wifi_row_action_.push_back(-2);
+            rows.push_back("Cấu hình bằng điện thoại");
+            wifi_row_action_.push_back(-4);
+            rows.push_back("<< Quay lại");
+            wifi_row_action_.push_back(-3);
+        } else {
+            const int per = 3;
+            int total = (int)nets_.size();
+            int pages = (total + per - 1) / per;
+            if (wpage_ >= pages) wpage_ = 0;
+            std::string cur = WifiManager::GetInstance().IsConnected() ? WifiManager::GetInstance().GetSsid() : "";
+            for (int i = wpage_ * per; i < total && i < (wpage_ + 1) * per; i++) {
+                int pct = std::max(0, std::min(100, 2 * (nets_[i].rssi + 100)));
+                char line[120];
+                snprintf(line, sizeof(line), "%s%s  %d%%%s", nets_[i].ssid.c_str(), nets_[i].ssid == cur ? " (đang dùng)" : "", pct,
+                         nets_[i].open ? "  (mở)" : "");
+                rows.push_back(line);
+                wifi_row_action_.push_back(i);
+            }
+            if (pages > 1) { rows.push_back("Trang sau >"); wifi_row_action_.push_back(-1); }
+            else { rows.push_back("Quét lại"); wifi_row_action_.push_back(-2); }
+            rows.push_back("<< Quay lại");
+            wifi_row_action_.push_back(-3);
+        }
+        if (display_) display_->MenuShowList("CHỌN WI-FI", rows, "");
+    }
+
+    void BuildKeys() {
+        using K = RubiDisplay::KbKey;
+        keys_.clear();
+        static const char* kR1[3] = {"qwertyuiop", "QWERTYUIOP", "1234567890"};
+        static const char* kR2[3] = {"asdfghjkl", "ASDFGHJKL", "@#$%&*-+()"};
+        static const char* kR3[3] = {"zxcvbnm", "ZXCVBNM", "_=/.,?!"};
+        const uint32_t kChar = 0xE6F0FF, kSpecial = 0xBBD0F0, kOk = 0xA5D6A7, kCancel = 0xFFC9C9;
+        const int KH = 38, KW = 28, G = 3;
+        int L = kb_layer_;
+        keys_.push_back({4, 2, 64, 22, "< Hủy", 6, "", kCancel});
+        auto addRow = [&](const char* chars, int y, int x0) {
+            for (int i = 0; chars[i]; i++) {
+                keys_.push_back({x0 + i * (KW + G), y, KW, KH, std::string(1, chars[i]), 0, std::string(1, chars[i]), kChar});
+            }
+        };
+        addRow(kR1[L], 56, 6);
+        addRow(kR2[L], 97, 22);
+        // row 3: shift / letters / backspace
+        keys_.push_back({10, 138, 40, KH, L == 2 ? "abc" : "Aa", L == 2 ? 3 : 1, "", L == 1 ? 0xFFE082 : kSpecial});
+        addRow(kR3[L], 138, 10 + 40 + G);
+        keys_.push_back({10 + 40 + G + 7 * (KW + G), 138, 40, KH, "Xóa", 2, "", kSpecial});
+        // row 4
+        keys_.push_back({7, 179, 60, KH, L == 2 ? "abc" : "123", 3, "", kSpecial});
+        keys_.push_back({7 + 60 + G, 179, 170, KH, "Cách", 4, " ", kChar});
+        keys_.push_back({7 + 60 + G + 170 + G, 179, 70, KH, "OK", 5, "", kOk});
+    }
+
+    void RenderKeyboard(const std::string& note) {
+        screen_ = Screen::kWifiKeys;
+        BuildKeys();
+        std::string shown;
+        if (show_pw_) shown = pass_; else shown.assign(pass_.size(), '*');
+        shown += "_";
+        std::string head = note.empty() ? sel_ssid_ : note;
+        if (display_) display_->MenuShowKeyboard(head, shown, keys_);
+    }
+
+    void HandleKeyboardTouch(int sx, int sy) {
+        if (sy >= 26 && sy < 54) {   // tap the password field: show / hide the characters
+            show_pw_ = !show_pw_;
+            RenderKeyboard("");
+            return;
+        }
+        for (const auto& k : keys_) {
+            if (sx < k.x - 1 || sx >= k.x + k.w + 1 || sy < k.y - 1 || sy >= k.y + k.h + 1) continue;
+            switch (k.kind) {
+            case 0:
+                if (pass_.size() < 63) pass_ += k.val;
+                if (kb_layer_ == 1) kb_layer_ = 0;
+                RenderKeyboard("");
+                break;
+            case 1: kb_layer_ = (kb_layer_ == 1) ? 0 : 1; RenderKeyboard(""); break;
+            case 2: if (!pass_.empty()) pass_.pop_back(); RenderKeyboard(""); break;
+            case 3: kb_layer_ = (kb_layer_ == 2) ? 0 : 2; RenderKeyboard(""); break;
+            case 4: if (pass_.size() < 63) pass_ += ' '; RenderKeyboard(""); break;
+            case 5:
+                if (pass_.size() < 8) RenderKeyboard("Mật khẩu cần từ 8 ký tự");
+                else ConnectWifi();
+                break;
+            case 6: ShowWifiList(); break;
+            }
+            return;
+        }
+    }
+
+    void ConnectWifi() {
+        screen_ = Screen::kWifiBusy;
+        if (display_) display_->MenuShowMessage(("Đang kết nối\n" + sel_ssid_).c_str(), -1, -1);
+        RunTask([this, ssid = sel_ssid_, pass = sel_open_ ? std::string() : pass_, open = sel_open_]() {
+            auto& sm = SsidManager::GetInstance();
+            bool had = false;
+            std::string old_pass;
+            for (auto& it : sm.GetSsidList()) if (it.ssid == ssid) { had = true; old_pass = it.password; }
+            sm.AddSsid(ssid, pass);
+            const auto& lst = sm.GetSsidList();
+            for (int i = 0; i < (int)lst.size(); i++) if (lst[i].ssid == ssid) { sm.SetDefaultSsid(i); break; }
+            auto& wm = WifiManager::GetInstance();
+            wm.StopStation();
+            vTaskDelay(pdMS_TO_TICKS(500));
+            wm.StartStation();
+            bool ok = false;
+            for (int i = 0; i < 40 && !ok; i++) {
+                vTaskDelay(pdMS_TO_TICKS(500));
+                ok = wm.IsConnected() && wm.GetSsid() == ssid;
+            }
+            if (ok) {
+                if (display_) display_->MenuShowMessage(("Đã kết nối!\n" + ssid).c_str(), -1, -1);
+                vTaskDelay(pdMS_TO_TICKS(2000));
+                std::lock_guard<std::recursive_mutex> lk(mutex_);
+                ShowMain();
+                return;
+            }
+            // failed: put the old settings back and reconnect to whatever worked before
+            if (had) {
+                sm.AddSsid(ssid, old_pass);
+            } else {
+                const auto& l2 = sm.GetSsidList();
+                for (int i = 0; i < (int)l2.size(); i++) if (l2[i].ssid == ssid) { sm.RemoveSsid(i); break; }
+            }
+            wm.StopStation();
+            vTaskDelay(pdMS_TO_TICKS(500));
+            wm.StartStation();
+            if (display_) display_->MenuShowMessage("Không kết nối được.\nKiểm tra lại mật khẩu", -1, -1);
+            vTaskDelay(pdMS_TO_TICKS(2500));
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            if (open) ShowWifiList(); else RenderKeyboard("");
+        }, "wifi_conn");
     }
 
     void ShowVolume() {

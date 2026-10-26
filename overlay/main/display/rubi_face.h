@@ -312,6 +312,34 @@ public:
         ShowMenuLayer();
     }
 
+    struct KbKey {
+        int x, y, w, h;
+        std::string label;
+        int kind;          // 0 character, 1 shift, 2 backspace, 3 layer switch, 4 space, 5 OK, 6 cancel
+        std::string val;   // character to type (kind 0)
+        uint32_t color;
+    };
+
+    void MenuShowKeyboard(const std::string& note, const std::string& field, const std::vector<KbKey>& keys) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        lv_label_set_text(kb_ssid_, note.c_str());
+        lv_obj_clear_flag(kb_ssid_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(kb_field_lbl_, field.c_str());
+        lv_obj_clear_flag(kb_field_, LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < kMaxKeys && i < (int)keys.size(); i++) {
+            const KbKey& k = keys[i];
+            lv_obj_set_pos(kb_key_[i], k.x, k.y);
+            lv_obj_set_size(kb_key_[i], k.w, k.h);
+            lv_obj_set_style_bg_color(kb_key_[i], lv_color_hex(k.color), 0);
+            lv_label_set_text(kb_lbl_[i], k.label.c_str());
+            lv_obj_center(kb_lbl_[i]);
+            lv_obj_clear_flag(kb_key_[i], LV_OBJ_FLAG_HIDDEN);
+        }
+        ShowMenuLayer();
+    }
+
     void MenuHide() {
         DisplayLockGuard lock(this);
         if (menu_ != nullptr) {
@@ -336,6 +364,12 @@ private:
     lv_obj_t* card_vi_ = nullptr;
     lv_obj_t* card_count_ = nullptr;
     lv_obj_t* card_btn_[3] = {};
+    static constexpr int kMaxKeys = 36;
+    lv_obj_t* kb_key_[kMaxKeys] = {};
+    lv_obj_t* kb_lbl_[kMaxKeys] = {};
+    lv_obj_t* kb_ssid_ = nullptr;
+    lv_obj_t* kb_field_ = nullptr;
+    lv_obj_t* kb_field_lbl_ = nullptr;
 
     void ShowMenuLayer() {
         lv_obj_clear_flag(menu_, LV_OBJ_FLAG_HIDDEN);
@@ -355,6 +389,9 @@ private:
         lv_obj_add_flag(card_vi_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(card_count_, LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < 3; i++) lv_obj_add_flag(card_btn_[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < kMaxKeys; i++) if (kb_key_[i]) lv_obj_add_flag(kb_key_[i], LV_OBJ_FLAG_HIDDEN);
+        if (kb_ssid_) lv_obj_add_flag(kb_ssid_, LV_OBJ_FLAG_HIDDEN);
+        if (kb_field_) lv_obj_add_flag(kb_field_, LV_OBJ_FLAG_HIDDEN);
     }
 
     lv_obj_t* MakeLabel(lv_obj_t* parent, const lv_font_t* font, uint32_t color) {
@@ -434,6 +471,24 @@ private:
             lv_obj_t* l = MakeLabel(card_btn_[i], font, 0x1E2A3A);
             lv_label_set_text(l, kBtn[i]);
             lv_obj_center(l);
+        }
+        // On-screen keyboard (used by the Wi-Fi password screen)
+        kb_ssid_ = MakeLabel(menu_, font, 0xD81B60);
+        lv_label_set_long_mode(kb_ssid_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_width(kb_ssid_, 240);
+        lv_obj_set_pos(kb_ssid_, 74, 4);
+        kb_field_ = MakeRect(menu_, 308, 26, 0xFFFFFF, 6);
+        lv_obj_set_pos(kb_field_, 6, 26);
+        lv_obj_set_style_border_width(kb_field_, 2, 0);
+        lv_obj_set_style_border_color(kb_field_, lv_color_hex(0x1E88E5), 0);
+        kb_field_lbl_ = MakeLabel(kb_field_, font, 0x1E2A3A);
+        lv_label_set_long_mode(kb_field_lbl_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_width(kb_field_lbl_, 292);
+        lv_obj_align(kb_field_lbl_, LV_ALIGN_LEFT_MID, 4, 0);
+        for (int i = 0; i < kMaxKeys; i++) {
+            kb_key_[i] = MakeRect(menu_, 28, 38, 0xE6F0FF, 6);
+            kb_lbl_[i] = MakeLabel(kb_key_[i], font, 0x1E2A3A);
+            lv_obj_center(kb_lbl_[i]);
         }
         MenuClearAll();
     }
