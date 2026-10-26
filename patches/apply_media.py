@@ -13,10 +13,19 @@ B = 'main/boards/freenove-esp32s3-display-2.8-lcd/freenove-esp32s3-display-2.8-l
 patch(B, [
     ('#include "display/rubi_face.h"\n', '#include "display/rubi_face.h"\n#include "display/rubi_media.h"\n\n// Called by application.cc for every speech-to-text result (spoken music commands)\nvoid rubi_handle_speech(const char* text) { RubiMedia::Get().HandleSpeech(text); }\n'),
     ('        bool down = false;\n',
-     '        bool down = false;\n        uint16_t lx = 0, ly = 0;\n'),
+     '        bool down = false;\n        uint16_t lx = 0, ly = 0;\n        uint16_t sxs[16], sys_[16];\n        int sn = 0;\n'),
     ('                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n',
-     '                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n                lx = x;\n                ly = y;\n'),
+     '                if (!down) {\n                    down = true;\n                    down_start = now;\n                    sn = 0;\n                }\n                if (sn < 16) { sxs[sn] = x; sys_[sn] = y; sn++; }\n'),
     ('                // long tap\n                if (press > 3000) {\n                    self->EnterWifiConfigMode();\n                } else {',
+     '                // Rubi: the last sample before the finger lifts drifts, so use the middle sample of the press\n'
+     '                if (sn > 0) {\n'
+     '                    if (sn <= 2) { lx = sxs[0]; ly = sys_[0]; }\n'
+     '                    else {\n'
+     '                        for (int a = 1; a < sn; a++) for (int b = a; b > 0 && sxs[b-1] > sxs[b]; b--) { uint16_t t0 = sxs[b]; sxs[b] = sxs[b-1]; sxs[b-1] = t0; }\n'
+     '                        for (int a = 1; a < sn; a++) for (int b = a; b > 0 && sys_[b-1] > sys_[b]; b--) { uint16_t t0 = sys_[b]; sys_[b] = sys_[b-1]; sys_[b-1] = t0; }\n'
+     '                        lx = sxs[sn / 2]; ly = sys_[sn / 2];\n'
+     '                    }\n'
+     '                }\n'
      '                // Rubi: icon menu first; tap the bottom-right button opens the menu; a hold of 1 s only before calibration\n'
      '                if (RubiMedia::Get().HandleTouch(press, lx, ly)) {\n'
      '                    last_tap = 0;\n'

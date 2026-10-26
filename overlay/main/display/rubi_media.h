@@ -90,6 +90,7 @@ public:
         }
         int sx = 0, sy = 0;
         Map(raw_x, raw_y, sx, sy);
+        ESP_LOGI("RubiTouch", "raw %u,%u -> screen %d,%d (screen %d)", (unsigned)raw_x, (unsigned)raw_y, sx, sy, (int)screen_);
         switch (screen_) {
         case Screen::kMain: {
             int t = RubiDisplay::TileAt(sx, sy, 6);
