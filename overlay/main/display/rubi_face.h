@@ -42,7 +42,7 @@ public:
         bat_box_ = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(bat_box_);
         lv_obj_set_size(bat_box_, bat_w_, bat_h_);
-        lv_obj_align(bat_box_, LV_ALIGN_TOP_RIGHT, -9, 4);
+        lv_obj_align(bat_box_, LV_ALIGN_TOP_RIGHT, -11, 4);
         lv_obj_set_style_border_width(bat_box_, 2, 0);
         lv_obj_set_style_border_color(bat_box_, lv_color_hex(0xFFFFFF), 0);
         lv_obj_set_style_radius(bat_box_, 5, 0);
@@ -95,7 +95,7 @@ public:
         bat_nub_ = lv_obj_create(lv_layer_top());
         lv_obj_remove_style_all(bat_nub_);
         lv_obj_set_size(bat_nub_, 4, bat_h_ / 2);
-        lv_obj_align_to(bat_nub_, bat_box_, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+        lv_obj_align(bat_nub_, LV_ALIGN_TOP_RIGHT, -7, 4 + (bat_h_ - bat_h_ / 2) / 2);   // fixed position: align_to ran before layout and put the nub in the wrong place
         lv_obj_set_style_radius(bat_nub_, 2, 0);
         lv_obj_set_style_bg_opa(bat_nub_, LV_OPA_COVER, 0);
         lv_obj_set_style_bg_color(bat_nub_, lv_color_hex(0xFFFFFF), 0);
