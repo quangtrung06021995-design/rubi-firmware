@@ -282,7 +282,7 @@ public:
         ShowMenuLayer();
     }
 
-    void MenuShowList(const char* title, const std::vector<std::string>& rows, const char* hint) {
+    void MenuShowList(const char* title, const std::vector<std::string>& rows, const char* hint, const std::vector<bool>* locks = nullptr) {
         DisplayLockGuard lock(this);
         EnsureMenu();
         MenuClearAll();
@@ -293,6 +293,9 @@ public:
         for (int i = 0; i < kMenuRows && i < (int)rows.size(); i++) {
             lv_label_set_text(menu_text_[i], rows[i].c_str());
             lv_obj_clear_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
+            bool lk = locks != nullptr && i < (int)locks->size() && (*locks)[i];
+            if (lk) { lv_obj_clear_flag(lock_body_[i], LV_OBJ_FLAG_HIDDEN); lv_obj_clear_flag(lock_arc_[i], LV_OBJ_FLAG_HIDDEN); }
+            else { lv_obj_add_flag(lock_body_[i], LV_OBJ_FLAG_HIDDEN); lv_obj_add_flag(lock_arc_[i], LV_OBJ_FLAG_HIDDEN); }
         }
         ShowMenuLayer();
     }
@@ -357,6 +360,8 @@ private:
     lv_obj_t* cross_v_ = nullptr;
     lv_obj_t* menu_row_[kMenuRows] = {};
     lv_obj_t* menu_text_[kMenuRows] = {};
+    lv_obj_t* lock_body_[kMenuRows] = {};   // padlock drawn at the right end of a row (secured Wi-Fi)
+    lv_obj_t* lock_arc_[kMenuRows] = {};
     lv_obj_t* tile_box_[kMaxTiles] = {};
     lv_obj_t* tile_img_[kMaxTiles] = {};
     lv_obj_t* tile_lbl_[kMaxTiles] = {};
@@ -441,8 +446,16 @@ private:
             lv_obj_set_pos(menu_row_[i], 8, 40 + i * 38);
             menu_text_[i] = MakeLabel(menu_row_[i], font, 0x1E2A3A);
             lv_label_set_long_mode(menu_text_[i], LV_LABEL_LONG_SCROLL_CIRCULAR);
-            lv_obj_set_width(menu_text_[i], 284);
+            lv_obj_set_width(menu_text_[i], 262);
             lv_obj_align(menu_text_[i], LV_ALIGN_LEFT_MID, 10, 0);
+            lock_arc_[i] = MakeRect(menu_row_[i], 10, 11, 0xE6F0FF, 5);
+            lv_obj_set_pos(lock_arc_[i], 284, 5);
+            lv_obj_set_style_border_width(lock_arc_[i], 2, 0);
+            lv_obj_set_style_border_color(lock_arc_[i], lv_color_hex(0x37474F), 0);
+            lock_body_[i] = MakeRect(menu_row_[i], 16, 12, 0x37474F, 3);
+            lv_obj_set_pos(lock_body_[i], 281, 15);
+            lv_obj_add_flag(lock_arc_[i], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(lock_body_[i], LV_OBJ_FLAG_HIDDEN);
         }
         menu_hint_ = MakeLabel(menu_, font, 0x5A6B80);
         lv_obj_align(menu_hint_, LV_ALIGN_BOTTOM_MID, 0, -2);

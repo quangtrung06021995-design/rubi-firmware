@@ -78,13 +78,20 @@ public:
         std::lock_guard<std::recursive_mutex> lk(mutex_);
         switch (screen_) {
         case Screen::kCalib1:
-            raw1_x_ = raw_x; raw1_y_ = raw_y;
-            screen_ = Screen::kCalib2;
-            if (display_) display_->MenuShowMessage("Chạm vào dấu + thứ hai", 305, 225);
-            return true;
         case Screen::kCalib2:
-            FinishCalibration(raw_x, raw_y);
+        case Screen::kCalib3:
+        case Screen::kCalib4: {
+            int idx = (int)screen_ - (int)Screen::kCalib1;
+            cal_raw_[idx][0] = raw_x; cal_raw_[idx][1] = raw_y;
+            ESP_LOGI("RubiTouch", "calibration point %d raw %u,%u", idx + 1, (unsigned)raw_x, (unsigned)raw_y);
+            if (idx < 3) {
+                screen_ = (Screen)((int)screen_ + 1);
+                ShowCalibTarget(idx + 1);
+            } else {
+                FinishCalibration();
+            }
             return true;
+        }
         default:
             break;
         }
@@ -284,7 +291,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -311,7 +318,6 @@ private:
     std::recursive_mutex voice_mutex_;
     std::atomic<bool> voice_mode_{false};
     int64_t voice_start_ms_ = 0;
-    uint16_t raw1_x_ = 0, raw1_y_ = 0;
 
     // ---------------- voice helpers ----------------
     void VoiceStartAt(int idx) {
@@ -403,48 +409,70 @@ private:
         if (cal_loaded_) return;
         cal_loaded_ = true;
         Settings st("rubi", false);
-        if (st.GetInt("cal_ok", 0) != 1) return;
+        if (st.GetInt("cal_v2", 0) != 1) return;   // older calibrations used 2 corner taps: not accurate enough
         cal_.valid = true;
         cal_.swap = st.GetInt("cal_swap", 0) != 0;
-        cal_.ax = st.GetInt("cal_ax", 1000) / 1000.0f;
+        cal_.ax = st.GetInt("cal_ax", 10000) / 10000.0f;
         cal_.bx = st.GetInt("cal_bx", 0) / 1000.0f;
-        cal_.ay = st.GetInt("cal_ay", 1000) / 1000.0f;
+        cal_.ay = st.GetInt("cal_ay", 10000) / 10000.0f;
         cal_.by = st.GetInt("cal_by", 0) / 1000.0f;
+    }
+
+    static constexpr int kCalX[4] = {30, 290, 30, 290};
+    static constexpr int kCalY[4] = {30, 30, 210, 210};
+    uint16_t cal_raw_[4][2] = {};
+
+    void ShowCalibTarget(int i) {
+        if (!display_) return;
+        char msg[64];
+        snprintf(msg, sizeof(msg), "Chỉnh cảm ứng %d/4: chạm vào dấu + đỏ", i + 1);
+        display_->MenuShowMessage(msg, kCalX[i], kCalY[i]);
     }
 
     void StartCalibration() {
         screen_ = Screen::kCalib1;
-        if (display_) display_->MenuShowMessage("Chỉnh cảm ứng: chạm vào dấu + đỏ", 15, 15);
+        ShowCalibTarget(0);
     }
 
-    void FinishCalibration(uint16_t rx2, uint16_t ry2) {
-        float dx = (float)rx2 - (float)raw1_x_;
-        float dy = (float)ry2 - (float)raw1_y_;
-        if (fabsf(dx) < 40 && fabsf(dy) < 40) {
-            StartCalibration();   // too close, start again
-            return;
-        }
+    // Four taps near the corners, a straight line fitted per axis (least squares).
+    void FinishCalibration() {
+        float dxr = (float)cal_raw_[1][0] - (float)cal_raw_[0][0];
+        float dyr = (float)cal_raw_[1][1] - (float)cal_raw_[0][1];
         Calib c;
-        c.swap = fabsf(dy) > fabsf(dx);
-        const float span_x = 305 - 15, span_y = 225 - 15;
-        float ra_x = c.swap ? ry2 - raw1_y_ : dx;   // raw axis that maps to screen x
-        float ra_y = c.swap ? dx : dy;              // raw axis that maps to screen y
-        float r1_x = c.swap ? raw1_y_ : raw1_x_;
-        float r1_y = c.swap ? raw1_x_ : raw1_y_;
-        if (fabsf(ra_x) < 20 || fabsf(ra_y) < 20) {
-            StartCalibration();
+        c.swap = fabsf(dyr) > fabsf(dxr);
+        float a[4], b[4];
+        for (int i = 0; i < 4; i++) {
+            a[i] = c.swap ? cal_raw_[i][1] : cal_raw_[i][0];   // raw axis that maps to screen x
+            b[i] = c.swap ? cal_raw_[i][0] : cal_raw_[i][1];   // raw axis that maps to screen y
+        }
+        auto fit = [](const float* r, const int* t, float& k, float& o, float& maxres) {
+            float mr = 0, mt = 0;
+            for (int i = 0; i < 4; i++) { mr += r[i]; mt += t[i]; }
+            mr /= 4; mt /= 4;
+            float cov = 0, var = 0;
+            for (int i = 0; i < 4; i++) { cov += (r[i] - mr) * (t[i] - mt); var += (r[i] - mr) * (r[i] - mr); }
+            if (var < 1.0f) { k = 0; o = 0; maxres = 999; return; }
+            k = cov / var; o = mt - k * mr;
+            maxres = 0;
+            for (int i = 0; i < 4; i++) maxres = std::max(maxres, fabsf(t[i] - (k * r[i] + o)));
+        };
+        float rx, ry;
+        fit(a, kCalX, c.ax, c.bx, rx);
+        fit(b, kCalY, c.ay, c.by, ry);
+        ESP_LOGI("RubiTouch", "calibration swap=%d ax=%.3f bx=%.1f ay=%.3f by=%.1f residual %.1f/%.1f px",
+                 c.swap ? 1 : 0, c.ax, c.bx, c.ay, c.by, rx, ry);
+        if (rx > 18 || ry > 18 || fabsf(c.ax) < 0.05f || fabsf(c.ay) < 0.05f) {
+            StartCalibration();   // taps did not agree: start again
             return;
         }
-        c.ax = span_x / ra_x; c.bx = 15 - c.ax * r1_x;
-        c.ay = span_y / ra_y; c.by = 15 - c.ay * r1_y;
         c.valid = true;
         cal_ = c;
         Settings st("rubi", true);
-        st.SetInt("cal_ok", 1);
+        st.SetInt("cal_v2", 1);
         st.SetInt("cal_swap", c.swap ? 1 : 0);
-        st.SetInt("cal_ax", (int)lroundf(c.ax * 1000));
+        st.SetInt("cal_ax", (int)lroundf(c.ax * 10000));
         st.SetInt("cal_bx", (int)lroundf(c.bx * 1000));
-        st.SetInt("cal_ay", (int)lroundf(c.ay * 1000));
+        st.SetInt("cal_ay", (int)lroundf(c.ay * 10000));
         st.SetInt("cal_by", (int)lroundf(c.by * 1000));
         ShowMain();
     }
@@ -549,6 +577,7 @@ private:
         screen_ = Screen::kWifiList;
         wifi_row_action_.clear();
         std::vector<std::string> rows;
+        std::vector<bool> locks;
         if (nets_.empty()) {
             rows.push_back(scan_failed_ ? "Không quét được Wi-Fi" : "Không thấy Wi-Fi nào");
             wifi_row_action_.push_back(-2);
@@ -567,9 +596,10 @@ private:
             for (int i = wpage_ * per; i < total && i < (wpage_ + 1) * per; i++) {
                 int pct = std::max(0, std::min(100, 2 * (nets_[i].rssi + 100)));
                 char line[120];
-                snprintf(line, sizeof(line), "%s%s  %d%%%s", nets_[i].ssid.c_str(), nets_[i].ssid == cur ? " (đang dùng)" : "", pct,
-                         nets_[i].open ? "  (mở)" : "");
+                snprintf(line, sizeof(line), "%s%s  %d%%", nets_[i].ssid.c_str(), nets_[i].ssid == cur ? " (đang dùng)" : "", pct);
                 rows.push_back(line);
+                locks.resize(rows.size(), false);
+                locks[rows.size() - 1] = !nets_[i].open;
                 wifi_row_action_.push_back(i);
             }
             if (pages > 1) { rows.push_back("Trang sau >"); wifi_row_action_.push_back(-1); }
@@ -577,7 +607,8 @@ private:
             rows.push_back("<< Quay lại");
             wifi_row_action_.push_back(-3);
         }
-        if (display_) display_->MenuShowList("CHỌN WI-FI", rows, "");
+        locks.resize(rows.size(), false);
+        if (display_) display_->MenuShowList("CHỌN WI-FI", rows, "", &locks);
     }
 
     void BuildKeys() {
