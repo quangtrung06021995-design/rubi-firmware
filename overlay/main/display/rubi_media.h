@@ -566,7 +566,6 @@ private:
     }
 
     void BuildKeys() {
-        using K = RubiDisplay::KbKey;
         keys_.clear();
         static const char* kR1[3] = {"qwertyuiop", "QWERTYUIOP", "1234567890"};
         static const char* kR2[3] = {"asdfghjkl", "ASDFGHJKL", "@#$%&*-+()"};
