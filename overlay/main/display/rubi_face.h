@@ -97,8 +97,9 @@ public:
         lv_obj_set_size(bat_nub_, 4, bat_h_ / 2);
         lv_obj_align(bat_nub_, LV_ALIGN_TOP_RIGHT, -7, 4 + (bat_h_ - bat_h_ / 2) / 2);   // fixed position: align_to ran before layout and put the nub in the wrong place
         lv_obj_set_style_radius(bat_nub_, 2, 0);
-        lv_obj_set_style_bg_opa(bat_nub_, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(bat_nub_, lv_color_hex(0xFFFFFF), 0);
+        // dark like the box fill: the nub used to be white on the white face background and could not be seen
+        lv_obj_set_style_bg_opa(bat_nub_, LV_OPA_80, 0);
+        lv_obj_set_style_bg_color(bat_nub_, lv_color_hex(0x202020), 0);
         if (battery_label_ != nullptr) lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);   // use our own icon only
         RubiBattery::Start([this](int pct) { SetBatteryPercent(pct); });
         RubiWifiSync::Start();

@@ -496,12 +496,23 @@ private:
         screen_ = Screen::kWifiBusy;
         if (display_) display_->MenuShowMessage("Đang quét Wi-Fi...", -1, -1);
         RunTask([this]() {
+            // The Wi-Fi library's own station handler takes the scan results (and frees them)
+            // on every SCAN_DONE event, so a scan started beside it always reads 0 networks.
+            // Stop the station, scan on our own, then start the station again.
+            auto& wm = WifiManager::GetInstance();
+            wm.StopStation();
+            vTaskDelay(pdMS_TO_TICKS(300));
             wifi_scan_config_t cfg = {};
             cfg.show_hidden = false;
-            esp_err_t e = ESP_FAIL;
-            for (int i = 0; i < 3 && e != ESP_OK; i++) {
-                e = esp_wifi_scan_start(&cfg, true);
-                if (e != ESP_OK) vTaskDelay(pdMS_TO_TICKS(1500));
+            esp_err_t e = esp_wifi_set_mode(WIFI_MODE_STA);
+            if (e == ESP_OK) e = esp_wifi_start();
+            if (e == ESP_ERR_WIFI_CONN) e = ESP_OK;
+            if (e == ESP_OK) {
+                e = ESP_FAIL;
+                for (int i = 0; i < 3 && e != ESP_OK; i++) {
+                    e = esp_wifi_scan_start(&cfg, true);
+                    if (e != ESP_OK) vTaskDelay(pdMS_TO_TICKS(1000));
+                }
             }
             std::vector<WifiNet> out;
             if (e == ESP_OK) {
@@ -522,6 +533,9 @@ private:
                 }
                 std::sort(out.begin(), out.end(), [](const WifiNet& a, const WifiNet& b) { return a.rssi > b.rssi; });
             }
+            esp_wifi_scan_stop();
+            esp_wifi_stop();
+            wm.StartStation();   // reconnects to the saved network in the background
             std::lock_guard<std::recursive_mutex> lk(mutex_);
             nets_ = out;
             wpage_ = 0;
