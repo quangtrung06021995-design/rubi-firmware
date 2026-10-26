@@ -644,7 +644,7 @@ private:
         if (show_pw_) shown = pass_; else shown.assign(pass_.size(), '*');
         shown += "_";
         std::string head = note.empty() ? sel_ssid_ : note;
-        if (display_) display_->MenuShowKeyboard(head, shown, keys_);
+        if (display_) display_->MenuShowKeyboard(head, shown, keys_, show_pw_);
     }
 
     void HandleKeyboardTouch(int sx, int sy) {

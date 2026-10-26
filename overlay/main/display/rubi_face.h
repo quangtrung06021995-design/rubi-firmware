@@ -324,7 +324,7 @@ public:
         uint32_t color;
     };
 
-    void MenuShowKeyboard(const std::string& note, const std::string& field, const std::vector<KbKey>& keys) {
+    void MenuShowKeyboard(const std::string& note, const std::string& field, const std::vector<KbKey>& keys, bool pw_visible = false) {
         DisplayLockGuard lock(this);
         EnsureMenu();
         MenuClearAll();
@@ -332,6 +332,7 @@ public:
         lv_obj_clear_flag(kb_ssid_, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(kb_field_lbl_, field.c_str());
         lv_obj_clear_flag(kb_field_, LV_OBJ_FLAG_HIDDEN);
+        if (pw_visible) lv_obj_add_flag(eye_slash_, LV_OBJ_FLAG_HIDDEN); else lv_obj_clear_flag(eye_slash_, LV_OBJ_FLAG_HIDDEN);   // slashed eye = password hidden
         for (int i = 0; i < kMaxKeys && i < (int)keys.size(); i++) {
             const KbKey& k = keys[i];
             lv_obj_set_pos(kb_key_[i], k.x, k.y);
@@ -376,6 +377,9 @@ private:
     lv_obj_t* kb_ssid_ = nullptr;
     lv_obj_t* kb_field_ = nullptr;
     lv_obj_t* kb_field_lbl_ = nullptr;
+    lv_obj_t* eye_out_ = nullptr;
+    lv_obj_t* eye_pupil_ = nullptr;
+    lv_obj_t* eye_slash_ = nullptr;
 
     void ShowMenuLayer() {
         lv_obj_clear_flag(menu_, LV_OBJ_FLAG_HIDDEN);
@@ -497,8 +501,20 @@ private:
         lv_obj_set_style_border_color(kb_field_, lv_color_hex(0x1E88E5), 0);
         kb_field_lbl_ = MakeLabel(kb_field_, font, 0x1E2A3A);
         lv_label_set_long_mode(kb_field_lbl_, LV_LABEL_LONG_SCROLL_CIRCULAR);
-        lv_obj_set_width(kb_field_lbl_, 292);
+        lv_obj_set_width(kb_field_lbl_, 262);
         lv_obj_align(kb_field_lbl_, LV_ALIGN_LEFT_MID, 4, 0);
+        // eye icon at the right end of the field: tap the field to show / hide the password
+        eye_out_ = MakeRect(kb_field_, 26, 16, 0xFFFFFF, 8);
+        lv_obj_set_pos(eye_out_, 274, 3);
+        lv_obj_set_style_border_width(eye_out_, 2, 0);
+        lv_obj_set_style_border_color(eye_out_, lv_color_hex(0x37474F), 0);
+        eye_pupil_ = MakeRect(kb_field_, 8, 8, 0x1E88E5, 4);
+        lv_obj_set_pos(eye_pupil_, 283, 7);
+        eye_slash_ = MakeRect(kb_field_, 32, 3, 0xE53935, 1);
+        lv_obj_set_pos(eye_slash_, 271, 10);
+        lv_obj_set_style_transform_pivot_x(eye_slash_, 16, 0);
+        lv_obj_set_style_transform_pivot_y(eye_slash_, 1, 0);
+        lv_obj_set_style_transform_rotation(eye_slash_, -350, 0);
         for (int i = 0; i < kMaxKeys; i++) {
             kb_key_[i] = MakeRect(menu_, 28, 38, 0xE6F0FF, 6);
             kb_lbl_[i] = MakeLabel(kb_key_[i], font, 0x1E2A3A);
