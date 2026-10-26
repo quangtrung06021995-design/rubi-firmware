@@ -89,12 +89,22 @@ public:
         Map(raw_x, raw_y, sx, sy);
         switch (screen_) {
         case Screen::kMain: {
-            int t = RubiDisplay::TileAt(sx, sy, 5);
+            int t = RubiDisplay::TileAt(sx, sy, 6);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
-            else if (t == 2) { Close(); if (wifi_cb_) wifi_cb_(); }
-            else if (t == 3) { StartCalibration(); }
-            else if (t == 4) { Close(); }
+            else if (t == 2) { ShowVolume(); }
+            else if (t == 3) { Close(); if (wifi_cb_) wifi_cb_(); }
+            else if (t == 4) { StartCalibration(); }
+            else if (t == 5) { Close(); }
+            break;
+        }
+        case Screen::kVolume: {
+            int r = RubiDisplay::RowAt(sx, sy, 4);
+            auto* codec = Board::GetInstance().GetAudioCodec();
+            int v = codec->output_volume();
+            if (r == 1) { codec->SetOutputVolume(std::min(100, v + 10)); ShowVolume(); }
+            else if (r == 2) { codec->SetOutputVolume(std::max(10, v - 10)); ShowVolume(); }
+            else if (r == 3) { ShowMain(); }
             break;
         }
         case Screen::kLearnTopics: {
@@ -247,7 +257,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -426,10 +436,20 @@ private:
         display_->MenuShowTiles({
             {&rubi_icon_nghe_nhac, "Nghe nhạc"},
             {&rubi_icon_song_ngu, "Học song ngữ"},
+            {nullptr, "Âm lượng"},
             {&rubi_icon_wifi, "Wi-Fi"},
             {&rubi_icon_chinh_cam_ung, "Chỉnh cảm ứng"},
             {&rubi_icon_dong, "Thoát"},
         });
+    }
+
+    void ShowVolume() {
+        screen_ = Screen::kVolume;
+        if (!display_) return;
+        int v = Board::GetInstance().GetAudioCodec()->output_volume();
+        char line[48];
+        snprintf(line, sizeof(line), "Âm lượng hiện tại: %d%%", v);
+        display_->MenuShowList("ÂM LƯỢNG", {line, "+  Tăng", "-  Giảm", "<< Quay lại"}, "");
     }
 
     void ShowMusic() {

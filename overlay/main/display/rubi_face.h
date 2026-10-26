@@ -261,7 +261,19 @@ public:
         MenuClearAll();
         for (int i = 0; i < kMaxTiles; i++) {
             if (i < (int)tiles.size()) {
-                lv_image_set_src(tile_img_[i], tiles[i].icon);
+                if (tiles[i].icon != nullptr) {
+                    lv_image_set_src(tile_img_[i], tiles[i].icon);
+                    lv_obj_clear_flag(tile_img_[i], LV_OBJ_FLAG_HIDDEN);
+                    lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_TRANSP, 0);
+                    lv_obj_align(tile_lbl_[i], LV_ALIGN_TOP_MID, 0, 92);
+                } else {
+                    // text-only tile (no icon drawn yet): soft blue card with the label centred
+                    lv_obj_add_flag(tile_img_[i], LV_OBJ_FLAG_HIDDEN);
+                    lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_COVER, 0);
+                    lv_obj_set_style_bg_color(tile_box_[i], lv_color_hex(0xE3F2FD), 0);
+                    lv_obj_set_style_radius(tile_box_[i], 14, 0);
+                    lv_obj_align(tile_lbl_[i], LV_ALIGN_CENTER, 0, 0);
+                }
                 lv_label_set_text(tile_lbl_[i], tiles[i].label.c_str());
                 lv_obj_clear_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
             }
