@@ -100,20 +100,20 @@ public:
         ESP_LOGI("RubiTouch", "raw %u,%u -> screen %d,%d (screen %d)", (unsigned)raw_x, (unsigned)raw_y, sx, sy, (int)screen_);
         switch (screen_) {
         case Screen::kMain: {
-            int t = RubiDisplay::TileAt(sx, sy, 6);
+            int t = RubiDisplay::TileAt(sx, sy, 5);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
             else if (t == 2) { spage_ = 0; LoadStories(); ShowStoryList(); }
-            else if (t == 3) { ShowVolume(); }
-            else if (t == 4) { ShowSettings(); }
-            else if (t == 5) { Close(); }
+            else if (t == 3) { ShowSettings(); }
+            else if (t == 4) { Close(); }
             break;
         }
         case Screen::kSettings: {
-            int r = RubiDisplay::RowAt(sx, sy, 3);
-            if (r == 0) StartWifiScan();
-            else if (r == 1) StartCalibration();
-            else if (r == 2) ShowMain();
+            int r = RubiDisplay::RowAt(sx, sy, 4);
+            if (r == 0) ShowVolume();
+            else if (r == 1) StartWifiScan();
+            else if (r == 2) StartCalibration();
+            else if (r == 3) ShowMain();
             break;
         }
         case Screen::kStoryList: {
@@ -166,7 +166,7 @@ public:
             int v = codec->output_volume();
             if (r == 1) { codec->SetOutputVolume(std::min(100, v + 10)); ShowVolume(); }
             else if (r == 2) { codec->SetOutputVolume(std::max(10, v - 10)); ShowVolume(); }
-            else if (r == 3) { ShowMain(); }
+            else if (r == 3) { ShowSettings(); }
             break;
         }
         case Screen::kLearnTopics: {
@@ -520,18 +520,17 @@ private:
         screen_ = Screen::kMain;
         if (!display_) return;
         display_->MenuShowTiles({
-            {&rubi_icon_nghe_nhac, "Nghe nhạc"},
-            {&rubi_icon_song_ngu, "Học song ngữ"},
-            {&rubi_icon_truyen_tranh, "Truyện tranh"},
-            {nullptr, "Âm lượng"},
-            {nullptr, "Cài đặt"},
-            {&rubi_icon_dong, "Thoát"},
+            {&rubi_icon_nghe_nhac, ""},
+            {&rubi_icon_song_ngu, ""},
+            {&rubi_icon_truyen_tranh, ""},
+            {&rubi_icon_cai_dat, ""},
+            {&rubi_icon_dong, ""},
         });
     }
 
     void ShowSettings() {
         screen_ = Screen::kSettings;
-        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Wi-Fi", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Chỉnh cảm ứng", "<< Quay lại"}, "");
     }
 
     // ---------------- picture books ----------------

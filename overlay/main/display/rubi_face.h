@@ -288,6 +288,8 @@ public:
                     lv_obj_clear_flag(tile_img_[i], LV_OBJ_FLAG_HIDDEN);
                     lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_TRANSP, 0);
                     lv_obj_align(tile_lbl_[i], LV_ALIGN_TOP_MID, 0, 92);
+                    // no label: the icon alone, centred in the tile
+                    lv_obj_align(tile_img_[i], LV_ALIGN_TOP_MID, 0, tiles[i].label.empty() ? 12 : 0);
                 } else {
                     // text-only tile (no icon drawn yet): soft blue card with the label centred
                     lv_obj_add_flag(tile_img_[i], LV_OBJ_FLAG_HIDDEN);
@@ -297,6 +299,8 @@ public:
                     lv_obj_align(tile_lbl_[i], LV_ALIGN_CENTER, 0, 0);
                 }
                 lv_label_set_text(tile_lbl_[i], tiles[i].label.c_str());
+                if (tiles[i].label.empty()) lv_obj_add_flag(tile_lbl_[i], LV_OBJ_FLAG_HIDDEN);
+                else lv_obj_clear_flag(tile_lbl_[i], LV_OBJ_FLAG_HIDDEN);
                 lv_obj_clear_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
