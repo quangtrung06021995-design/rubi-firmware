@@ -17,6 +17,7 @@
 
 #include "rubi_vi_font.h"
 #include "rubi_mat_data.h"
+#include "rubi_talk_data.h"
 #include "rubi_battery.h"
 #include "rubi_wifisync.h"
 #include <esp_heap_caps.h>
@@ -595,6 +596,10 @@ private:
     bool photo_on_ = false;
     int photo_cur_ = -1;
     int bob_tick_ = 0;
+    bool talk_active_ = false;   // a talking frame is on screen
+    int talk_cur_ = -1;          // 0 closed, 1 half open, 2 wide open, 3 blink
+    int talk_hold_ = 0;          // ticks left before the mouth changes
+    int talk_blink_in_ = 30;     // ticks until the next blink
     Expr photo_expr_ = Expr::kNeutral;
     Expr pending_ = Expr::kNeutral;
     bool has_pending_ = false;
@@ -857,8 +862,42 @@ private:
         lv_obj_set_style_translate_y(photo_, 0, 0);
     }
 
+    // One 100 ms step of the talking animation: the mouth changes every 1-2 ticks, blink every 3-4.5 s.
+    void TalkStep() {
+        int f = talk_cur_;
+        if (!talk_active_) {
+            talk_active_ = true;
+            talk_cur_ = -1;
+            talk_hold_ = 0;
+            talk_blink_in_ = 20 + (int)(esp_random() % 20);
+            f = -1;
+        }
+        if (talk_cur_ == 3) {
+            f = 1;                         // eyes open again after the blink
+            talk_hold_ = 1;
+        } else if (--talk_blink_in_ <= 0) {
+            f = 3;
+            talk_blink_in_ = 30 + (int)(esp_random() % 20);
+            talk_hold_ = 0;
+        } else if (--talk_hold_ <= 0 || talk_cur_ < 0) {
+            int r = (int)(esp_random() % 10);
+            int n = r < 3 ? 0 : (r < 7 ? 1 : 2);
+            if (n == talk_cur_) n = (n + 1) % 3;
+            f = n;
+            talk_hold_ = 1 + (int)(esp_random() % 2);
+        }
+        if (f < 0 || f == talk_cur_ || photo_buf_[0] == nullptr) return;
+        int slot = 1 - photo_slot_;
+        if (!RubiDecodePal(kRubiTalkData[f], kRubiTalkSize[f], photo_buf_[slot], 320 * 240)) return;
+        photo_slot_ = slot;
+        lv_image_set_src(photo_, &photo_dsc_[slot]);
+        lv_obj_set_style_translate_y(photo_, 0, 0);
+        talk_cur_ = f;
+    }
+
     void Apply(Expr e) {
         expr_ = e;
+        if (photo_on_ && talk_active_) return;   // talking pictures stay until the speech ends
         speaking_ = false;
         if (photo_on_) {
             ShowPhoto(e);
@@ -1003,12 +1042,20 @@ private:
         if (face_ == nullptr) return;
         bool speak_now = Application::GetInstance().GetDeviceState() == kDeviceStateSpeaking;
         if (photo_on_) {
-            // Speaking: the picture bobs up and down. Idle: a new mood every 8-16 s (never angry/crying).
+            // Speaking: the mouth opens and closes and the eyes blink (4 talking pictures).
+            // Idle: a new mood every 8-16 s (never angry/crying).
             if (speak_now) {
                 speaking_ = true;
-                static const int8_t kBob[] = {0, -2, -4, -2, 0, 2, 3, 2};
-                lv_obj_set_style_translate_y(photo_, kBob[(bob_tick_++) & 7], 0);
+                TalkStep();
                 return;
+            }
+            if (talk_active_) {
+                talk_active_ = false;
+                talk_cur_ = -1;
+                speaking_ = false;
+                photo_cur_ = -1;      // force the resting picture of the current mood back
+                photo_time_ = 0;
+                ShowPhoto(expr_);
             }
             if (speaking_) {
                 speaking_ = false;
