@@ -85,7 +85,7 @@ jobs:
           PY
           grep -n 'settings.EraseKey("download_url")' main/application.cc
 
-      - name: Microphone gain 30 dB (test: with the speaker plugged in, 42 dB amplified the amplifier noise)
+      - name: Microphone gain 30 dB (test, 42 dB amplified the amplifier noise with the speaker plugged in)
         shell: bash
         working-directory: upstream
         run: |
