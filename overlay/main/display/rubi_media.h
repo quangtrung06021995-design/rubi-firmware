@@ -103,10 +103,38 @@ public:
             int t = RubiDisplay::TileAt(sx, sy, 6);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
-            else if (t == 2) { ShowVolume(); }
-            else if (t == 3) { StartWifiScan(); }
-            else if (t == 4) { StartCalibration(); }
+            else if (t == 2) { spage_ = 0; LoadStories(); ShowStoryList(); }
+            else if (t == 3) { ShowVolume(); }
+            else if (t == 4) { ShowSettings(); }
             else if (t == 5) { Close(); }
+            break;
+        }
+        case Screen::kSettings: {
+            int r = RubiDisplay::RowAt(sx, sy, 3);
+            if (r == 0) StartWifiScan();
+            else if (r == 1) StartCalibration();
+            else if (r == 2) ShowMain();
+            break;
+        }
+        case Screen::kStoryList: {
+            int r = RubiDisplay::RowAt(sx, sy, (int)story_row_action_.size());
+            if (r < 0) break;
+            int act = story_row_action_[r];
+            if (act >= 0) OpenStory(act);
+            else if (act == -1) { spage_++; ShowStoryList(); }
+            else ShowMain();
+            break;
+        }
+        case Screen::kStoryPage: {
+            int b = RubiDisplay::StoryAt(sx, sy);
+            StopPlayback();
+            if (b == 1) { scene_gen_++; ShowStoryList(); }
+            else if (b == 0) { if (scene_ > 0) scene_--; ShowScene(); }
+            else if (b == 2) {
+                if (scene_ + 1 < (int)scenes_.size()) { scene_++; ShowScene(); }
+                else { scene_gen_++; ShowStoryList(); }
+            }
+            else { ShowScene(); }   // tap in the middle: read this page again
             break;
         }
         case Screen::kWifiBusy:
@@ -125,7 +153,7 @@ public:
             }
             else if (act == -1) { wpage_++; ShowWifiList(); }
             else if (act == -2) { StartWifiScan(); }
-            else if (act == -3) { ShowMain(); }
+            else if (act == -3) { ShowSettings(); }
             else if (act == -4) { Close(); if (wifi_cb_) wifi_cb_(); }
             break;
         }
@@ -149,6 +177,9 @@ public:
         }
         case Screen::kLearnEmpty:
             ShowLearnTopics();
+            break;
+        case Screen::kStoryEmpty:
+            ShowStoryList();
             break;
         case Screen::kLearnCard: {
             int b = RubiDisplay::CardAt(sx, sy);
@@ -291,7 +322,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -491,11 +522,194 @@ private:
         display_->MenuShowTiles({
             {&rubi_icon_nghe_nhac, "Nghe nhạc"},
             {&rubi_icon_song_ngu, "Học song ngữ"},
+            {&rubi_icon_truyen_tranh, "Truyện tranh"},
             {nullptr, "Âm lượng"},
-            {&rubi_icon_wifi, "Wi-Fi"},
-            {&rubi_icon_chinh_cam_ung, "Chỉnh cảm ứng"},
+            {nullptr, "Cài đặt"},
             {&rubi_icon_dong, "Thoát"},
         });
+    }
+
+    void ShowSettings() {
+        screen_ = Screen::kSettings;
+        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Wi-Fi", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+    }
+
+    // ---------------- picture books ----------------
+    // SD layout:  /sdcard/rubi/truyen/<story>/ten.txt (title), NN.bin (320x240 RGB565 page), NN.wav (spoken text).
+    // Pages are the *.bin files in name order. The page is read aloud, then the next page opens by itself.
+    struct Story { std::string dir, title; };
+    static constexpr const char* kStoryDir = "/sdcard/rubi/truyen";
+    static constexpr int kStoriesPerPage = 3;
+    static constexpr size_t kStoryBytes = 320 * 240 * 2;
+    std::vector<Story> stories_;
+    std::vector<int> story_row_action_;   // per row: story index, -1 next page, -2 back
+    int spage_ = 0;
+    int story_idx_ = 0;
+    std::vector<std::string> scenes_;     // full path of each page without extension
+    int scene_ = 0;
+    std::atomic<int> scene_gen_{0};
+    uint8_t* story_buf_[2] = {nullptr, nullptr};
+    lv_image_dsc_t story_dsc_[2] = {};
+    int story_cur_ = 0;
+
+    static bool HasExt(const char* name, const char* ext) {
+        size_t n = strlen(name), m = strlen(ext);
+        if (n <= m) return false;
+        for (size_t i = 0; i < m; i++) if (tolower((unsigned char)name[n - m + i]) != ext[i]) return false;
+        return true;
+    }
+
+    void LoadStories() {
+        stories_.clear();
+        if (!MountSd()) return;
+        DIR* d = opendir(kStoryDir);
+        if (d == nullptr) return;
+        while (dirent* e = readdir(d)) {
+            if (e->d_type != DT_DIR || e->d_name[0] == '.') continue;
+            Story st;
+            st.dir = e->d_name;
+            st.title = e->d_name;
+            std::string tf = std::string(kStoryDir) + "/" + e->d_name + "/ten.txt";
+            if (FILE* f = fopen(tf.c_str(), "rb")) {
+                char line[128] = {};
+                if (fgets(line, sizeof(line), f)) {
+                    std::string t = Trim(line);
+                    if (!t.empty()) st.title = t;
+                }
+                fclose(f);
+            }
+            stories_.push_back(st);
+        }
+        closedir(d);
+        std::sort(stories_.begin(), stories_.end(), [](const Story& a, const Story& b) { return a.dir < b.dir; });
+    }
+
+    void ShowStoryList() {
+        screen_ = Screen::kStoryList;
+        std::vector<std::string> rows;
+        story_row_action_.clear();
+        int total = (int)stories_.size();
+        int pages = total == 0 ? 1 : (total + kStoriesPerPage - 1) / kStoriesPerPage;
+        if (spage_ >= pages) spage_ = 0;
+        if (total == 0) {
+            rows.push_back("(Chưa có truyện nào)");
+            story_row_action_.push_back(-2);
+        }
+        for (int i = spage_ * kStoriesPerPage; i < total && i < (spage_ + 1) * kStoriesPerPage; i++) {
+            rows.push_back(stories_[i].title);
+            story_row_action_.push_back(i);
+        }
+        if (pages > 1) {
+            rows.push_back("Trang sau >");
+            story_row_action_.push_back(-1);
+        }
+        rows.push_back("<< Quay lại");
+        story_row_action_.push_back(-2);
+        if (display_) display_->MenuShowList("TRUYỆN TRANH - chạm để xem", rows, total == 0 ? "Chép thư mục rubi/truyen vào thẻ nhớ" : "");
+    }
+
+    void OpenStory(int idx) {
+        if (idx < 0 || idx >= (int)stories_.size()) return;
+        story_idx_ = idx;
+        scenes_.clear();
+        std::string dir = std::string(kStoryDir) + "/" + stories_[idx].dir;
+        if (DIR* d = opendir(dir.c_str())) {
+            while (dirent* e = readdir(d)) {
+                if (e->d_type != DT_DIR && HasExt(e->d_name, ".bin")) {
+                    std::string n = e->d_name;
+                    n.resize(n.size() - 4);
+                    scenes_.push_back(dir + "/" + n);
+                }
+            }
+            closedir(d);
+        }
+        std::sort(scenes_.begin(), scenes_.end());
+        if (scenes_.empty()) {
+            if (display_) display_->MenuShowMessage("Truyện này chưa có trang nào\n(thiếu file .bin)\n\nChạm để quay lại", -1, -1);
+            screen_ = Screen::kStoryEmpty;
+            return;
+        }
+        scene_ = 0;
+        ShowScene();
+    }
+
+    bool LoadStoryImage(const std::string& path, std::string& err) {
+        int next = 1 - story_cur_;
+        if (story_buf_[next] == nullptr) {
+            story_buf_[next] = (uint8_t*)heap_caps_malloc(kStoryBytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (story_buf_[next] == nullptr) story_buf_[next] = (uint8_t*)heap_caps_malloc(kStoryBytes, MALLOC_CAP_8BIT);
+            if (story_buf_[next] == nullptr) { err = "hết bộ nhớ"; return false; }
+        }
+        FILE* f = fopen(path.c_str(), "rb");
+        if (f == nullptr) { err = "không mở được hình"; return false; }
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        if ((size_t)size != kStoryBytes) {   // wrong picture file: never draw it
+            fclose(f);
+            err = "hình sai kích thước " + std::to_string(size);
+            return false;
+        }
+        size_t got = fread(story_buf_[next], 1, kStoryBytes, f);
+        fclose(f);
+        if (got != kStoryBytes) { err = "đọc hình bị lỗi"; return false; }
+        lv_image_dsc_t& d = story_dsc_[next];
+        memset(&d, 0, sizeof(d));
+        d.header.magic = LV_IMAGE_HEADER_MAGIC;
+        d.header.cf = LV_COLOR_FORMAT_RGB565;
+        d.header.w = 320;
+        d.header.h = 240;
+        d.header.stride = 640;
+        d.data_size = kStoryBytes;
+        d.data = story_buf_[next];
+        story_cur_ = next;
+        return true;
+    }
+
+    // Show page scene_ and start reading it. Caller holds mutex_ and has stopped any earlier reading.
+    void ShowScene() {
+        screen_ = Screen::kStoryPage;
+        scene_gen_++;
+        std::string err;
+        if (scene_ < 0 || scene_ >= (int)scenes_.size()) return;
+        if (!LoadStoryImage(scenes_[scene_] + ".bin", err)) {
+            if (display_) display_->MenuShowMessage(("Không hiện được trang\n" + err).c_str(), -1, -1);
+            return;
+        }
+        if (display_) display_->MenuShowStoryPage(&story_dsc_[story_cur_]);
+        std::string wav = scenes_[scene_] + ".wav";
+        FILE* f = fopen(wav.c_str(), "rb");
+        if (f == nullptr) return;   // silent page: stay until the child taps
+        fclose(f);
+        stop_ = false;
+        playing_ = true;
+        xTaskCreatePinnedToCore(&RubiMedia::StoryTask, "rubi_story", 8192, this, 4, nullptr, 1);
+    }
+
+    static void StoryTask(void* arg) {
+        static_cast<RubiMedia*>(arg)->StoryLoop();
+        vTaskDelete(nullptr);
+    }
+
+    void StoryLoop() {
+        auto& as = Application::GetInstance().GetAudioService();
+        int out_rate = Board::GetInstance().GetAudioCodec()->output_sample_rate();
+        int my_gen = scene_gen_.load();
+        std::string wav = scene_ < (int)scenes_.size() ? scenes_[scene_] + ".wav" : "";
+        PlayFile(wav, out_rate, as);
+        bool natural = !stop_;
+        playing_ = false;
+        if (!natural) return;
+        vTaskDelay(pdMS_TO_TICKS(900));   // short pause between pages
+        std::lock_guard<std::recursive_mutex> lk(mutex_);
+        if (screen_ != Screen::kStoryPage || my_gen != scene_gen_.load()) return;   // the child already moved on
+        if (scene_ + 1 < (int)scenes_.size()) {
+            scene_++;
+            ShowScene();
+        } else {
+            scene_gen_++;
+            ShowStoryList();   // end of the story
+        }
     }
 
     // ---------------- Wi-Fi: scan, pick a network, type the password ----------------
@@ -699,7 +913,7 @@ private:
                 if (display_) display_->MenuShowMessage(("Đã kết nối!\n" + ssid).c_str(), -1, -1);
                 vTaskDelay(pdMS_TO_TICKS(2000));
                 std::lock_guard<std::recursive_mutex> lk(mutex_);
-                ShowMain();
+                ShowSettings();
                 return;
             }
             // failed: put the old settings back and reconnect to whatever worked before
@@ -949,8 +1163,10 @@ private:
         screen_ = Screen::kNone;
         if (display_) display_->MenuHide();
         vTaskDelay(pdMS_TO_TICKS(100));
+        scene_gen_++;
         for (int i = 0; i < 2; i++) {
             if (card_buf_[i] != nullptr) { heap_caps_free(card_buf_[i]); card_buf_[i] = nullptr; }
+            if (story_buf_[i] != nullptr) { heap_caps_free(story_buf_[i]); story_buf_[i] = nullptr; }
         }
         Application::GetInstance().GetAudioService().EnableWakeWordDetection(true);
     }

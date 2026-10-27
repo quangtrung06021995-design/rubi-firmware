@@ -235,6 +235,27 @@ public:
         return -1;
     }
 
+    // Picture-book page: the whole screen is the picture, with three faint round buttons on top.
+    // StoryAt: 0 = previous page, 1 = close, 2 = next page, 3 = anywhere else (replay the page).
+    static int StoryAt(int x, int y) {
+        if (x >= 240 && y < 70) return 1;
+        if (x < 107) return 0;
+        if (x >= 213) return 2;
+        return 3;
+    }
+
+    void MenuShowStoryPage(const lv_image_dsc_t* img) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        if (img != nullptr) {
+            lv_image_set_src(story_img_, img);
+            lv_obj_clear_flag(story_img_, LV_OBJ_FLAG_HIDDEN);
+        }
+        for (int i = 0; i < 3; i++) lv_obj_clear_flag(story_btn_[i], LV_OBJ_FLAG_HIDDEN);
+        ShowMenuLayer();
+    }
+
     void MenuShowCard(const lv_image_dsc_t* img, const std::string& title, const std::string& en,
                       const std::string& vi, const std::string& counter) {
         DisplayLockGuard lock(this);
@@ -371,6 +392,8 @@ private:
     lv_obj_t* card_vi_ = nullptr;
     lv_obj_t* card_count_ = nullptr;
     lv_obj_t* card_btn_[3] = {};
+    lv_obj_t* story_img_ = nullptr;
+    lv_obj_t* story_btn_[3] = {};
     static constexpr int kMaxKeys = 36;
     lv_obj_t* kb_key_[kMaxKeys] = {};
     lv_obj_t* kb_lbl_[kMaxKeys] = {};
@@ -399,6 +422,8 @@ private:
         lv_obj_add_flag(card_vi_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(card_count_, LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < 3; i++) lv_obj_add_flag(card_btn_[i], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(story_img_, LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < 3; i++) lv_obj_add_flag(story_btn_[i], LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < kMaxKeys; i++) if (kb_key_[i]) lv_obj_add_flag(kb_key_[i], LV_OBJ_FLAG_HIDDEN);
         if (kb_ssid_) lv_obj_add_flag(kb_ssid_, LV_OBJ_FLAG_HIDDEN);
         if (kb_field_) lv_obj_add_flag(kb_field_, LV_OBJ_FLAG_HIDDEN);
@@ -488,6 +513,20 @@ private:
             lv_obj_set_pos(card_btn_[i], kBtnX[i], 192);
             lv_obj_t* l = MakeLabel(card_btn_[i], font, 0x1E2A3A);
             lv_label_set_text(l, kBtn[i]);
+            lv_obj_center(l);
+        }
+        // Picture-book page: full-screen picture + faint round buttons (previous, close, next)
+        story_img_ = lv_image_create(menu_);
+        lv_obj_set_pos(story_img_, 0, 0);
+        static const char* kStoryBtn[3] = {"<", "X", ">"};
+        static const int kStoryBtnX[3] = {4, 276, 276};
+        static const int kStoryBtnY[3] = {100, 4, 100};
+        for (int i = 0; i < 3; i++) {
+            story_btn_[i] = MakeRect(menu_, 40, 40, 0x000000, 20);
+            lv_obj_set_style_bg_opa(story_btn_[i], 90, 0);
+            lv_obj_set_pos(story_btn_[i], kStoryBtnX[i], kStoryBtnY[i]);
+            lv_obj_t* l = MakeLabel(story_btn_[i], font, 0xFFFFFF);
+            lv_label_set_text(l, kStoryBtn[i]);
             lv_obj_center(l);
         }
         // On-screen keyboard (used by the Wi-Fi password screen)
