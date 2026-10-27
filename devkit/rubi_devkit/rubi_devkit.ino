@@ -7,7 +7,7 @@
 //   Motor A: PWMA=D25  AIN1=D26  AIN2=D27     encoder E1A=D34  E1B=D35
 //   Motor B: PWMB=D33  BIN1=D13  BIN2=D14     encoder E2A=VN(GPIO39)  E2B=D32
 //   STBY=D23 (muc cao = driver chay)
-//   Do pin: module chia ap 5:1, S -> GPIO36 (VP)
+//   Do pin: module chia ap 5:1, S -> GPIO36 (VP)   (dat CO_MODULE_DO_PIN = true khi da noi module)
 //   UART2 sang bo man hinh: TX2=GPIO17, RX2=GPIO16 (chi gui "B<mV>" moi giay, nhu pin_gui_phan_tram.ino)
 //
 // Lenh go trong Serial Monitor (gui bang Enter):
@@ -54,7 +54,9 @@ const int STALL_MIN_PCT = 20;
 const uint32_t STALL_MS = 800;
 const int STALL_MIN_COUNTS = 6;
 
-// Do pin
+// Do pin: chi bat (true) khi da noi module do ap (S -> GPIO36, - -> GND). Chua noi thi de false,
+// neu khong chan GPIO36 de ho se doc ra so ngau nhien va chuong trinh tuong pin yeu.
+const bool CO_MODULE_DO_PIN = false;
 const float TI_LE_CHIA = 5.0f;           // module 30k/7.5k
 const float HE_SO_HIEU_CHINH = 1.000f;   // do pin bang dong ho van nang roi sua so nay
 const int PIN_THAP_MV = 6200;            // duoi muc nay (2S, 3.1 V/cell) -> khong cho motor chay
@@ -203,6 +205,7 @@ uint32_t g_bat_last_sample = 0, g_bat_last_send = 0;
 float g_bat_mv = 0;
 
 void doPin() {
+    if (!CO_MODULE_DO_PIN) return;
     uint32_t now = millis();
     if (now - g_bat_last_sample >= 15) {
         g_bat_last_sample = now;
@@ -217,7 +220,11 @@ void doPin() {
         Serial2.printf("B%d\n", (int)g_bat_mv);
         // chi khoa motor khi co so do hop ly (module chua noi thi doc ~0, bo qua)
         g_pin_thap = (g_bat_mv > 4000 && g_bat_mv < PIN_THAP_MV);
-        if (g_pin_thap) { g_target[0] = g_target[1] = 0; Serial.printf("! Pin yeu: %.2f V\n", g_bat_mv / 1000.0f); }
+        if (g_pin_thap) {
+            g_target[0] = g_target[1] = 0;
+            static uint32_t lastMsg = 0;
+            if (millis() - lastMsg > 5000) { lastMsg = millis(); Serial.printf("! Pin yeu: %.2f V\n", g_bat_mv / 1000.0f); }
+        }
     }
 }
 
