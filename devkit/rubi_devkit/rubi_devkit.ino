@@ -21,6 +21,8 @@
 // Wi-Fi + CAP NHAT QUA MANG (OTA):
 //   wTenWifi|MatKhau   luu Wi-Fi 2.4 GHz vao bo nho (khong nam trong code). Bo man hinh sau nay gui lenh nay qua UART2.
 //   w                  xem trang thai Wi-Fi          w-   xoa Wi-Fi          i   xem IP/trang thai
+//   u                  TU TAI BAN MOI TU GITHUB (nhanh ota-devkit) roi tu nap, khoi dong lai. u! = ep nap lai dung ca khi cung phien ban.
+//   v                  xem phien ban dang chay.  Bo man hinh cung co the gui dong "u" qua UART2 de kich hoat.
 //   Tools -> Partition Scheme phai la "Default 4MB with spiffs" (co cho cho OTA). Lan dau nap bang cap USB,
 //   tu lan sau: Tools -> Port -> "rubi-devkit at <IP>" (mat khau OTA: xem OTA_MAT_KHAU ben duoi).
 
@@ -29,6 +31,9 @@
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 #include <Preferences.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <Update.h>
 
 // ---------------- Chan ----------------
 const int PIN_PWMA = 25, PIN_AIN1 = 26, PIN_AIN2 = 27;
@@ -254,7 +259,7 @@ void inDem() {
 
 void inHuongDan() {
     Serial.println("Lenh: t=thu tu dong | a50 / b-50 = motor A / B | d40 = ca hai | s=dung | r=reset dem | e=in dem | ?=huong dan");
-    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = luu Wi-Fi | w = trang thai | w- = xoa | i = IP");
+    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = luu Wi-Fi | w = trang thai | w- = xoa | i = IP | u = tai ban moi tu GitHub | v = phien ban");
 }
 
 // ---------------- Thu tu dong ----------------
@@ -370,6 +375,98 @@ void wifiTick() {
     g_wifi_was = ok;
 }
 
+// ---------------- Cap nhat tu GitHub (nhanh ota-devkit) ----------------
+const char* FW_VERSION = "dev";   // GitHub Actions doi thanh 1.0.<so lan build>
+const char* OTA_MANIFEST_URL = "https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/ota-devkit/manifest.json";
+
+static String jsonGet(const String& s, const char* key) {
+    String k = String("\"") + key + "\"";
+    int i = s.indexOf(k);
+    if (i < 0) return "";
+    i = s.indexOf(':', i + k.length());
+    if (i < 0) return "";
+    i++;
+    while (i < (int)s.length() && (s[i] == ' ' || s[i] == '"')) i++;
+    int j = i;
+    while (j < (int)s.length() && s[j] != '"' && s[j] != ',' && s[j] != '}' && s[j] != '\n' && s[j] != '\r') j++;
+    String v = s.substring(i, j);
+    v.trim();
+    return v;
+}
+
+void githubCapNhat(bool ep) {
+    if (WiFi.status() != WL_CONNECTED) { Serial.println("Chua co Wi-Fi. Go: wTenWifi|MatKhau"); return; }
+    dungHet();                               // tat motor trong luc cap nhat
+    Serial.printf("Phien ban dang chay: %s. Dang hoi GitHub...\n", FW_VERSION);
+
+    String body;
+    {
+        WiFiClientSecure cl;
+        cl.setInsecure();                    // khong kiem tra chung chi (xem ghi chu bao mat khi gui file)
+        HTTPClient http;
+        http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+        http.setTimeout(15000);
+        if (!http.begin(cl, OTA_MANIFEST_URL)) { Serial.println("Loi: khong mo duoc dia chi manifest"); return; }
+        int code = http.GET();
+        if (code != 200) { Serial.printf("Loi: GitHub tra ve ma %d (chua co ban nao hoac mat mang)\n", code); http.end(); return; }
+        body = http.getString();
+        http.end();
+    }
+    String ver = jsonGet(body, "version"), url = jsonGet(body, "url"), md5 = jsonGet(body, "md5");
+    if (ver.length() == 0 || url.length() == 0) { Serial.println("Loi: manifest khong doc duoc"); return; }
+    Serial.printf("Ban tren GitHub: %s\n", ver.c_str());
+    if (!ep && ver == FW_VERSION) { Serial.println("Da la ban moi nhat. (Go u! de ep nap lai)"); return; }
+
+    WiFiClientSecure cl2;
+    cl2.setInsecure();
+    HTTPClient h2;
+    h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
+    h2.setTimeout(15000);
+    if (!h2.begin(cl2, url)) { Serial.println("Loi: khong mo duoc dia chi file"); return; }
+    int code2 = h2.GET();
+    int len = h2.getSize();
+    if (code2 != 200 || len <= 0) { Serial.printf("Loi tai file: ma %d, dung luong %d\n", code2, len); h2.end(); return; }
+    if (!Update.begin(len)) { Serial.printf("Loi: khong du cho nap (%s)\n", Update.errorString()); h2.end(); return; }
+    if (md5.length() == 32) Update.setMD5(md5.c_str());
+
+    Serial.printf("Dang tai %d byte...\n", len);
+    WiFiClient* st = h2.getStreamPtr();
+    uint8_t buf[1024];
+    int got = 0, lastPct = -1;
+    uint32_t lastData = millis();
+    bool loi = false;
+    while (got < len) {
+        size_t avail = st->available();
+        if (avail) {
+            size_t n = (avail > sizeof(buf)) ? sizeof(buf) : avail;
+            int r = st->readBytes(buf, n);
+            if (r <= 0) continue;
+            if (Update.write(buf, r) != (size_t)r) { Serial.printf("Loi ghi: %s\n", Update.errorString()); loi = true; break; }
+            got += r;
+            lastData = millis();
+            int pct = (int)((int64_t)got * 100 / len);
+            if (pct / 10 != lastPct / 10) { lastPct = pct; Serial.printf("  %d%%\n", pct); }
+        } else {
+            if (!h2.connected()) break;
+            if (millis() - lastData > 20000) { Serial.println("Loi: het gio cho du lieu"); loi = true; break; }
+            delay(2);
+        }
+    }
+    h2.end();
+    if (loi || got != len) {
+        Update.abort();
+        Serial.printf("Cap nhat that bai (nhan %d/%d byte). Ban cu van chay binh thuong.\n", got, len);
+        return;
+    }
+    if (!Update.end(true)) {
+        Serial.printf("Cap nhat that bai: %s. Ban cu van chay binh thuong.\n", Update.errorString());
+        return;
+    }
+    Serial.printf("Cap nhat xong, len ban %s. Khoi dong lai...\n", ver.c_str());
+    delay(500);
+    ESP.restart();
+}
+
 // ---------------- Lenh tu may tinh ----------------
 void xuLyLenh(String s) {
     s.trim();
@@ -385,6 +482,8 @@ void xuLyLenh(String s) {
         case 'r': noInterrupts(); g_cnt[0] = g_cnt[1] = 0; interrupts(); Serial.println("Da dat lai dem"); break;
         case 'e': inDem(); break;
         case 'i': wifiTrangThai(); break;
+        case 'v': Serial.printf("Phien ban: %s\n", FW_VERSION); break;
+        case 'u': githubCapNhat(s.length() > 1 && s[1] == '!'); break;
         case 'w': {
             String r = s.substring(1);
             r.trim();
@@ -435,7 +534,7 @@ void setup() {
     wifiNapCauHinh();
     wifiKetNoi();
     Serial.println();
-    Serial.println("Rubi DevKit san sang. Motor dang dung.");
+    Serial.printf("Rubi DevKit san sang. Phien ban %s. Motor dang dung.\n", FW_VERSION);
     inHuongDan();
 }
 
@@ -458,8 +557,8 @@ void loop() {
     while (Serial2.available()) {   // lenh tu bo man hinh (vd luu Wi-Fi)
         char ch = (char)Serial2.read();
         if (ch == '\n' || ch == '\r') {
-            // chi nhan lenh Wi-Fi tu UART2: chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
-            if (line2.length() > 1 && line2[0] == 'w') xuLyLenh(line2);
+            // chi nhan lenh Wi-Fi (w...) va cap nhat (u) tu UART2: chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
+            if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") xuLyLenh(line2);
             line2 = "";
         }
         else if (line2.length() < 100) line2 += ch;

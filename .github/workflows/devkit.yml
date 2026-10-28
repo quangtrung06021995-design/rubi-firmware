@@ -1,0 +1,71 @@
+name: Build Rubi DevKit firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - devkit/rubi_devkit/**
+      - .github/workflows/devkit.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stamp version
+        shell: bash
+        run: |
+          VER="1.0.${{ github.run_number }}"
+          sed -i "s/^const char\* FW_VERSION = \"[^\"]*\";/const char* FW_VERSION = \"$VER\";/" devkit/rubi_devkit/rubi_devkit.ino
+          grep -n "FW_VERSION =" devkit/rubi_devkit/rubi_devkit.ino
+          echo "DEVKIT_VERSION=$VER" >> "$GITHUB_ENV"
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          arduino-cli config init --overwrite 2>&1 | tee devkit-build.log
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json 2>&1 | tee -a devkit-build.log
+          arduino-cli core update-index 2>&1 | tee -a devkit-build.log
+          arduino-cli core install esp32:esp32 2>&1 | tee -a devkit-build.log
+          arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir out devkit/rubi_devkit 2>&1 | tee -a devkit-build.log
+          ls -la out
+
+      - name: Publish build log (branch build-log-devkit)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p /tmp/logpub && cd /tmp/logpub && rm -rf .git
+          { echo "devkit run ${{ github.run_number }} sha ${{ github.sha }}"; tail -n 300 "$GITHUB_WORKSPACE/devkit-build.log" 2>/dev/null; } > build.log.txt
+          git init -q && git checkout -q -b build-log-devkit
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "devkit build log"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" build-log-devkit || true
+
+      - name: Publish OTA files (branch ota-devkit)
+        shell: bash
+        run: |
+          mkdir -p /tmp/otapub && cd /tmp/otapub && rm -rf .git
+          cp "$GITHUB_WORKSPACE/out/rubi_devkit.ino.bin" devkit.bin
+          MD5=$(md5sum devkit.bin | cut -d' ' -f1)
+          SIZE=$(stat -c %s devkit.bin)
+          printf '{"version":"%s","url":"https://raw.githubusercontent.com/%s/ota-devkit/devkit.bin","md5":"%s","size":%s}\n' "$DEVKIT_VERSION" "${{ github.repository }}" "$MD5" "$SIZE" > manifest.json
+          cat manifest.json; ls -la
+          git init -q && git checkout -q -b ota-devkit
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "DevKit OTA $DEVKIT_VERSION"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ota-devkit
+
+      - name: Upload firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: rubi-devkit-firmware
+          path: out/rubi_devkit.ino.bin
+          if-no-files-found: error
