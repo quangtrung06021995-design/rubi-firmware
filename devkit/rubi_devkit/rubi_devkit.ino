@@ -31,11 +31,11 @@ const int PIN_VBAT = 36;
 
 // ---------------- Cau hinh (sua o day neu can) ----------------
 // Dao chieu neu "tien" ma banh quay lui:
-const bool DAO_CHIEU_A = false;
-const bool DAO_CHIEU_B = false;
+const bool DAO_CHIEU_A = true;
+const bool DAO_CHIEU_B = true;
 // Dao dau encoder neu tien ma bo dem giam:
-const bool DAO_ENC_A = true;
-const bool DAO_ENC_B = false;
+const bool DAO_ENC_A = false;
+const bool DAO_ENC_B = true;
 
 const int PWM_FREQ = 10000;      // 10 kHz, em tai, khong ru
 const int PWM_BITS = 10;         // 0..1023
