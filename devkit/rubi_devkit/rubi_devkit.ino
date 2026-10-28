@@ -17,9 +17,18 @@
 //   r        dat lai bo dem encoder                       e     in bo dem + toc do
 //   ?        hien huong dan
 // Moi lenh a/b/d chi chay toi da 5 giay roi tu dung (de khong bao gio chay mai).
+//
+// Wi-Fi + CAP NHAT QUA MANG (OTA):
+//   wTenWifi|MatKhau   luu Wi-Fi 2.4 GHz vao bo nho (khong nam trong code). Bo man hinh sau nay gui lenh nay qua UART2.
+//   w                  xem trang thai Wi-Fi          w-   xoa Wi-Fi          i   xem IP/trang thai
+//   Tools -> Partition Scheme phai la "Default 4MB with spiffs" (co cho cho OTA). Lan dau nap bang cap USB,
+//   tu lan sau: Tools -> Port -> "rubi-devkit at <IP>" (mat khau OTA: xem OTA_MAT_KHAU ben duoi).
 
 #include <Arduino.h>
 #include <driver/gpio.h>
+#include <WiFi.h>
+#include <ArduinoOTA.h>
+#include <Preferences.h>
 
 // ---------------- Chan ----------------
 const int PIN_PWMA = 25, PIN_AIN1 = 26, PIN_AIN2 = 27;
@@ -245,6 +254,7 @@ void inDem() {
 
 void inHuongDan() {
     Serial.println("Lenh: t=thu tu dong | a50 / b-50 = motor A / B | d40 = ca hai | s=dung | r=reset dem | e=in dem | ?=huong dan");
+    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = luu Wi-Fi | w = trang thai | w- = xoa | i = IP");
 }
 
 // ---------------- Thu tu dong ----------------
@@ -287,6 +297,79 @@ void thuTuDong() {
     if (!g_huy) Serial.println("== Xong ==");
 }
 
+// ---------------- Wi-Fi + cap nhat OTA ----------------
+const char* OTA_TEN_MAY = "rubi-devkit";
+const char* OTA_MAT_KHAU = "rubi1234";   // Arduino IDE hoi mat khau nay khi nap qua Wi-Fi
+Preferences g_pref;
+String g_ssid, g_pass;
+bool g_ota_started = false;
+bool g_wifi_was = false;
+uint32_t g_wifi_try = 0;
+
+void wifiNapCauHinh() {
+    g_pref.begin("rubi", true);
+    g_ssid = g_pref.getString("ssid", "");
+    g_pass = g_pref.getString("pass", "");
+    g_pref.end();
+}
+
+void wifiLuu(const String& ssid, const String& pass) {
+    g_pref.begin("rubi", false);
+    g_pref.putString("ssid", ssid);
+    g_pref.putString("pass", pass);
+    g_pref.end();
+    g_ssid = ssid;
+    g_pass = pass;
+}
+
+void wifiKetNoi() {
+    if (g_ssid.length() == 0) return;
+    WiFi.disconnect();
+    WiFi.begin(g_ssid.c_str(), g_pass.c_str());
+    g_wifi_try = millis();
+}
+
+void wifiTrangThai() {
+    if (g_ssid.length() == 0) { Serial.println("Wi-Fi: chua cai. Go: wTenWifi|MatKhau"); return; }
+    if (WiFi.status() == WL_CONNECTED)
+        Serial.printf("Wi-Fi: dang noi \"%s\", IP %s, OTA: %s (mat khau %s)\n", g_ssid.c_str(), WiFi.localIP().toString().c_str(), OTA_TEN_MAY, OTA_MAT_KHAU);
+    else
+        Serial.printf("Wi-Fi: da luu \"%s\" nhung chua noi duoc (can Wi-Fi 2.4 GHz, kiem tra ten/mat khau)\n", g_ssid.c_str());
+}
+
+void otaBatDau() {
+    ArduinoOTA.setHostname(OTA_TEN_MAY);
+    ArduinoOTA.setPassword(OTA_MAT_KHAU);
+    ArduinoOTA.onStart([]() {
+        dungHet();
+        digitalWrite(PIN_STBY, LOW);   // tat driver trong luc nap
+        Serial.println("OTA: bat dau nap, da tat motor");
+    });
+    ArduinoOTA.onEnd([]() { Serial.println("OTA: xong, khoi dong lai"); });
+    ArduinoOTA.onError([](ota_error_t e) {
+        Serial.printf("OTA loi %u\n", (unsigned)e);
+        digitalWrite(PIN_STBY, HIGH);
+    });
+    ArduinoOTA.begin();
+    g_ota_started = true;
+}
+
+void wifiTick() {
+    if (g_ssid.length() == 0) return;
+    bool ok = (WiFi.status() == WL_CONNECTED);
+    uint32_t now = millis();
+    if (ok) {
+        if (!g_wifi_was) wifiTrangThai();
+        if (!g_ota_started) otaBatDau();
+        ArduinoOTA.handle();
+    } else {
+        if (g_wifi_was) Serial.println("Wi-Fi mat ket noi");
+        bool dung = (g_cmd[0] == 0 && g_cmd[1] == 0);   // chi thu noi lai khi motor dang nghi
+        if (dung && now - g_wifi_try > 20000) wifiKetNoi();
+    }
+    g_wifi_was = ok;
+}
+
 // ---------------- Lenh tu may tinh ----------------
 void xuLyLenh(String s) {
     s.trim();
@@ -301,6 +384,19 @@ void xuLyLenh(String s) {
         case 's': dungHet(); Serial.println("Da dung"); break;
         case 'r': noInterrupts(); g_cnt[0] = g_cnt[1] = 0; interrupts(); Serial.println("Da dat lai dem"); break;
         case 'e': inDem(); break;
+        case 'i': wifiTrangThai(); break;
+        case 'w': {
+            String r = s.substring(1);
+            r.trim();
+            if (r.length() == 0) { wifiTrangThai(); break; }
+            if (r == "-") { wifiLuu("", ""); WiFi.disconnect(); Serial.println("Da xoa Wi-Fi"); break; }
+            int k = r.indexOf('|');
+            if (k <= 0) { Serial.println("Cu phap: wTenWifi|MatKhau  (dung dau | giua ten va mat khau)"); break; }
+            wifiLuu(r.substring(0, k), r.substring(k + 1));
+            Serial.printf("Da luu Wi-Fi \"%s\". Dang ket noi...\n", g_ssid.c_str());
+            wifiKetNoi();
+            break;
+        }
         default: inHuongDan(); break;
     }
 }
@@ -333,6 +429,11 @@ void setup() {
 
     delay(300);
     digitalWrite(PIN_STBY, HIGH);   // bat driver (motor van dung vi PWM = 0)
+    WiFi.mode(WIFI_STA);
+    WiFi.setSleep(false);           // OTA on dinh hon khi khong ngu Wi-Fi
+    WiFi.setAutoReconnect(true);
+    wifiNapCauHinh();
+    wifiKetNoi();
     Serial.println();
     Serial.println("Rubi DevKit san sang. Motor dang dung.");
     inHuongDan();
@@ -340,7 +441,7 @@ void setup() {
 
 void loop() {
     static uint32_t last10 = 0;
-    static String line;
+    static String line, line2;
     uint32_t now = millis();
     if (now - last10 >= 10) {
         last10 += 10;
@@ -348,10 +449,20 @@ void loop() {
         capNhatMotor();
     }
     doPin();
+    wifiTick();
     while (Serial.available()) {
         char ch = (char)Serial.read();
         if (ch == '\n' || ch == '\r') { xuLyLenh(line); line = ""; }
-        else if (line.length() < 24) line += ch;
+        else if (line.length() < 100) line += ch;
+    }
+    while (Serial2.available()) {   // lenh tu bo man hinh (vd luu Wi-Fi)
+        char ch = (char)Serial2.read();
+        if (ch == '\n' || ch == '\r') {
+            // chi nhan lenh Wi-Fi tu UART2: chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
+            if (line2.length() > 1 && line2[0] == 'w') xuLyLenh(line2);
+            line2 = "";
+        }
+        else if (line2.length() < 100) line2 += ch;
     }
     delay(1);
 }
