@@ -309,6 +309,8 @@ Preferences g_pref;
 String g_ssid, g_pass;
 bool g_ota_started = false;
 bool g_wifi_was = false;
+uint32_t g_auto_at = 0;      // thoi diem tu kiem tra GitHub (0 = chua dat / da xong)
+bool g_auto_done = false;
 uint32_t g_wifi_try = 0;
 
 void wifiNapCauHinh() {
@@ -364,7 +366,7 @@ void wifiTick() {
     bool ok = (WiFi.status() == WL_CONNECTED);
     uint32_t now = millis();
     if (ok) {
-        if (!g_wifi_was) wifiTrangThai();
+        if (!g_wifi_was) { wifiTrangThai(); if (!g_auto_done && g_auto_at == 0) g_auto_at = millis() + 8000; }
         if (!g_ota_started) otaBatDau();
         ArduinoOTA.handle();
     } else {
@@ -376,6 +378,7 @@ void wifiTick() {
 }
 
 // ---------------- Cap nhat tu GitHub (nhanh ota-devkit) ----------------
+const bool TU_CAP_NHAT_KHI_BAT = true;   // true = moi lan bat nguon, noi duoc Wi-Fi thi tu kiem tra GitHub va tu nap ban moi
 const char* FW_VERSION = "dev";   // GitHub Actions doi thanh 1.0.<so lan build>
 const char* OTA_MANIFEST_URL = "https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/ota-devkit/manifest.json";
 
@@ -549,6 +552,11 @@ void loop() {
     }
     doPin();
     wifiTick();
+    if (TU_CAP_NHAT_KHI_BAT && !g_auto_done && g_auto_at != 0 && (int32_t)(millis() - g_auto_at) >= 0) {
+        g_auto_done = true;   // chi thu mot lan moi lan bat nguon
+        Serial.println("Tu kiem tra ban moi tren GitHub...");
+        githubCapNhat(false);
+    }
     while (Serial.available()) {
         char ch = (char)Serial.read();
         if (ch == '\n' || ch == '\r') { xuLyLenh(line); line = ""; }
