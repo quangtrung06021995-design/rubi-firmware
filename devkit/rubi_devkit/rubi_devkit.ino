@@ -34,7 +34,7 @@ const int PIN_VBAT = 36;
 const bool DAO_CHIEU_A = false;
 const bool DAO_CHIEU_B = false;
 // Dao dau encoder neu tien ma bo dem giam:
-const bool DAO_ENC_A = false;
+const bool DAO_ENC_A = true;
 const bool DAO_ENC_B = false;
 
 const int PWM_FREQ = 10000;      // 10 kHz, em tai, khong ru
