@@ -19,7 +19,9 @@
 // Moi lenh a/b/d chi chay toi da 5 giay roi tu dung (de khong bao gio chay mai).
 //
 // Wi-Fi + CAP NHAT QUA MANG (OTA):
-//   wTenWifi|MatKhau   luu Wi-Fi 2.4 GHz vao bo nho (khong nam trong code). Bo man hinh sau nay gui lenh nay qua UART2.
+//   wTenWifi|MatKhau   them Wi-Fi 2.4 GHz: robot thu noi, NOI DUOC MOI LUU (nho toi da 10 mang, bo mang it dung nhat khi day).
+//                      Bo man hinh gui cung lenh nay (hoac dong W<ten>\t<mk>\t<cs> nhu gui cho camera) qua UART2; DevKit bao lai "I<ip>" moi 5 giay, "F" neu mang moi khong noi duoc.
+//   l = xem cac mang da nho   q2 = quen mang so 2   w- = quen het.  Bat nguon: quet va noi mang manh nhat trong so da nho.
 //   w                  xem trang thai Wi-Fi          w-   xoa Wi-Fi          i   xem IP/trang thai
 //   u                  TU TAI BAN MOI TU GITHUB (nhanh ota-devkit) roi tu nap, khoi dong lai. u! = ep nap lai dung ca khi cung phien ban.
 //   v                  xem phien ban dang chay.  Bo man hinh cung co the gui dong "u" qua UART2 de kich hoat.
@@ -262,7 +264,7 @@ void inDem() {
 
 void inHuongDan() {
     Serial.println("Lenh: t=thu tu dong | a50 / b-50 = motor A / B | d40 = ca hai | s=dung | r=reset dem | e=in dem | ?=huong dan");
-    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = luu Wi-Fi | w = trang thai | w- = xoa | i = IP | u = tai ban moi tu GitHub | v = phien ban");
+    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = them mang (chi luu neu noi duoc) | l = cac mang da nho | q2 = quen mang so 2 | w- = quen het | w = trang thai | i = IP | u = tai ban moi | v = phien ban");
 }
 
 // ---------------- Thu tu dong ----------------
@@ -309,42 +311,158 @@ void thuTuDong() {
 const char* OTA_TEN_MAY = "rubi-devkit";
 const char* OTA_MAT_KHAU = "rubi1234";   // Arduino IDE hoi mat khau nay khi nap qua Wi-Fi
 Preferences g_pref;
-String g_ssid, g_pass;
+String g_ssid, g_pass;            // mang dang noi / dang thu
 bool g_ota_started = false;
 bool g_wifi_was = false;
 uint32_t g_auto_at = 0;      // thoi diem tu kiem tra GitHub (0 = chua dat / da xong)
 bool g_auto_done = false;
 uint32_t g_wifi_try = 0;
 
-void wifiNapCauHinh() {
-    g_pref.begin("rubi", true);
-    g_ssid = g_pref.getString("ssid", "");
-    g_pass = g_pref.getString("pass", "");
+// Danh sach toi da WIFI_MAX mang DA NOI THANH CONG (mang sai mat khau khong duoc luu). g_nq lon = dung gan day nhat.
+const int WIFI_MAX = 10;
+String g_ns[WIFI_MAX], g_np[WIFI_MAX];
+uint32_t g_nq[WIFI_MAX];
+int g_nn = 0;
+uint32_t g_seq = 0;
+bool g_cho = false;                    // dang thu mot mang moi (chua luu)
+String g_cho_ssid, g_cho_pass;
+bool g_loi_co = false;                 // mang moi vua that bai: bo qua lenh lap lai trong 60 giay
+String g_loi_ssid, g_loi_pass;
+uint32_t g_loi_at = 0;
+uint32_t g_ip_send = 0;
+
+void wifiLuuDS() {
+    g_pref.begin("rubiwf", false);
+    g_pref.clear();
+    g_pref.putUInt("n", (uint32_t)g_nn);
+    g_pref.putUInt("seq", g_seq);
+    for (int i = 0; i < g_nn; i++) {
+        String k = String(i);
+        g_pref.putString(("s" + k).c_str(), g_ns[i]);
+        g_pref.putString(("p" + k).c_str(), g_np[i]);
+        g_pref.putUInt(("q" + k).c_str(), g_nq[i]);
+    }
     g_pref.end();
 }
 
-void wifiLuu(const String& ssid, const String& pass) {
-    g_pref.begin("rubi", false);
-    g_pref.putString("ssid", ssid);
-    g_pref.putString("pass", pass);
-    g_pref.end();
-    g_ssid = ssid;
-    g_pass = pass;
+int wifiTim(const String& s) {
+    for (int i = 0; i < g_nn; i++) if (g_ns[i] == s) return i;
+    return -1;
 }
 
-void wifiKetNoi() {
-    if (g_ssid.length() == 0) return;
+void wifiThem(const String& s, const String& p) {
+    int i = wifiTim(s);
+    if (i < 0) {
+        if (g_nn < WIFI_MAX) i = g_nn++;
+        else { i = 0; for (int k = 1; k < g_nn; k++) if (g_nq[k] < g_nq[i]) i = k; }   // day: bo mang it dung nhat
+        g_ns[i] = s;
+    }
+    g_np[i] = p;
+    g_nq[i] = ++g_seq;
+    wifiLuuDS();
+}
+
+void wifiQuenMuc(int i) {
+    if (i < 0 || i >= g_nn) return;
+    for (int k = i; k < g_nn - 1; k++) { g_ns[k] = g_ns[k + 1]; g_np[k] = g_np[k + 1]; g_nq[k] = g_nq[k + 1]; }
+    g_nn--;
+    wifiLuuDS();
+}
+
+void wifiQuenHet() {
+    g_nn = 0; g_cho = false; g_loi_co = false;
+    g_ssid = ""; g_pass = "";
+    wifiLuuDS();
     WiFi.disconnect();
-    WiFi.begin(g_ssid.c_str(), g_pass.c_str());
+}
+
+void wifiNapDS() {
+    g_pref.begin("rubiwf", true);
+    g_nn = (int)g_pref.getUInt("n", 0);
+    if (g_nn < 0 || g_nn > WIFI_MAX) g_nn = 0;
+    g_seq = g_pref.getUInt("seq", 0);
+    for (int i = 0; i < g_nn; i++) {
+        String k = String(i);
+        g_ns[i] = g_pref.getString(("s" + k).c_str(), "");
+        g_np[i] = g_pref.getString(("p" + k).c_str(), "");
+        g_nq[i] = g_pref.getUInt(("q" + k).c_str(), 0);
+    }
+    g_pref.end();
+    if (g_nn == 0) {   // chuyen mang duy nhat cua ban 1.0/1.1 sang danh sach
+        g_pref.begin("rubi", true);
+        String s = g_pref.getString("ssid", ""), p = g_pref.getString("pass", "");
+        g_pref.end();
+        if (s.length() > 0) wifiThem(s, p);
+    }
+}
+
+void wifiBegin(const String& s, const String& p) {
+    g_ssid = s; g_pass = p;
+    WiFi.disconnect();
+    WiFi.begin(s.c_str(), p.c_str());
     g_wifi_try = millis();
 }
 
+// Chon mang da nho co song manh nhat; khong thay mang nao thi thu mang dung gan day nhat (co the la mang an).
+void wifiKetNoi() {
+    if (g_nn == 0) return;
+    int best = -1, bestRssi = -1000;
+    WiFi.disconnect();
+    int n = WiFi.scanNetworks(false, true);      // chan 2-4 giay; chi goi khi motor dang dung
+    for (int j = 0; j < n; j++) {
+        int i = wifiTim(WiFi.SSID(j));
+        if (i >= 0 && WiFi.RSSI(j) > bestRssi) { bestRssi = WiFi.RSSI(j); best = i; }
+    }
+    WiFi.scanDelete();
+    if (best < 0) {
+        best = 0;
+        for (int k = 1; k < g_nn; k++) if (g_nq[k] > g_nq[best]) best = k;
+        Serial.println("Wi-Fi: khong thay mang nao da nho, thu mang dung gan nhat");
+    }
+    Serial.printf("Wi-Fi: dang noi \"%s\"...\n", g_ns[best].c_str());
+    wifiBegin(g_ns[best], g_np[best]);
+}
+
+// Mang MOI (tu man hinh hoac go tay): thu noi, chi luu khi noi duoc. tuUART = lenh lap lai tu bo man hinh.
+void wifiMangMoi(const String& s, const String& p, bool tuUART) {
+    if (s.length() == 0 || s.length() > 32 || p.length() > 63) { Serial.println("Ten Wi-Fi 1-32 ky tu, mat khau toi da 63"); return; }
+    int i = wifiTim(s);
+    if (i >= 0 && g_np[i] == p) {                 // da biet roi
+        if (!tuUART) wifiKetNoi();                // go tay: noi ngay
+        return;                                   // tu man hinh (gui lap moi 5 giay): im lang, wifiTick lo
+    }
+    if (g_cho && g_cho_ssid == s && g_cho_pass == p) return;     // dang thu dung mang nay
+    if (tuUART && g_loi_co && g_loi_ssid == s && g_loi_pass == p && millis() - g_loi_at < 60000) return;
+    g_cho = true; g_cho_ssid = s; g_cho_pass = p; g_loi_co = false;
+    Serial.printf("Mang moi \"%s\": dang thu noi (chi luu neu noi duoc)...\n", s.c_str());
+    wifiBegin(s, p);
+}
+
+// Dong tu bo man hinh: W<ten>\t<mat khau>\t<2 chu so hex tong byte>  (cung dinh dang gui cho camera)
+bool phanTichW(const String& line, String& ssid, String& pass) {
+    if (line.length() < 5 || line[0] != 'W') return false;
+    int t1 = line.indexOf('\t'), t2 = line.lastIndexOf('\t');
+    if (t1 < 2 || t2 <= t1 || (int)line.length() - t2 != 3) return false;
+    unsigned sum = 0;
+    for (int k = 1; k < t2; k++) sum += (uint8_t)line[k];
+    if ((sum & 0xFF) != (unsigned)strtoul(line.substring(t2 + 1).c_str(), nullptr, 16)) return false;
+    ssid = line.substring(1, t1);
+    pass = line.substring(t1 + 1, t2);
+    return ssid.length() > 0;
+}
+
 void wifiTrangThai() {
-    if (g_ssid.length() == 0) { Serial.println("Wi-Fi: chua cai. Go: wTenWifi|MatKhau"); return; }
+    if (g_nn == 0 && !g_cho) { Serial.println("Wi-Fi: chua co mang nao. Go: wTenWifi|MatKhau (hoac cai tren man hinh Rubi)"); return; }
     if (WiFi.status() == WL_CONNECTED)
-        Serial.printf("Wi-Fi: dang noi \"%s\", IP %s, OTA: %s (mat khau %s)\n", g_ssid.c_str(), WiFi.localIP().toString().c_str(), OTA_TEN_MAY, OTA_MAT_KHAU);
+        Serial.printf("Wi-Fi: dang noi \"%s\", IP %s, da nho %d mang, OTA: %s (mat khau %s)\n", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), g_nn, OTA_TEN_MAY, OTA_MAT_KHAU);
     else
-        Serial.printf("Wi-Fi: da luu \"%s\" nhung chua noi duoc (can Wi-Fi 2.4 GHz, kiem tra ten/mat khau)\n", g_ssid.c_str());
+        Serial.printf("Wi-Fi: chua noi duoc (da nho %d mang; can Wi-Fi 2.4 GHz, kiem tra ten/mat khau)\n", g_nn);
+}
+
+void wifiLiet() {
+    if (g_nn == 0) { Serial.println("Chua nho mang nao"); return; }
+    for (int i = 0; i < g_nn; i++)
+        Serial.printf("  %d. %s%s\n", i + 1, g_ns[i].c_str(), (WiFi.status() == WL_CONNECTED && WiFi.SSID() == g_ns[i]) ? "   <- dang noi" : "");
 }
 
 void otaBatDau() {
@@ -370,19 +488,45 @@ void webBatDau();
 void mdnsBatDau();
 
 void wifiTick() {
-    if (g_ssid.length() == 0) return;
-    bool ok = (WiFi.status() == WL_CONNECTED);
+    if (g_nn == 0 && !g_cho) return;
+    // dang thu mang moi thi chi tinh la "noi duoc" khi dung ten mang do (tranh doc nham mang cu truoc luc ngat)
+    bool ok = (WiFi.status() == WL_CONNECTED) && (!g_cho || WiFi.SSID() == g_cho_ssid);
     uint32_t now = millis();
     if (ok) {
-        if (!g_wifi_was) { wifiTrangThai(); mdnsBatDau(); if (!g_auto_done && g_auto_at == 0) g_auto_at = millis() + 8000; }
+        bool moi = !g_wifi_was;                        // vua noi (hoac vua doi sang mang khac)
+        if (g_cho) {
+            wifiThem(g_cho_ssid, g_cho_pass);
+            g_cho = false; moi = true;
+            Serial.printf("Da luu mang moi \"%s\" (nho %d mang)\n", g_cho_ssid.c_str(), g_nn);
+        } else if (moi) {
+            int i = wifiTim(WiFi.SSID());
+            if (i >= 0 && g_nq[i] != g_seq) { g_nq[i] = ++g_seq; wifiLuuDS(); }   // danh dau vua dung
+        }
+        if (moi) {
+            wifiTrangThai(); mdnsBatDau();
+            if (!g_auto_done && g_auto_at == 0) g_auto_at = millis() + 8000;
+            g_ip_send = now - 5000;                    // bao IP ngay
+        }
         if (!g_ota_started) otaBatDau();
         if (!g_web_started) webBatDau();
         g_web.handleClient();
         ArduinoOTA.handle();
+        if (now - g_ip_send >= 5000) {            // bao dia chi cho bo man hinh (dong ngan "I<ip>")
+            g_ip_send = now;
+            Serial2.printf("I%s\n", WiFi.localIP().toString().c_str());
+        }
     } else {
         if (g_wifi_was) Serial.println("Wi-Fi mat ket noi");
         bool dung = (g_cmd[0] == 0 && g_cmd[1] == 0);   // chi thu noi lai khi motor dang nghi
-        if (dung && now - g_wifi_try > 20000) wifiKetNoi();
+        if (g_cho && now - g_wifi_try > 15000) {
+            Serial.printf("Mang moi \"%s\" KHONG noi duoc (sai mat khau, hoac la Wi-Fi 5 GHz). Khong luu.\n", g_cho_ssid.c_str());
+            Serial2.println("F");
+            g_loi_co = true; g_loi_ssid = g_cho_ssid; g_loi_pass = g_cho_pass; g_loi_at = now;
+            g_cho = false;
+            if (dung) wifiKetNoi();                    // quay lai mang da nho
+        } else if (!g_cho && dung && now - g_wifi_try > 20000) {
+            wifiKetNoi();
+        }
     }
     g_wifi_was = ok;
 }
@@ -588,16 +732,22 @@ void xuLyLenh(String s) {
         case 'i': wifiTrangThai(); break;
         case 'v': Serial.printf("Phien ban: %s\n", FW_VERSION); break;
         case 'u': githubCapNhat(s.length() > 1 && s[1] == '!'); break;
+        case 'l': wifiLiet(); break;
+        case 'q': {
+            int n = s.substring(1).toInt();
+            if (n < 1 || n > g_nn) { Serial.println("Cu phap: q<so>  (xem so bang lenh l)"); break; }
+            Serial.printf("Da quen \"%s\"\n", g_ns[n - 1].c_str());
+            wifiQuenMuc(n - 1);
+            break;
+        }
         case 'w': {
             String r = s.substring(1);
             r.trim();
             if (r.length() == 0) { wifiTrangThai(); break; }
-            if (r == "-") { wifiLuu("", ""); WiFi.disconnect(); Serial.println("Da xoa Wi-Fi"); break; }
+            if (r == "-") { wifiQuenHet(); Serial.println("Da xoa het Wi-Fi da nho"); break; }
             int k = r.indexOf('|');
             if (k <= 0) { Serial.println("Cu phap: wTenWifi|MatKhau  (dung dau | giua ten va mat khau)"); break; }
-            wifiLuu(r.substring(0, k), r.substring(k + 1));
-            Serial.printf("Da luu Wi-Fi \"%s\". Dang ket noi...\n", g_ssid.c_str());
-            wifiKetNoi();
+            wifiMangMoi(r.substring(0, k), r.substring(k + 1), false);
             break;
         }
         default: inHuongDan(); break;
@@ -635,7 +785,7 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);           // OTA on dinh hon khi khong ngu Wi-Fi
     WiFi.setAutoReconnect(true);
-    wifiNapCauHinh();
+    wifiNapDS();
     wifiKetNoi();
     Serial.println();
     Serial.printf("Rubi DevKit san sang. Phien ban %s. Motor dang dung.\n", FW_VERSION);
@@ -663,14 +813,22 @@ void loop() {
         if (ch == '\n' || ch == '\r') { xuLyLenh(line); line = ""; }
         else if (line.length() < 100) line += ch;
     }
-    while (Serial2.available()) {   // lenh tu bo man hinh (vd luu Wi-Fi)
+    while (Serial2.available()) {   // lenh tu bo man hinh
         char ch = (char)Serial2.read();
         if (ch == '\n' || ch == '\r') {
-            // chi nhan lenh Wi-Fi (w...) va cap nhat (u) tu UART2: chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
-            if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") xuLyLenh(line2);
+            // chi nhan Wi-Fi ("w..." hoac "W<ten>\t<mk>\t<cs>") va cap nhat (u): chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
+            String ws, wp;
+            if (line2.length() > 4 && line2[0] == 'W') { if (phanTichW(line2, ws, wp)) wifiMangMoi(ws, wp, true); }
+            else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
+                if (line2[0] == 'w') {   // dang w<ten>|<mk> tu man hinh: xu ly nhu mang moi (lap lai thi im lang)
+                    String r = line2.substring(1); r.trim();
+                    int k = r.indexOf('|');
+                    if (k > 0) wifiMangMoi(r.substring(0, k), r.substring(k + 1), true);
+                } else xuLyLenh(line2);
+            }
             line2 = "";
         }
-        else if (line2.length() < 100) line2 += ch;
+        else if (line2.length() < 120) line2 += ch;
     }
     delay(1);
 }
