@@ -23,7 +23,8 @@
 //   w                  xem trang thai Wi-Fi          w-   xoa Wi-Fi          i   xem IP/trang thai
 //   u                  TU TAI BAN MOI TU GITHUB (nhanh ota-devkit) roi tu nap, khoi dong lai. u! = ep nap lai dung ca khi cung phien ban.
 //   v                  xem phien ban dang chay.  Bo man hinh cung co the gui dong "u" qua UART2 de kich hoat.
-//   Tools -> Partition Scheme phai la "Default 4MB with spiffs" (co cho cho OTA). Lan dau nap bang cap USB,
+//   Web dieu khien: http://rubi.local (hoac http://<IP>) - giao dien tai tu Vercel, mat Internet thi hien trang co ban.
+//   Tools -> Partition Scheme: "Minimal SPIFFS (1.9MB APP with OTA)". Lan dau nap bang cap USB,
 //   tu lan sau: Tools -> Port -> "rubi-devkit at <IP>" (mat khau OTA: xem OTA_MAT_KHAU ben duoi).
 
 #include <Arduino.h>
@@ -34,6 +35,8 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <Update.h>
+#include <WebServer.h>
+#include <ESPmDNS.h>
 
 // ---------------- Chan ----------------
 const int PIN_PWMA = 25, PIN_AIN1 = 26, PIN_AIN2 = 27;
@@ -189,7 +192,7 @@ void capNhatMotor() {
     if (g_cmd_deadline != 0 && (int32_t)(now - g_cmd_deadline) >= 0) {
         g_target[0] = g_target[1] = 0;
         g_cmd_deadline = 0;
-        Serial.println("(het 5 giay, tu dung)");
+        Serial.println("(het gio lenh, tu dung)");
     }
 }
 
@@ -361,13 +364,20 @@ void otaBatDau() {
     g_ota_started = true;
 }
 
+extern WebServer g_web;
+extern bool g_web_started;
+void webBatDau();
+void mdnsBatDau();
+
 void wifiTick() {
     if (g_ssid.length() == 0) return;
     bool ok = (WiFi.status() == WL_CONNECTED);
     uint32_t now = millis();
     if (ok) {
-        if (!g_wifi_was) { wifiTrangThai(); if (!g_auto_done && g_auto_at == 0) g_auto_at = millis() + 8000; }
+        if (!g_wifi_was) { wifiTrangThai(); mdnsBatDau(); if (!g_auto_done && g_auto_at == 0) g_auto_at = millis() + 8000; }
         if (!g_ota_started) otaBatDau();
+        if (!g_web_started) webBatDau();
+        g_web.handleClient();
         ArduinoOTA.handle();
     } else {
         if (g_wifi_was) Serial.println("Wi-Fi mat ket noi");
@@ -375,6 +385,97 @@ void wifiTick() {
         if (dung && now - g_wifi_try > 20000) wifiKetNoi();
     }
     g_wifi_was = ok;
+}
+
+
+// ---------------- Web dieu khien (rubi.local) ----------------
+// DevKit phuc vu 1 trang rat nho o http://rubi.local. Trang do tai giao dien day du tu Vercel (neu co Internet)
+// va chay NGAY TREN dia chi rubi.local, nen lenh di thang toi robot qua Wi-Fi nha. Mat Internet thi hien nut co ban.
+extern const char* FW_VERSION;
+WebServer g_web(80);
+const char* MDNS_TEN = "rubi";                       // -> http://rubi.local
+const uint32_t WEB_DEADMAN_MS = 500;                 // het 0.5 giay khong co lenh moi thi robot tu dung
+const bool A_LA_BANH_TRAI = true;                    // dat false neu motor A la banh PHAI (nhin tu phia sau robot)
+bool g_web_started = false;
+bool g_mdns_started = false;
+
+const char PAGE_ROOT[] PROGMEM = R"RAW(<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Rubi">
+<meta name="theme-color" content="#101820"><title>Rubi</title>
+<style>
+body{margin:0;background:#101820;color:#eaf1f7;font:16px system-ui,sans-serif;text-align:center;padding:16px}
+h1{font-size:20px;margin:8px 0 2px}p{margin:4px 0 14px;color:#9fb0c0}
+.g{display:grid;grid-template-columns:repeat(3,84px);gap:10px;justify-content:center;margin:12px 0}
+button{height:84px;border:0;border-radius:14px;background:#24384a;color:#fff;font-size:26px;touch-action:none}
+button:active{background:#e0553a}.s{background:#a33}
+</style></head><body>
+<h1>Rubi</h1><p id="st">Đang tải giao diện đầy đủ...</p>
+<div class="g">
+<span></span><button data-l="60" data-r="60">▲</button><span></span>
+<button data-l="-45" data-r="45">◀</button><button class="s" data-l="0" data-r="0">■</button><button data-l="45" data-r="-45">▶</button>
+<span></span><button data-l="-50" data-r="-50">▼</button><span></span></div>
+<script>
+var UI='https://rubi-web-eight.vercel.app/',cur=[0,0],tm=null;
+function send(){fetch('/api/drive?l='+cur[0]+'&r='+cur[1],{cache:'no-store'}).catch(function(){})}
+function halt(){clearInterval(tm);tm=null;cur=[0,0];fetch('/api/stop',{cache:'no-store'}).catch(function(){})}
+document.querySelectorAll('button').forEach(function(b){
+ b.addEventListener('pointerdown',function(e){e.preventDefault();var l=+b.dataset.l,r=+b.dataset.r;if(!l&&!r){halt();return}cur=[l,r];send();if(!tm)tm=setInterval(send,150)});
+ ['pointerup','pointercancel','pointerleave'].forEach(function(n){b.addEventListener(n,function(){if(+b.dataset.l||+b.dataset.r)halt()})})});
+(function(){var c=new AbortController(),t=setTimeout(function(){c.abort()},5000);
+ fetch(UI+'index.html',{signal:c.signal,cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(h){
+  clearTimeout(t);h=h.replace('<head>','<head><base href="'+UI+'">');document.open();document.write(h);document.close()
+ }).catch(function(){document.getElementById('st').textContent='Chế độ cơ bản (chưa có Internet)'})})();
+</script></body></html>)RAW";
+
+static void webJson(const String& j) {
+    g_web.sendHeader("Cache-Control", "no-store");
+    g_web.send(200, "application/json", j);
+}
+
+void webDrive() {   // /api/drive?l=-100..100&r=-100..100
+    int l = constrain(g_web.arg("l").toInt(), -100, 100);
+    int r = constrain(g_web.arg("r").toInt(), -100, 100);
+    datToc(0, A_LA_BANH_TRAI ? l : r);
+    datToc(1, A_LA_BANH_TRAI ? r : l);
+    g_cmd_deadline = millis() + WEB_DEADMAN_MS;
+    webJson("{\"ok\":true}");
+}
+
+void webStop() {
+    dungHet();
+    webJson("{\"ok\":true}");
+}
+
+void webStatus() {
+    String j = String("{\"ver\":\"") + FW_VERSION + "\",\"ip\":\"" + WiFi.localIP().toString() +
+               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
+               ",\"bat_mv\":" + String((int)g_bat_mv) +
+               ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
+               ",\"r\":" + String(A_LA_BANH_TRAI ? g_cmd[1] : g_cmd[0]) +
+               ",\"fault\":" + String((g_fault[0] || g_fault[1]) ? "true" : "false") + "}";
+    webJson(j);
+}
+
+void webBatDau() {
+    g_web.on("/", HTTP_GET, []() { g_web.sendHeader("Cache-Control", "no-store"); g_web.send_P(200, "text/html; charset=utf-8", PAGE_ROOT); });
+    g_web.on("/api/drive", HTTP_GET, webDrive);
+    g_web.on("/api/stop", HTTP_GET, webStop);
+    g_web.on("/api/status", HTTP_GET, webStatus);
+    g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });
+    g_web.begin();
+    g_web_started = true;
+}
+
+void mdnsBatDau() {
+    MDNS.end();
+    if (MDNS.begin(MDNS_TEN)) {
+        MDNS.addService("http", "tcp", 80);
+        g_mdns_started = true;
+        Serial.printf("Web dieu khien: http://%s.local  (hoac http://%s)\n", MDNS_TEN, WiFi.localIP().toString().c_str());
+    } else {
+        Serial.println("Khong bat duoc rubi.local (dung dia chi IP)");
+    }
 }
 
 // ---------------- Cap nhat tu GitHub (nhanh ota-devkit) ----------------
