@@ -97,10 +97,11 @@
 </section>
 
 <section class="view" id="v-cai-dat">
- <div class="card"><h2>Cài đặt</h2><div class="field"><label for="nm">Tên robot</label><input id="nm" value="Rubi"></div><div class="field"><label for="wf">Wi-Fi</label><input id="wf" value="TP-Link_7FA8"></div><div class="field"><label for="pin">Mã PIN điều khiển</label><input id="pin" value="••••" type="password"></div><button class="btn" id="save">Lưu</button></div>
+ <div class="card"><h2>Cài đặt</h2><div class="field"><label for="nm">Tên robot</label><input id="nm" value="Rubi"></div><div class="field"><label for="wf">Wi-Fi</label><input id="wf" value="TP-Link_7FA8"></div><p class="hint">Mã PIN điều khiển: đặt trên màn hình robot (Cài đặt → Mã PIN) hoặc bằng cáp USB.</p><button class="btn" id="save">Lưu</button></div>
 </section>
 </div>
 <div class="stopbar" id="stopbar"><button class="btn bad" id="estop">DỪNG KHẨN CẤP</button></div>
+<div class="pinbox" id="pinbox" hidden><div class="pincard"><h2>Mã PIN</h2><p id="pinmsg">Nhập mã PIN để điều khiển Rubi</p><input id="pinin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off"><button class="btn" id="pinok">Mở khóa</button></div></div>
 <div class="toast" id="toast" role="status"></div>
 
 

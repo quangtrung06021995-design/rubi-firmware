@@ -21,6 +21,7 @@
 // Wi-Fi + CAP NHAT QUA MANG (OTA):
 //   wTenWifi|MatKhau   them Wi-Fi 2.4 GHz: robot thu noi, NOI DUOC MOI LUU (nho toi da 10 mang, bo mang it dung nhat khi day).
 //                      Bo man hinh gui cung lenh nay (hoac dong W<ten>\t<mk>\t<cs> nhu gui cho camera) qua UART2; DevKit bao lai "I<ip>" moi 5 giay, "F" neu mang moi khong noi duoc.
+//   p4826 = dat ma PIN dieu khien web (4-8 so); p- = xoa PIN; chua dat thi ai cung lai xe duoc. /api/stop luon mo.
 //   l = xem cac mang da nho   q2 = quen mang so 2   w- = quen het.  Bat nguon: quet va noi mang manh nhat trong so da nho.
 //   w                  xem trang thai Wi-Fi          w-   xoa Wi-Fi          i   xem IP/trang thai
 //   u                  TU TAI BAN MOI TU GITHUB (nhanh ota-devkit) roi tu nap, khoi dong lai. u! = ep nap lai dung ca khi cung phien ban.
@@ -39,6 +40,7 @@
 #include <Update.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
+#include <esp_random.h>
 
 // ---------------- Chan ----------------
 const int PIN_PWMA = 25, PIN_AIN1 = 26, PIN_AIN2 = 27;
@@ -264,7 +266,7 @@ void inDem() {
 
 void inHuongDan() {
     Serial.println("Lenh: t=thu tu dong | a50 / b-50 = motor A / B | d40 = ca hai | s=dung | r=reset dem | e=in dem | ?=huong dan");
-    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = them mang (chi luu neu noi duoc) | l = cac mang da nho | q2 = quen mang so 2 | w- = quen het | w = trang thai | i = IP | u = tai ban moi | v = phien ban");
+    Serial.println("Wi-Fi/OTA: wTenWifi|MatKhau = them mang (chi luu neu noi duoc) | l = cac mang da nho | q2 = quen mang so 2 | w- = quen het | w = trang thai | i = IP | u = tai ban moi | v = phien ban | p4826 = dat PIN | p- = xoa PIN");
 }
 
 // ---------------- Thu tu dong ----------------
@@ -561,7 +563,11 @@ button:active{background:#e0553a}.s{background:#a33}
 <span></span><button data-l="-50" data-r="-50">▼</button><span></span></div>
 <script>
 var UI='https://rubi-web-eight.vercel.app/',cur=[0,0],tm=null;
-function send(){fetch('/api/drive?l='+cur[0]+'&r='+cur[1],{cache:'no-store'}).catch(function(){})}
+var TK='';try{TK=localStorage.getItem('rubi_t')||''}catch(e){}
+function q(){return TK?'&t='+encodeURIComponent(TK):''}
+function send(){fetch('/api/drive?l='+cur[0]+'&r='+cur[1]+q(),{cache:'no-store'}).then(function(r){if(r.status==401)ask()}).catch(function(){})}
+var asking=false;
+function ask(){if(asking)return;asking=true;halt();var p=prompt('Nhập mã PIN');if(!p){asking=false;return}fetch('/api/login?pin='+encodeURIComponent(p),{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){if(j.ok){TK=j.t||'';try{localStorage.setItem('rubi_t',TK)}catch(e){}}else alert(j.wait?'Thử lại sau '+j.wait+' giây':'Sai mã');asking=false}).catch(function(){asking=false})}
 function halt(){clearInterval(tm);tm=null;cur=[0,0];fetch('/api/stop',{cache:'no-store'}).catch(function(){})}
 document.querySelectorAll('button').forEach(function(b){
  b.addEventListener('pointerdown',function(e){e.preventDefault();var l=+b.dataset.l,r=+b.dataset.r;if(!l&&!r){halt();return}cur=[l,r];send();if(!tm)tm=setInterval(send,150)});
@@ -577,7 +583,76 @@ static void webJson(const String& j) {
     g_web.send(200, "application/json", j);
 }
 
-void webDrive() {   // /api/drive?l=-100..100&r=-100..100
+
+// ---- Ma PIN dieu khien ----
+// Chua dat PIN = ai cung dieu khien duoc (nhu truoc). Dat PIN: lenh p<4-8 chu so> (cap USB hoac tu bo man hinh qua UART2); p- = xoa (chi qua USB).
+// Dien thoai goi /api/login?pin=.. nhan lai ma "t"; cac lenh lai xe phai kem &t=<ma>. Doi PIN thi ma "t" doi, moi dien thoai phai nhap lai.
+// /api/stop LUON mo (dung khan cap khong can PIN). Sai 5 lan lien tiep thi khoa 30 giay, lan sau gap doi (toi da 4 phut).
+String g_pin, g_tok;
+int g_pin_bad = 0, g_pin_lock_n = 0;
+uint32_t g_pin_lock_until = 0;
+bool g_pin_locked = false;
+
+void pinNap() {
+    g_pref.begin("rubi", true);
+    g_pin = g_pref.getString("pin", "");
+    g_tok = g_pref.getString("tok", "");
+    g_pref.end();
+    if (g_pin.length() > 0 && g_tok.length() == 0) { g_tok = String((uint32_t)esp_random(), HEX) + String((uint32_t)esp_random(), HEX); }
+}
+
+bool pinHopLe(const String& p) {
+    if (p.length() < 4 || p.length() > 8) return false;
+    for (unsigned i = 0; i < p.length(); i++) if (p[i] < '0' || p[i] > '9') return false;
+    return true;
+}
+
+void pinDat(const String& p) {          // p rong = xoa PIN
+    g_pin = p;
+    g_tok = p.length() ? (String((uint32_t)esp_random(), HEX) + String((uint32_t)esp_random(), HEX)) : String("");
+    g_pref.begin("rubi", false);
+    g_pref.putString("pin", g_pin);
+    g_pref.putString("tok", g_tok);
+    g_pref.end();
+    g_pin_bad = 0; g_pin_lock_n = 0; g_pin_locked = false;
+}
+
+bool webAuth() { return g_pin.length() == 0 || (g_tok.length() > 0 && g_web.arg("t") == g_tok); }
+
+void webTuChoi() {
+    g_web.sendHeader("Cache-Control", "no-store");
+    g_web.send(401, "application/json", "{\"ok\":false,\"err\":\"pin\"}");
+}
+
+void webLogin() {   // /api/login?pin=1234
+    if (g_pin.length() == 0) { webJson("{\"ok\":true,\"t\":\"\"}"); return; }
+    uint32_t now = millis();
+    if (g_pin_locked && (int32_t)(g_pin_lock_until - now) > 0) {
+        webJson(String("{\"ok\":false,\"wait\":") + String((g_pin_lock_until - now + 999) / 1000) + "}");
+        return;
+    }
+    g_pin_locked = false;
+    if (g_web.arg("pin") == g_pin) {
+        g_pin_bad = 0; g_pin_lock_n = 0;
+        webJson(String("{\"ok\":true,\"t\":\"") + g_tok + "\"}");
+        return;
+    }
+    g_pin_bad++;
+    if (g_pin_bad >= 5) {
+        g_pin_bad = 0;
+        uint32_t w = 30000UL << (g_pin_lock_n < 3 ? g_pin_lock_n : 3);
+        g_pin_lock_n++;
+        g_pin_lock_until = now + w;
+        g_pin_locked = true;
+        Serial.printf("! Nhap sai PIN nhieu lan: khoa %lu giay\n", (unsigned long)(w / 1000));
+        webJson(String("{\"ok\":false,\"wait\":") + String(w / 1000) + "}");
+        return;
+    }
+    webJson(String("{\"ok\":false,\"left\":") + String(5 - g_pin_bad) + "}");
+}
+
+void webDrive() {   // /api/drive?l=-100..100&r=-100..100[&t=<ma>]
+    if (!webAuth()) { webTuChoi(); return; }
     int l = constrain(g_web.arg("l").toInt(), -100, 100);
     int r = constrain(g_web.arg("r").toInt(), -100, 100);
     datToc(0, A_LA_BANH_TRAI ? l : r);
@@ -592,7 +667,12 @@ void webStop() {
 }
 
 void webStatus() {
-    String j = String("{\"ver\":\"") + FW_VERSION + "\",\"ip\":\"" + WiFi.localIP().toString() +
+    bool ok = webAuth();
+    if (!ok) {   // chua dang nhap: chi cho biet phien ban va can PIN
+        webJson(String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":true,\"auth\":false}");
+        return;
+    }
+    String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
                ",\"bat_mv\":" + String((int)g_bat_mv) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
@@ -605,6 +685,7 @@ void webBatDau() {
     g_web.on("/", HTTP_GET, []() { g_web.sendHeader("Cache-Control", "no-store"); g_web.send_P(200, "text/html; charset=utf-8", PAGE_ROOT); });
     g_web.on("/api/drive", HTTP_GET, webDrive);
     g_web.on("/api/stop", HTTP_GET, webStop);
+    g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
     g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });
     g_web.begin();
@@ -733,6 +814,16 @@ void xuLyLenh(String s) {
         case 'v': Serial.printf("Phien ban: %s\n", FW_VERSION); break;
         case 'u': githubCapNhat(s.length() > 1 && s[1] == '!'); break;
         case 'l': wifiLiet(); break;
+        case 'p': {
+            String r = s.substring(1);
+            r.trim();
+            if (r == "-") { pinDat(""); Serial.println("Da xoa PIN: ai cung dieu khien duoc"); break; }
+            if (r.length() == 0) { Serial.println(g_pin.length() ? "Dang co ma PIN (go p<4-8 so> de doi, p- de xoa)" : "Chua dat PIN (go p<4-8 so>, vi du p4826)"); break; }
+            if (!pinHopLe(r)) { Serial.println("PIN la 4-8 chu so, vi du p4826"); break; }
+            pinDat(r);
+            Serial.println("Da dat ma PIN. Cac dien thoai phai nhap lai ma.");
+            break;
+        }
         case 'q': {
             int n = s.substring(1).toInt();
             if (n < 1 || n > g_nn) { Serial.println("Cu phap: q<so>  (xem so bang lenh l)"); break; }
@@ -785,6 +876,7 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);           // OTA on dinh hon khi khong ngu Wi-Fi
     WiFi.setAutoReconnect(true);
+    pinNap();
     wifiNapDS();
     wifiKetNoi();
     Serial.println();
@@ -819,6 +911,7 @@ void loop() {
             // chi nhan Wi-Fi ("w..." hoac "W<ten>\t<mk>\t<cs>") va cap nhat (u): chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
             String ws, wp;
             if (line2.length() > 4 && line2[0] == 'W') { if (phanTichW(line2, ws, wp)) wifiMangMoi(ws, wp, true); }
+            else if (line2.length() > 1 && line2[0] == 'p') { String pv = line2.substring(1); if (pinHopLe(pv)) xuLyLenh(line2); }   // chi p<so>, khong cho xoa PIN qua day
             else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
                 if (line2[0] == 'w') {   // dang w<ten>|<mk> tu man hinh: xu ly nhu mang moi (lap lai thi im lang)
                     String r = line2.substring(1); r.trim();

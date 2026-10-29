@@ -97,3 +97,10 @@ body[data-v="dieu-khien"] .stopbar,body[data-v="dieu-khien"] .note{display:none}
  .ctl{gap:10px}.card.vid,.card.pilot{padding:10px}
  .screen{width:min(100%,calc(30svh*1.333));margin-inline:auto}
 }
+
+.pinbox{position:fixed;inset:0;z-index:80;background:rgba(10,20,35,.72);display:flex;align-items:center;justify-content:center;padding:16px}
+.pinbox[hidden]{display:none}
+.pincard{background:var(--card);color:var(--fg);border-radius:16px;padding:20px;width:100%;max-width:320px;text-align:center}
+.pincard h2{margin:0 0 6px}.pincard p{margin:0 0 12px;color:var(--mute)}
+.pincard input{width:100%;font-size:26px;text-align:center;letter-spacing:.3em;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);margin-bottom:12px}
+.hint{color:var(--mute);margin:8px 0}

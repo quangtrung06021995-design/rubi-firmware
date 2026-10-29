@@ -5,7 +5,15 @@ var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"C�
 var $=function(i){return document.getElementById(i)},tt;
 function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){t.classList.remove("on")},1600)}
 var LIVE=location.protocol==="http:"&&!/vercel\.app$/.test(location.hostname),M=LIVE?"":" (mẫu)";
-function api(p){return fetch(location.origin+p,{cache:"no-store"}).then(function(r){return r.json()})}
+var TK="";try{TK=localStorage.getItem("rubi_t")||""}catch(e){}
+function api(p){return fetch(location.origin+p+(TK?(p.indexOf("?")<0?"?":"&")+"t="+encodeURIComponent(TK):""),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){if(j&&j.err==="pin")askPin();return j})}
+function askPin(){var b=$("pinbox");if(!b||!b.hidden)return;stopAll();b.hidden=false;$("pinmsg").textContent="Nhập mã PIN để điều khiển Rubi";$("pinin").value="";setTimeout(function(){$("pinin").focus()},50)}
+function tryPin(){var v=$("pinin").value.trim();if(!v)return;
+ fetch(location.origin+"/api/login?pin="+encodeURIComponent(v),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){
+  if(j.ok){TK=j.t||"";try{localStorage.setItem("rubi_t",TK)}catch(e){}$("pinbox").hidden=true;toast("Đã mở khóa");api("/api/status").then(function(s){if(s.ver)toast("Đã nối Rubi · bản "+s.ver)})}
+  else if(j.wait){$("pinmsg").textContent="Sai nhiều lần. Thử lại sau "+j.wait+" giây"}
+  else{$("pinmsg").textContent="Sai mã"+(j.left?" (còn "+j.left+" lần)":"");$("pinin").value=""}
+ }).catch(function(){$("pinmsg").textContent="Không gọi được Rubi"})}
 var pingT=null,pl=0,pr=0;
 function drive(l,r){var was=pl||pr;pl=l;pr=r;if(!LIVE)return;
  if(!l&&!r){if(was||pingT)stopAll();return}
@@ -19,7 +27,8 @@ function show(){var h=(location.hash||"#trang-chu").slice(1);if(views.indexOf(h)
  $("title").textContent=names[h];document.body.dataset.v=h;document.body.classList.remove("open");window.scrollTo(0,0)}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest('a[href^="#"]');if(a){e.preventDefault();location.hash=a.getAttribute("href")}});
 addEventListener("hashchange",show);show();
-if(LIVE)api("/api/status").then(function(j){toast("Đã nối Rubi · bản "+j.ver)}).catch(function(){toast("Chưa nối được Rubi")});
+if(LIVE){if($("pinok"))$("pinok").onclick=tryPin;if($("pinin"))$("pinin").onkeydown=function(e){if(e.key==="Enter")tryPin()};
+ api("/api/status").then(function(j){if(j.pin&&!j.auth)askPin();else toast("Đã nối Rubi · bản "+j.ver)}).catch(function(){toast("Chưa nối được Rubi")})}
 $("burger").onclick=function(){document.body.classList.toggle("open")};$("scrim").onclick=function(){document.body.classList.remove("open")};
 $("stop2").onclick=function(){stopAll();$("drv").textContent="Đứng yên";toast("Đã gửi lệnh dừng"+M)};
 $("estop").onclick=function(){stopAll();$("drv").textContent="Đứng yên";toast("Đã gửi lệnh dừng"+M)};
