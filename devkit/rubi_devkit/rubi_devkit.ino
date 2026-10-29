@@ -395,7 +395,7 @@ extern const char* FW_VERSION;
 WebServer g_web(80);
 const char* MDNS_TEN = "rubi";                       // -> http://rubi.local
 const uint32_t WEB_DEADMAN_MS = 500;                 // het 0.5 giay khong co lenh moi thi robot tu dung
-const bool A_LA_BANH_TRAI = true;                    // dat false neu motor A la banh PHAI (nhin tu phia sau robot)
+const bool A_LA_BANH_TRAI = false;                   // dat false neu motor A la banh PHAI (nhin tu phia sau robot)
 bool g_web_started = false;
 bool g_mdns_started = false;
 
