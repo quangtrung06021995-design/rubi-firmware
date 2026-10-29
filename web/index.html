@@ -52,16 +52,18 @@
 
 <section class="view" id="v-dieu-khien">
  <div class="ctl">
-  <div class="card vid"><h2>Camera</h2>
+  <div class="card vid">
    <div class="screen" id="screen"><img src="img/robot.webp" alt="Khung hình mẫu từ camera"><span class="live"><b></b>TRỰC TIẾP (mẫu)</span><span class="fps">640×480 · 12 fps</span></div>
-   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost" id="snap">Chụp ảnh</button><button class="btn ghost" id="full">Toàn màn hình</button><button class="btn ghost" id="camoff">Tắt camera</button></div>
+   <div class="vbtns"><button class="btn ghost" id="snap">Chụp ảnh</button><button class="btn ghost" id="full">Toàn màn hình</button><button class="btn ghost" id="camoff">Tắt camera</button></div>
   </div>
-  <div class="card"><h2>Lái robot</h2>
+  <div class="card pilot">
    <div class="joywrap"><div class="joy" id="joy" role="application" aria-label="Cần lái tròn. Kéo để lái, thả tay để dừng"><span class="m mt">▲</span><span class="m mb">▼</span><span class="m ml">◀</span><span class="m mr">▶</span><div class="knob" id="knob"></div></div></div>
-   <div id="drv" style="text-align:center;margin:10px 0 4px;font-weight:600">Đứng yên</div>
-   <div style="text-align:center;font-size:12.5px;color:var(--mute)">Kéo nút tròn để lái. Thả tay là robot dừng.</div>
-   <div class="field" style="margin:12px 0 0"><label for="spd">Tốc độ tối đa: <span id="spv">30</span>%</label><input id="spd" type="range" min="10" max="60" value="30"></div>
-   <div style="display:flex;gap:8px;justify-content:center;margin-top:12px"><button class="btn ghost" id="rl">⟲ Xoay trái</button><button class="btn ghost" id="rr">Xoay phải ⟳</button></div>
+   <div class="side">
+    <div id="drv" class="drv">Đứng yên</div>
+    <button class="btn bad stop2" id="stop2">DỪNG</button>
+    <div class="rot"><button class="btn ghost" id="rl">⟲ Trái</button><button class="btn ghost" id="rr">Phải ⟳</button></div>
+    <div class="field spdf"><label for="spd">Tốc độ tối đa: <span id="spv">30</span>%</label><input id="spd" type="range" min="10" max="60" value="30"></div>
+   </div>
   </div>
  </div>
  <div class="card"><h2>Đèn LED</h2><div class="leds" id="leds"><button class="on" style="background:#4a9bff" aria-label="Xanh"></button><button style="background:#ff7ab0" aria-label="Hồng"></button><button style="background:#ffd23f" aria-label="Vàng"></button><button style="background:#3ac47d" aria-label="Lục"></button><button style="background:conic-gradient(red,yellow,lime,cyan,blue,magenta,red)" aria-label="Cầu vồng"></button></div>

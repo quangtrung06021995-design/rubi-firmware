@@ -7,9 +7,10 @@ function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTi
 function show(){var h=(location.hash||"#trang-chu").slice(1);if(views.indexOf(h)<0)h="trang-chu";
  views.forEach(function(v){$("v-"+v).classList.toggle("on",v===h)});
  document.querySelectorAll(".drawer a").forEach(function(a){a.classList.toggle("on",a.dataset.v===h)});
- $("title").textContent=names[h];document.body.classList.remove("open");window.scrollTo(0,0)}
+ $("title").textContent=names[h];document.body.dataset.v=h;document.body.classList.remove("open");window.scrollTo(0,0)}
 addEventListener("hashchange",show);show();
 $("burger").onclick=function(){document.body.classList.toggle("open")};$("scrim").onclick=function(){document.body.classList.remove("open")};
+$("stop2").onclick=function(){$("drv").textContent="Đứng yên";toast("Đã gửi lệnh dừng (mẫu)")};
 $("estop").onclick=function(){$("drv").textContent="Đứng yên";toast("Đã gửi lệnh dừng (mẫu)")};
 document.querySelectorAll(".pad button").forEach(function(b){b.onclick=function(){$("drv").textContent=b.dataset.m==="Dừng"?"Đứng yên":"Đang: "+b.dataset.m+" (mẫu)"}});
 $("spd").oninput=function(){$("spv").textContent=this.value};$("br").oninput=function(){$("brv").textContent=this.value};
