@@ -17,6 +17,7 @@ function show(){var h=(location.hash||"#trang-chu").slice(1);if(views.indexOf(h)
  views.forEach(function(v){$("v-"+v).classList.toggle("on",v===h)});
  document.querySelectorAll(".drawer a").forEach(function(a){a.classList.toggle("on",a.dataset.v===h)});
  $("title").textContent=names[h];document.body.dataset.v=h;document.body.classList.remove("open");window.scrollTo(0,0)}
+document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest('a[href^="#"]');if(a){e.preventDefault();location.hash=a.getAttribute("href")}});
 addEventListener("hashchange",show);show();
 if(LIVE)api("/api/status").then(function(j){toast("Đã nối Rubi · bản "+j.ver)}).catch(function(){toast("Chưa nối được Rubi")});
 $("burger").onclick=function(){document.body.classList.toggle("open")};$("scrim").onclick=function(){document.body.classList.remove("open")};
