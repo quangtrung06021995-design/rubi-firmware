@@ -1,0 +1,50 @@
+
+(function(){
+var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","the-nho","cai-dat"];
+var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
+var $=function(i){return document.getElementById(i)},tt;
+function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){t.classList.remove("on")},1600)}
+function show(){var h=(location.hash||"#trang-chu").slice(1);if(views.indexOf(h)<0)h="trang-chu";
+ views.forEach(function(v){$("v-"+v).classList.toggle("on",v===h)});
+ document.querySelectorAll(".drawer a").forEach(function(a){a.classList.toggle("on",a.dataset.v===h)});
+ $("title").textContent=names[h];document.body.classList.remove("open");window.scrollTo(0,0)}
+addEventListener("hashchange",show);show();
+$("burger").onclick=function(){document.body.classList.toggle("open")};$("scrim").onclick=function(){document.body.classList.remove("open")};
+$("estop").onclick=function(){$("drv").textContent="Đứng yên";toast("Đã gửi lệnh dừng (mẫu)")};
+document.querySelectorAll(".pad button").forEach(function(b){b.onclick=function(){$("drv").textContent=b.dataset.m==="Dừng"?"Đứng yên":"Đang: "+b.dataset.m+" (mẫu)"}});
+$("spd").oninput=function(){$("spv").textContent=this.value};$("br").oninput=function(){$("brv").textContent=this.value};
+document.querySelectorAll("#leds button").forEach(function(b){b.onclick=function(){document.querySelectorAll("#leds button").forEach(function(x){x.classList.remove("on")});b.classList.add("on");toast("Đổi màu đèn (mẫu)")}});
+document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function(){document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Đang chơi: "+b.dataset.g+" (mẫu)";$("state").textContent=b.dataset.g}});
+var LC={"l-chest":3,"l-fl":6,"l-fr":6,"l-ant":2};
+function est(){var n=0;for(var k in LC)if($(k).checked)n+=LC[k];var ma=Math.round(n*60*($("br").value/100));$("est").textContent="Đang bật "+n+"/17 đèn, khoảng "+ma+" mA (mẫu).";}
+document.querySelectorAll("[data-l]").forEach(function(c){c.onchange=est});
+$("saver").onclick=function(){document.querySelectorAll("[data-l]").forEach(function(c){c.checked=false});est();toast("Đã tắt hết đèn (mẫu)")};
+$("allon").onclick=function(){document.querySelectorAll("[data-l]").forEach(function(c){c.checked=true});est();toast("Đã bật lại đèn (mẫu)")};
+$("br").addEventListener("input",est);est();
+(function(){var joy=$("joy"),k=$("knob"),id=null;
+function set(x,y){var R=joy.clientWidth/2-k.clientWidth/2;var m=Math.hypot(x,y);if(m>1){x/=m;y/=m;m=1}
+ k.style.transform="translate(calc(-50% + "+(x*R)+"px),calc(-50% + "+(-y*R)+"px))";k.classList.toggle("act",m>.12);
+ if(m<.12){$("drv").textContent="Đứng yên";return}
+ var sp=Math.round(m*$("spd").value),t=[];
+ if(Math.abs(y)>.3)t.push(y>0?"Tiến":"Lùi");
+ if(Math.abs(x)>.3)t.push(x>0?"rẽ phải":"rẽ trái");
+ if(!t.length)t.push(Math.abs(y)>=Math.abs(x)?(y>0?"Tiến":"Lùi"):(x>0?"rẽ phải":"rẽ trái"));
+ $("drv").textContent="Đang: "+t.join(", ")+" · "+sp+"% (mẫu)"}
+function pos(e){var r=joy.getBoundingClientRect(),R=joy.clientWidth/2-k.clientWidth/2;set((e.clientX-r.left-r.width/2)/R,-(e.clientY-r.top-r.height/2)/R)}
+joy.addEventListener("pointerdown",function(e){id=e.pointerId;joy.setPointerCapture(id);pos(e)});
+joy.addEventListener("pointermove",function(e){if(e.pointerId===id)pos(e)});
+function end(e){if(e.pointerId===id){id=null;set(0,0)}}
+joy.addEventListener("pointerup",end);joy.addEventListener("pointercancel",end);
+$("rl").onclick=function(){$("drv").textContent="Xoay tại chỗ sang trái (mẫu)";setTimeout(function(){$("drv").textContent="Đứng yên"},900)};
+$("rr").onclick=function(){$("drv").textContent="Xoay tại chỗ sang phải (mẫu)";setTimeout(function(){$("drv").textContent="Đứng yên"},900)};
+$("snap").onclick=function(){toast("Đã chụp ảnh (mẫu)")};
+$("camoff").onclick=function(){var s=$("screen").classList.toggle("off");this.textContent=s?"Bật camera":"Tắt camera"};
+$("full").onclick=function(){var s=$("screen");if(s.requestFullscreen)s.requestFullscreen().catch(function(){toast("Không mở được toàn màn hình")});else toast("Không hỗ trợ toàn màn hình")};
+})();
+$("save").onclick=function(){toast("Đã lưu (mẫu)")};
+var songs=["Con cò bé bé","Chú voi con ở Bản Đôn","Baby Shark","Twinkle Twinkle Little Star","Cá heo ơi","Bé học đếm số"];
+$("songs").innerHTML=songs.map(function(s,i){return '<div class="item"><div class="t">'+s+'<small>'+(2+i%3)+':'+(10+i*7)+'</small></div><button class="btn" data-s="'+s+'">▶ Phát</button></div>'}).join("");
+$("songs").onclick=function(e){var b=e.target.closest("button");if(b)toast("Phát: "+b.dataset.s+" (mẫu)")};
+$("dkbtn").onclick=function(){var b=this,bar=$("dkbar"),i=bar.firstChild,p=0;b.disabled=true;bar.hidden=false;$("dk").textContent="Đang tải bản 1.0.2...";
+ var iv=setInterval(function(){p+=8;i.style.width=Math.min(p,100)+"%";if(p>=100){clearInterval(iv);$("dk").textContent="1.0.2, đã mới nhất";bar.hidden=true;b.textContent="Mới nhất";b.className="btn ghost";document.querySelector(".alert").style.display="none";var dt=document.querySelector(".drawer .dot");if(dt)dt.style.display="none";toast("Cập nhật xong (mẫu)")}},300)};
+})();
