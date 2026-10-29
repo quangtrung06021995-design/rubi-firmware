@@ -6,6 +6,7 @@
 //     W<ssid>\t<password>\t<checksum 2 hex digits>\n        (checksum = sum of the bytes of "<ssid>\t<password>" mod 256)
 // The camera board stores them if they differ from what it has, then restarts. So Wi-Fi is set up once (on the screen)
 // and the camera follows.
+// The same line also goes to the motor DevKit over the UART socket (TX0 = GPIO43 -> DevKit RX2 = GPIO16), see rubi_battery.h.
 // Wiring: screen board expansion socket pin IO21 (TX) -> camera board GPIO42;  common GND.
 #include <cstdio>
 #include <cstring>
@@ -14,6 +15,7 @@
 #include <esp_wifi.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "rubi_battery.h"
 
 class RubiWifiSync {
 public:
@@ -54,7 +56,10 @@ private:
             for (const char* p = pass; *p; p++) sum += (unsigned char)*p;
             char line[128];
             int n = snprintf(line, sizeof(line), "W%s\t%s\t%02X\n", ssid, pass, sum & 0xFF);
-            if (n > 0 && n < (int)sizeof(line)) uart_write_bytes(UART_NUM_2, line, n);
+            if (n > 0 && n < (int)sizeof(line)) {
+                uart_write_bytes(UART_NUM_2, line, n);          // -> camera (IO21)
+                RubiBattery::Send(line, n);                      // -> DevKit (UART socket TX0 / GPIO43)
+            }
         }
     }
 };

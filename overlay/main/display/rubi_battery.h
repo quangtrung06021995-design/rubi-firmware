@@ -6,8 +6,11 @@
 // Wiring: DevKit GPIO17 (TX) -> screen board UART socket pin RX0 (GPIO44);  DevKit GPIO16 (RX) <- screen board UART socket pin TX0 (GPIO43);  common GND.
 // (Moved off GPIO14/21 so the 4-pin expansion socket stays free for the external I2S microphone.)
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
+#include <cstring>
 #include <functional>
+#include <string>
 #include <driver/uart.h>
 #include <esp_log.h>
 #include <esp_timer.h>
@@ -17,6 +20,21 @@
 class RubiBattery {
 public:
     static constexpr gpio_num_t kRx = GPIO_NUM_44, kTx = GPIO_NUM_43;
+
+    // Same UART, other direction: write a text line to the DevKit (used to hand it the Wi-Fi). False until the UART is up.
+    static bool Send(const char* data, size_t len) {
+        if (!Ready().load()) return false;
+        return uart_write_bytes(UART_NUM_1, data, len) >= 0;
+    }
+    // The DevKit reports its own address once it is on Wi-Fi: "I<ip>\n" (every 5 s). Empty string = none heard recently.
+    static std::string Ip() {
+        if (esp_timer_get_time() / 1000 - IpAt().load() > 20000) return std::string();
+        char b[20];
+        memcpy(b, IpBuf(), sizeof(b));
+        b[sizeof(b) - 1] = 0;
+        return std::string(b);
+    }
+    static void ForgetIp() { IpAt().store(-100000); }
 
     // cb(percent): 0..100, or -1 when no data has arrived for a while.
     static void Start(std::function<void(int)> cb) {
@@ -39,6 +57,9 @@ public:
     }
 
 private:
+    static std::atomic<bool>& Ready() { static std::atomic<bool> r{false}; return r; }
+    static std::atomic<int64_t>& IpAt() { static std::atomic<int64_t> t{-100000}; return t; }
+    static char* IpBuf() { static char b[20] = {0}; return b; }
     static void Loop(std::function<void(int)> cb) {
         uart_config_t c = {};
         c.baud_rate = 115200;
@@ -53,6 +74,7 @@ private:
             ESP_LOGW("RubiBat", "uart init failed");
             return;
         }
+        Ready().store(true);
         char line[24];
         int n = 0;
         float mv_avg = 0;
@@ -65,6 +87,10 @@ private:
             if (r == 1) {
                 if (b == '\n' || b == '\r') {
                     line[n] = 0;
+                    if (n >= 8 && n <= 16 && line[0] == 'I' && line[1] >= '0' && line[1] <= '9') {
+                        memcpy(IpBuf(), line + 1, n);   // includes the terminating 0
+                        IpAt().store(now);
+                    }
                     if (n >= 2 && line[0] == 'B') {
                         int mv = atoi(line + 1);
                         if (mv > 4000 && mv < 9500) {   // plausible 2S pack

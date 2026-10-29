@@ -29,9 +29,11 @@
 
 #include "application.h"
 #include <esp_wifi.h>
+#include <esp_netif.h>
 #include <ssid_manager.h>
 #include <wifi_manager.h>
 #include "board.h"
+#include "rubi_battery.h"
 #include "rubi_face.h"
 #include "rubi_icons.h"
 #include "rubi_learn_data.h"
@@ -109,13 +111,17 @@ public:
             break;
         }
         case Screen::kSettings: {
-            int r = RubiDisplay::RowAt(sx, sy, 4);
+            int r = RubiDisplay::RowAt(sx, sy, 5);
             if (r == 0) ShowVolume();
             else if (r == 1) StartWifiScan();
-            else if (r == 2) StartCalibration();
-            else if (r == 3) ShowMain();
+            else if (r == 2) ShowRobotAddress();
+            else if (r == 3) StartCalibration();
+            else if (r == 4) ShowMain();
             break;
         }
+        case Screen::kIp:
+            ShowSettings();
+            break;
         case Screen::kStoryList: {
             int r = RubiDisplay::RowAt(sx, sy, (int)story_row_action_.size());
             if (r < 0) break;
@@ -322,7 +328,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kIp, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -530,7 +536,18 @@ private:
 
     void ShowSettings() {
         screen_ = Screen::kSettings;
-        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Địa chỉ điều khiển", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+    }
+
+    // The robot (motor DevKit) tells us its address on the Wi-Fi we gave it; show it so the phone can be pointed there.
+    void ShowRobotAddress() {
+        screen_ = Screen::kIp;
+        std::string ip = RubiBattery::Ip();
+        if (!display_) return;
+        if (ip.empty())
+            display_->MenuShowMessage("Robot chưa báo địa chỉ.\nKiểm tra dây TX0/RX0\nvà Wi-Fi của robot.\n\nChạm để quay lại", -1, -1);
+        else
+            display_->MenuShowMessage(("Mở trên điện thoại:\nhttp://" + ip + "\n(cùng Wi-Fi)\n\nChạm để quay lại").c_str(), -1, -1);
     }
 
     // ---------------- picture books ----------------
@@ -888,6 +905,16 @@ private:
         }
     }
 
+    // "192.168.0." of this screen board's own Wi-Fi address (assumes a /24 home network), or empty.
+    static std::string OwnPrefix() {
+        esp_netif_t* nif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        esp_netif_ip_info_t info;
+        if (!nif || esp_netif_get_ip_info(nif, &info) != ESP_OK || info.ip.addr == 0) return std::string();
+        char b[24];
+        snprintf(b, sizeof(b), "%d.%d.%d.", (int)(info.ip.addr & 0xFF), (int)((info.ip.addr >> 8) & 0xFF), (int)((info.ip.addr >> 16) & 0xFF));
+        return std::string(b);
+    }
+
     void ConnectWifi() {
         screen_ = Screen::kWifiBusy;
         if (display_) display_->MenuShowMessage(("Đang kết nối\n" + sel_ssid_).c_str(), -1, -1);
@@ -909,8 +936,21 @@ private:
                 ok = wm.IsConnected() && wm.GetSsid() == ssid;
             }
             if (ok) {
-                if (display_) display_->MenuShowMessage(("Đã kết nối!\n" + ssid).c_str(), -1, -1);
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                if (display_) display_->MenuShowMessage(("Đã kết nối!\n" + ssid + "\nĐang tìm robot...").c_str(), -1, -1);
+                // The Wi-Fi now goes to the DevKit too; wait (up to ~30 s) for its new address, ignoring one left from the old network.
+                std::string mine = OwnPrefix();
+                std::string robot;
+                RubiBattery::ForgetIp();
+                for (int i = 0; i < 30 && robot.empty(); i++) {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    std::string ip = RubiBattery::Ip();
+                    if (!ip.empty() && !mine.empty() && ip.compare(0, mine.size(), mine) == 0) robot = ip;
+                }
+                if (display_) {
+                    if (!robot.empty()) display_->MenuShowMessage(("Đã kết nối!\n" + ssid + "\nhttp://" + robot).c_str(), -1, -1);
+                    else display_->MenuShowMessage(("Đã kết nối!\n" + ssid + "\n(robot chưa báo địa chỉ)").c_str(), -1, -1);
+                }
+                vTaskDelay(pdMS_TO_TICKS(robot.empty() ? 2500 : 8000));
                 std::lock_guard<std::recursive_mutex> lk(mutex_);
                 ShowSettings();
                 return;
