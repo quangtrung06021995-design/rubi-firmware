@@ -206,6 +206,14 @@ jobs:
           sed -i "s/set(PROJECT_VER \"[^\"]*\")/set(PROJECT_VER \"$VER\")/" CMakeLists.txt
           grep -n "PROJECT_VER" CMakeLists.txt
           echo "RUBI_VERSION=$VER" >> "$GITHUB_ENV"
+          # the app was 5 KB over the 0x3f0000 partition: shrink it (silent asserts, warnings-only logs); partition table is fixed on the device
+          python3 - <<'PY'
+          import json
+          p = 'main/boards/freenove-esp32s3-display-2.8-lcd/config.json'
+          c = json.load(open(p, encoding='utf-8'))
+          c['builds'][0]['sdkconfig_append'] += ['CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y', 'CONFIG_LOG_DEFAULT_LEVEL_WARN=y', 'CONFIG_LOG_MAXIMUM_EQUALS_DEFAULT=y']
+          json.dump(c, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=4)
+          PY
           if [ -n "$OTA_URL_VAR" ]; then
             python3 - <<'PY'
           import json, os
