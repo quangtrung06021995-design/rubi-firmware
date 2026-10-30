@@ -364,7 +364,7 @@ public:
                 qr_dsc_.data = reinterpret_cast<const uint8_t*>(qr_buf_);
                 qr_img_ = lv_image_create(menu_);
                 lv_obj_set_pos(qr_img_, 8, 33);
-                qr_lbl_ = MakeLabel(menu_, lv_obj_get_style_text_font(menu_msg_, 0), 0x1E2A3A);
+                qr_lbl_ = MakeLabel(menu_, lv_obj_get_style_text_font(menu_msg_, LV_PART_MAIN), 0x1E2A3A);
                 lv_obj_set_width(qr_lbl_, 120);
                 lv_obj_set_style_text_align(qr_lbl_, LV_TEXT_ALIGN_CENTER, 0);
                 lv_obj_set_pos(qr_lbl_, 188, 50);

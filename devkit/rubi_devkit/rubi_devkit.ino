@@ -121,6 +121,7 @@ bool g_fault[2] = {false, false};
 uint32_t g_stall_since[2] = {0, 0};
 int32_t g_stall_cnt[2] = {0, 0};
 uint32_t g_cmd_deadline = 0; // het gio thi tu dung (0 = khong dung gio)
+extern String g_pin;   // dinh nghia o duoi (PIN dieu khien)
 bool g_pin_thap = false;
 
 void xuatMotor(int ch, int pct) {
