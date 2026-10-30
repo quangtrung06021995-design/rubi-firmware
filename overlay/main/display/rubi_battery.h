@@ -56,8 +56,14 @@ public:
         return 100;
     }
 
+    static int PinSet() { return PinSetRef().load(); }
+    static void PinReplyClear() { PinReplyRef().store(-1); }
+    static int PinReply() { return PinReplyRef().load(); }
+
 private:
     static std::atomic<bool>& Ready() { static std::atomic<bool> r{false}; return r; }
+    static std::atomic<int>& PinSetRef() { static std::atomic<int> v{-1}; return v; }     // -1 unknown, 0 none, 1 set
+    static std::atomic<int>& PinReplyRef() { static std::atomic<int> v{-1}; return v; }   // -1 none yet, 0 refused, 1 done
     static std::atomic<int64_t>& IpAt() { static std::atomic<int64_t> t{-100000}; return t; }
     static char* IpBuf() { static char b[20] = {0}; return b; }
     static void Loop(std::function<void(int)> cb) {
@@ -91,6 +97,8 @@ private:
                         memcpy(IpBuf(), line + 1, n);   // includes the terminating 0
                         IpAt().store(now);
                     }
+                    if (n == 2 && line[0] == 'K' && (line[1] == '0' || line[1] == '1')) PinSetRef().store(line[1] - '0');
+                    if (n == 2 && line[0] == 'P' && (line[1] == '0' || line[1] == '1')) PinReplyRef().store(line[1] - '0');
                     if (n >= 2 && line[0] == 'B') {
                         int mv = atoi(line + 1);
                         if (mv > 4000 && mv < 9500) {   // plausible 2S pack

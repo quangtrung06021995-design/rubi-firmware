@@ -516,6 +516,7 @@ void wifiTick() {
         if (now - g_ip_send >= 5000) {            // bao dia chi cho bo man hinh (dong ngan "I<ip>")
             g_ip_send = now;
             Serial2.printf("I%s\n", WiFi.localIP().toString().c_str());
+            Serial2.printf("K%d\n", g_pin.length() ? 1 : 0);   // co dat PIN chua
         }
     } else {
         if (g_wifi_was) Serial.println("Wi-Fi mat ket noi");
@@ -911,7 +912,14 @@ void loop() {
             // chi nhan Wi-Fi ("w..." hoac "W<ten>\t<mk>\t<cs>") va cap nhat (u): chan RX2 de ho co the nhan nhieu rac, khong cho rac dieu khien motor
             String ws, wp;
             if (line2.length() > 4 && line2[0] == 'W') { if (phanTichW(line2, ws, wp)) wifiMangMoi(ws, wp, true); }
-            else if (line2.length() > 1 && line2[0] == 'p') { String pv = line2.substring(1); if (pinHopLe(pv)) xuLyLenh(line2); }   // chi p<so>, khong cho xoa PIN qua day
+            else if (line2.length() > 2 && line2[0] == 'P') {   // P<PIN cu>|<PIN moi> tu man hinh: da co PIN thi phai dung PIN cu; tra "P1" (xong) hoac "P0" (sai)
+                static uint8_t sai = 0; static uint32_t khoa_den = 0;
+                int k = line2.indexOf('|');
+                String cu = k > 1 ? line2.substring(1, k) : String(""), moi = k > 0 ? line2.substring(k + 1) : String("");
+                if (k > 0 && (int32_t)(khoa_den - millis()) > 0) { Serial2.println("P0"); }
+                else if (k > 0 && pinHopLe(moi) && (g_pin.length() == 0 || cu == g_pin)) { pinDat(moi); sai = 0; Serial.println("PIN doi tu man hinh"); Serial2.println("P1"); }
+                else { if (++sai >= 5) { sai = 0; khoa_den = millis() + 30000; } Serial2.println("P0"); }
+            }
             else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
                 if (line2[0] == 'w') {   // dang w<ten>|<mk> tu man hinh: xu ly nhu mang moi (lap lai thi im lang)
                     String r = line2.substring(1); r.trim();

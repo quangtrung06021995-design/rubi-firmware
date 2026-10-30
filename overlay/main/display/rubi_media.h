@@ -114,13 +114,25 @@ public:
             int r = RubiDisplay::RowAt(sx, sy, 5);
             if (r == 0) ShowVolume();
             else if (r == 1) StartWifiScan();
-            else if (r == 2) ShowRobotAddress();
+            else if (r == 2) ShowControl();
             else if (r == 3) StartCalibration();
             else if (r == 4) ShowMain();
             break;
         }
         case Screen::kIp:
-            ShowSettings();
+            ShowControl();
+            break;
+        case Screen::kCtl: {
+            int r = RubiDisplay::RowAt(sx, sy, 3);
+            if (r == 0) ShowRobotAddress();
+            else if (r == 1) StartPinChange();
+            else if (r == 2) ShowSettings();
+            break;
+        }
+        case Screen::kPinKeys:
+            HandlePinTouch(sx, sy);
+            break;
+        case Screen::kPinBusy:
             break;
         case Screen::kStoryList: {
             int r = RubiDisplay::RowAt(sx, sy, (int)story_row_action_.size());
@@ -328,7 +340,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kIp, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -536,7 +548,79 @@ private:
 
     void ShowSettings() {
         screen_ = Screen::kSettings;
-        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Địa chỉ điều khiển", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+    }
+
+    // ---------------- control: QR code and family PIN ----------------
+    void ShowControl() {
+        screen_ = Screen::kCtl;
+        int has = RubiBattery::PinSet();
+        std::string hint = has == 1 ? "Robot đang có mã PIN" : (has == 0 ? "CHƯA có PIN: ai cũng điều khiển được!" : "Chưa biết PIN (robot chưa trả lời)");
+        if (display_) display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "<< Quay lại"}, hint.c_str());
+    }
+
+    std::string pin_old_, pin_new_, pin_buf_;
+    int pin_step_ = 0;   // 0 old PIN, 1 new PIN, 2 repeat new PIN
+
+    void StartPinChange() {
+        pin_old_.clear(); pin_new_.clear(); pin_buf_.clear();
+        pin_step_ = RubiBattery::PinSet() == 1 ? 0 : 1;
+        RenderPin("");
+    }
+
+    void RenderPin(const std::string& note) {
+        screen_ = Screen::kPinKeys;
+        keys_.clear();
+        const uint32_t kNum = 0xE6F0FF, kSpecial = 0xBBD0F0, kOk = 0xA5D6A7, kCancel = 0xFFC9C9;
+        const int KH = 38, KW = 56, G = 4, X0 = 76;
+        keys_.push_back({4, 2, 64, 22, "< Hủy", 6, "", kCancel});
+        static const char* rows[3] = {"123", "456", "789"};
+        for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+                keys_.push_back({X0 + c * (KW + G), 56 + r * 41, KW, KH, std::string(1, rows[r][c]), 0, std::string(1, rows[r][c]), kNum});
+        keys_.push_back({X0, 179, KW, KH, "Xóa", 2, "", kSpecial});
+        keys_.push_back({X0 + KW + G, 179, KW, KH, "0", 0, "0", kNum});
+        keys_.push_back({X0 + 2 * (KW + G), 179, KW, KH, "OK", 5, "", kOk});
+        static const char* titles[3] = {"PIN hiện tại", "PIN mới (4-8 số)", "Nhập lại PIN mới"};
+        std::string shown(pin_buf_.size(), '*');
+        shown += "_";
+        if (display_) display_->MenuShowKeyboard(note.empty() ? titles[pin_step_] : note, shown, keys_, false);
+    }
+
+    void HandlePinTouch(int sx, int sy) {
+        for (const auto& k : keys_) {
+            if (sx < k.x - 1 || sx >= k.x + k.w + 1 || sy < k.y - 1 || sy >= k.y + k.h + 1) continue;
+            switch (k.kind) {
+            case 0: if (pin_buf_.size() < 8) pin_buf_ += k.val; RenderPin(""); break;
+            case 2: if (!pin_buf_.empty()) pin_buf_.pop_back(); RenderPin(""); break;
+            case 6: ShowControl(); break;
+            case 5:
+                if (pin_buf_.size() < 4) { RenderPin("PIN cần 4-8 chữ số"); break; }
+                if (pin_step_ == 0) { pin_old_ = pin_buf_; pin_buf_.clear(); pin_step_ = 1; RenderPin(""); }
+                else if (pin_step_ == 1) { pin_new_ = pin_buf_; pin_buf_.clear(); pin_step_ = 2; RenderPin(""); }
+                else if (pin_buf_ != pin_new_) { pin_buf_.clear(); pin_step_ = 1; pin_new_.clear(); RenderPin("Hai lần không giống nhau"); }
+                else SendPin();
+                break;
+            }
+            return;
+        }
+    }
+
+    void SendPin() {
+        screen_ = Screen::kPinBusy;
+        if (display_) display_->MenuShowMessage("Đang đặt PIN...", -1, -1);
+        RunTask([this, o = pin_old_, n = pin_new_]() {
+            RubiBattery::PinReplyClear();
+            std::string line = "P" + o + "|" + n + "\n";
+            RubiBattery::Send(line.c_str(), line.size());
+            int r = -1;
+            for (int i = 0; i < 30 && r < 0; i++) { vTaskDelay(pdMS_TO_TICKS(100)); r = RubiBattery::PinReply(); }
+            if (display_) display_->MenuShowMessage(r == 1 ? "Đã đặt PIN!\nChỉ người biết PIN\nđiều khiển được robot." : (r == 0 ? "PIN hiện tại sai\n(hoặc đang bị khóa 30 giây)" : "Robot không trả lời.\nKiểm tra dây TX0/RX0"), -1, -1);
+            vTaskDelay(pdMS_TO_TICKS(2500));
+            pin_old_.clear(); pin_new_.clear(); pin_buf_.clear();
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            ShowControl();
+        }, "pin_set");
     }
 
     // The robot (motor DevKit) tells us its address on the Wi-Fi we gave it; show it so the phone can be pointed there.
@@ -547,7 +631,7 @@ private:
         if (ip.empty())
             display_->MenuShowMessage("Robot chưa báo địa chỉ.\nKiểm tra dây TX0/RX0\nvà Wi-Fi của robot.\n\nChạm để quay lại", -1, -1);
         else
-            display_->MenuShowMessage(("Mở trên điện thoại:\nhttp://" + ip + "\n(cùng Wi-Fi)\n\nChạm để quay lại").c_str(), -1, -1);
+            display_->MenuShowQr(("http://" + ip).c_str(), ("Quét bằng\nđiện thoại\n(cùng Wi-Fi)\n" + ip + "\n\nChạm để\nquay lại").c_str());
     }
 
     // ---------------- picture books ----------------
@@ -947,10 +1031,10 @@ private:
                     if (!ip.empty() && !mine.empty() && ip.compare(0, mine.size(), mine) == 0) robot = ip;
                 }
                 if (display_) {
-                    if (!robot.empty()) display_->MenuShowMessage(("Đã kết nối!\n" + ssid + "\nhttp://" + robot).c_str(), -1, -1);
+                    if (!robot.empty()) display_->MenuShowQr(("http://" + robot).c_str(), ("Đã kết nối!\nQuét bằng\nđiện thoại để\nđiều khiển\n" + robot).c_str());
                     else display_->MenuShowMessage(("Đã kết nối!\n" + ssid + "\n(robot chưa báo địa chỉ)").c_str(), -1, -1);
                 }
-                vTaskDelay(pdMS_TO_TICKS(robot.empty() ? 2500 : 8000));
+                vTaskDelay(pdMS_TO_TICKS(robot.empty() ? 2500 : 20000));
                 std::lock_guard<std::recursive_mutex> lk(mutex_);
                 ShowSettings();
                 return;

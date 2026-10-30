@@ -19,6 +19,7 @@
 #include "rubi_mat_data.h"
 #include "rubi_talk_data.h"
 #include "rubi_battery.h"
+#include "rubi_qr.h"
 #include "rubi_wifisync.h"
 #include <esp_heap_caps.h>
 
@@ -342,6 +343,52 @@ public:
         ShowMenuLayer();
     }
 
+    // A QR code of `text` (max 26 bytes) on the left, `caption` on the right. Falls back to the caption alone if it cannot be drawn.
+    void MenuShowQr(const char* text, const char* caption) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        static uint8_t mod[RubiQr::kSize][RubiQr::kSize];
+        constexpr int kScale = 6, kQuiet = 2, kPix = (RubiQr::kSize + 2 * kQuiet) * kScale;   // 174 px
+        bool ok = RubiQr::Make(text, mod);
+        if (ok && qr_buf_ == nullptr) {
+            qr_buf_ = (uint16_t*)heap_caps_malloc(kPix * kPix * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (qr_buf_ != nullptr) {
+                memset(&qr_dsc_, 0, sizeof(qr_dsc_));
+                qr_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+                qr_dsc_.header.cf = LV_COLOR_FORMAT_RGB565;
+                qr_dsc_.header.w = kPix;
+                qr_dsc_.header.h = kPix;
+                qr_dsc_.header.stride = kPix * 2;
+                qr_dsc_.data_size = kPix * kPix * 2;
+                qr_dsc_.data = reinterpret_cast<const uint8_t*>(qr_buf_);
+                qr_img_ = lv_image_create(menu_);
+                lv_obj_set_pos(qr_img_, 8, 33);
+                qr_lbl_ = MakeLabel(menu_, lv_obj_get_style_text_font(menu_msg_, 0), 0x1E2A3A);
+                lv_obj_set_width(qr_lbl_, 120);
+                lv_obj_set_style_text_align(qr_lbl_, LV_TEXT_ALIGN_CENTER, 0);
+                lv_obj_set_pos(qr_lbl_, 188, 50);
+            }
+        }
+        if (ok && qr_buf_ != nullptr) {
+            for (int y = 0; y < kPix; y++)
+                for (int x = 0; x < kPix; x++) {
+                    int mx = x / kScale - kQuiet, my = y / kScale - kQuiet;
+                    bool dark = mx >= 0 && my >= 0 && mx < RubiQr::kSize && my < RubiQr::kSize && mod[my][mx];
+                    qr_buf_[y * kPix + x] = dark ? 0x0000 : 0xFFFF;
+                }
+            lv_image_set_src(qr_img_, &qr_dsc_);
+            lv_obj_invalidate(qr_img_);
+            lv_label_set_text(qr_lbl_, caption);
+            lv_obj_clear_flag(qr_img_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(qr_lbl_, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_label_set_text(menu_msg_, caption);
+            lv_obj_clear_flag(menu_msg_, LV_OBJ_FLAG_HIDDEN);
+        }
+        ShowMenuLayer();
+    }
+
     struct KbKey {
         int x, y, w, h;
         std::string label;
@@ -393,6 +440,10 @@ private:
     lv_obj_t* tile_img_[kMaxTiles] = {};
     lv_obj_t* tile_lbl_[kMaxTiles] = {};
     lv_obj_t* card_img_ = nullptr;
+    lv_obj_t* qr_img_ = nullptr;
+    lv_obj_t* qr_lbl_ = nullptr;
+    lv_image_dsc_t qr_dsc_ = {};
+    uint16_t* qr_buf_ = nullptr;
     lv_obj_t* card_en_ = nullptr;
     lv_obj_t* card_vi_ = nullptr;
     lv_obj_t* card_count_ = nullptr;
@@ -423,6 +474,8 @@ private:
         lv_obj_add_flag(cross_h_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(cross_v_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(card_img_, LV_OBJ_FLAG_HIDDEN);
+        if (qr_img_) lv_obj_add_flag(qr_img_, LV_OBJ_FLAG_HIDDEN);
+        if (qr_lbl_) lv_obj_add_flag(qr_lbl_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(card_en_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(card_vi_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(card_count_, LV_OBJ_FLAG_HIDDEN);
