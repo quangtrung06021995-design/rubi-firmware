@@ -19,8 +19,8 @@
 <div class="scrim" id="scrim"></div>
 <aside class="drawer" id="drawer" aria-label="Menu"><div class="brand"><img alt="" src="img/robot.webp">Rubi</div><a href="#trang-chu" data-v="trang-chu"><img alt="" src="img/icon-trangchu.webp">Trang chủ</a><a href="#tinh-trang" data-v="tinh-trang"><img alt="" src="img/icon-tinhtrang.webp">Tình trạng</a><a href="#cap-nhat" data-v="cap-nhat"><img alt="" src="img/icon-capnhat.webp">Cập nhật<i class=dot></i></a><a href="#dieu-khien" data-v="dieu-khien"><img alt="" src="img/icon-dieukhien.webp">Điều khiển</a><a href="#choi-cung" data-v="choi-cung"><img alt="" src="img/icon-choicung.webp">Chơi cùng Rubi</a><a href="#bai-hat" data-v="bai-hat"><img alt="" src="img/icon-nhac.webp">Bài hát</a><a href="#truyen-tranh" data-v="truyen-tranh"><img alt="" src="img/icon-truyen.webp">Truyện tranh</a><a href="#the-nho" data-v="the-nho"><img alt="" src="img/icon-thenho.webp">Quản lý thẻ nhớ</a><a href="#cai-dat" data-v="cai-dat"><img alt="" src="img/icon-caidat.webp">Cài đặt</a></aside>
 <div class="wrap">
-<div class="top"><button class="burger" id="burger" aria-label="Mở menu"><i></i><i></i><i></i></button><h1 id="title">Trang chủ</h1><span class="pill ok"><b></b>Kết nối (mẫu)</span></div>
-<div class="note">Bản demo. Số liệu và nút bấm là mẫu, chưa nối với robot.</div>
+<div class="top"><button class="burger" id="burger" aria-label="Mở menu"><i></i><i></i><i></i></button><h1 id="title">Trang chủ</h1><span class="pill ok" id="conn"><b></b>Kết nối (mẫu)</span></div>
+<div class="note" id="demonote">Bản demo. Số liệu và nút bấm là mẫu, chưa nối với robot.</div>
 
 <section class="view" id="v-trang-chu">
  <div class="card"><div class="hero"><img src="img/robot.webp" alt="Robot Rubi"><div><div class="big">Rubi</div><div id="state" style="color:var(--mute)">Sẵn sàng chơi cùng bé</div>
@@ -32,11 +32,11 @@
 
 <section class="view" id="v-tinh-trang">
  <div class="grid">
-  <div class="card"><h2>Pin</h2><div class="big">78%</div><div class="bar"><i style="width:78%"></i></div><div class="stat" style="margin-top:8px"><span>Điện áp</span><span>7,6 V</span></div><div class="stat"><span>Sạc</span><span>Không sạc</span></div></div>
-  <div class="card"><h2>Mạng</h2><div class="stat"><span>Wi-Fi</span><span>TP-Link_7FA8</span></div><div class="stat"><span>Tín hiệu</span><span>-52 dBm</span></div><div class="stat"><span>Địa chỉ</span><span>192.168.0.196</span></div></div>
-  <div class="card"><h2>Cảm biến</h2><div class="stat"><span>Phía trước</span><span>82 cm</span></div><div class="stat"><span>Mép bàn (ToF)</span><span>An toàn</span></div><div class="stat"><span>Phía sau</span><span>120 cm</span></div></div>
+  <div class="card" id="cpin"><h2>Pin</h2><div class="big">78%</div><div class="bar"><i style="width:78%"></i></div><div class="stat" style="margin-top:8px"><span>Điện áp</span><span>7,6 V</span></div><div class="stat"><span>Sạc</span><span>Không sạc</span></div></div>
+  <div class="card" id="cnet"><h2>Mạng</h2><div class="stat"><span>Wi-Fi</span><span>TP-Link_7FA8</span></div><div class="stat"><span>Tín hiệu</span><span>-52 dBm</span></div><div class="stat"><span>Địa chỉ</span><span>192.168.0.196</span></div></div>
+  <div class="card" id="csen"><h2>Cảm biến</h2><div class="stat"><span>Phía trước</span><span>82 cm</span></div><div class="stat"><span>Mép bàn (ToF)</span><span>An toàn</span></div><div class="stat"><span>Phía sau</span><span>120 cm</span></div></div>
  </div>
- <div class="card"><h2>Phiên bản các bo mạch</h2><div class="tw"><table><thead><tr><th>Bo mạch</th><th>Đang chạy</th><th>Mới nhất</th><th>Trạng thái</th></tr></thead><tbody>
+ <div class="card"><h2>Phiên bản các bo mạch</h2><div class="tw"><table><thead><tr><th>Bo mạch</th><th>Đang chạy</th><th>Mới nhất</th><th>Trạng thái</th></tr></thead><tbody id="vtb">
  <tr><td>Bo màn hình</td><td>1.0.31</td><td>1.0.31</td><td><span class="pill ok"><b></b>Mới nhất</span></td></tr>
  <tr><td>DevKit (bánh xe)</td><td>1.0.1</td><td>1.0.2</td><td><span class="pill warn"><b></b>Có bản mới</span></td></tr>
  <tr><td>Camera</td><td>1.0.7</td><td>1.0.7</td><td><span class="pill ok"><b></b>Mới nhất</span></td></tr></tbody></table></div></div>

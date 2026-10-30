@@ -69,4 +69,53 @@ $("songs").innerHTML=songs.map(function(s,i){return '<div class="item"><div clas
 $("songs").onclick=function(e){var b=e.target.closest("button");if(b)toast("Phát: "+b.dataset.s+" (mẫu)")};
 $("dkbtn").onclick=function(){var b=this,bar=$("dkbar"),i=bar.firstChild,p=0;b.disabled=true;bar.hidden=false;$("dk").textContent="Đang tải bản 1.0.2...";
  var iv=setInterval(function(){p+=8;i.style.width=Math.min(p,100)+"%";if(p>=100){clearInterval(iv);$("dk").textContent="1.0.2, đã mới nhất";bar.hidden=true;b.textContent="Mới nhất";b.className="btn ghost";document.querySelector(".alert").style.display="none";var dt=document.querySelector(".drawer .dot");if(dt)dt.style.display="none";toast("Cập nhật xong (mẫu)")}},300)};
+/* ---- Chế độ thật (mở từ rubi.local): số thật từ DevKit (/api/status) + bản mới nhất trên GitHub ---- */
+if(LIVE){
+var RAW="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/";
+var LAT={ds:"",dk:"",cam:""},latAt=0,ST=null;
+function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function man(br){return fetch(RAW+br+"/manifest.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){return j&&j.version?String(j.version):""}).catch(function(){return ""})}
+function loadLat(){if(Date.now()-latAt<60000)return Promise.resolve();latAt=Date.now();
+ return Promise.all([man("ota"),man("ota-devkit"),man("ota-cam")]).then(function(a){LAT.ds=a[0];LAT.dk=a[1];LAT.cam=a[2]})}
+function stat(k,v){return '<div class="stat"><span>'+k+'</span><span>'+esc(v)+'</span></div>'}
+function note(t){return '<p style="color:var(--mute);font-size:13px;margin:8px 0 0">'+t+'</p>'}
+function setCard(id,h,body){var c=$(id);if(c)c.innerHTML='<h2>'+h+'</h2>'+body}
+function pinBtn(){return '<button class="btn" id="pinbtn" style="margin-top:8px">Nhập PIN</button>'}
+function bindPin(){var b=$("pinbtn");if(b)b.onclick=askPin}
+function render(){
+ var s=ST,ok=s&&s.auth!==false,ver=s&&s.ver?String(s.ver):"",bad=s?null:note("Chưa nối được Rubi. Kiểm tra Wi-Fi và nguồn.");
+ if(!s){setCard("cpin","Pin",bad);setCard("cnet","Mạng",bad);setCard("csen","Bánh xe",bad)}
+ else if(!ok){var n=note("Cần mã PIN để xem đầy đủ.")+pinBtn();setCard("cpin","Pin",n);setCard("cnet","Mạng",n);setCard("csen","Bánh xe",n)}
+ else{
+  var mv=+s.bat_mv||0;
+  if(mv>2000){var p=Math.max(0,Math.min(100,Math.round((mv-6000)/24)));
+   setCard("cpin","Pin",'<div class="big">'+p+'%</div><div class="bar"><i style="width:'+p+'%"></i></div>'+stat("Điện áp",(mv/1000).toFixed(1).replace(".",",")+" V")+note("Phần trăm là ước lượng theo điện áp của bộ pin 2S."))}
+  else setCard("cpin","Pin",note("Chưa đo được điện áp pin."));
+  setCard("cnet","Mạng",stat("Wi-Fi",s.ssid||"—")+stat("Tín hiệu",(s.rssi!=null?s.rssi+" dBm":"—"))+stat("Địa chỉ",s.ip||"—"));
+  setCard("csen","Bánh xe",stat("Bánh trái",(s.l!=null?s.l+"%":"—"))+stat("Bánh phải",(s.r!=null?s.r+"%":"—"))+stat("Lỗi motor",s.fault?"Có lỗi":"Không")+note("Cảm biến khoảng cách chưa có số thật."));
+  bindPin()}
+ var dkNew=!!(ver&&LAT.dk&&ver!==LAT.dk);
+ function pill(c,t){return '<span class="pill '+c+'"><b></b>'+t+'</span>'}
+ function unk(n,l){return '<tr><td>'+n+'</td><td>—</td><td>'+esc(l||"—")+'</td><td>Chưa đọc bản đang chạy</td></tr>'}
+ var tb=$("vtb");
+ if(tb)tb.innerHTML=unk("Bo màn hình",LAT.ds)+
+  '<tr><td>DevKit (bánh xe)</td><td>'+esc(ver||"—")+'</td><td>'+esc(LAT.dk||"—")+'</td><td>'+(!ver||!LAT.dk?"—":dkNew?pill("warn","Có bản mới"):pill("ok","Mới nhất"))+'</td></tr>'+unk("Camera",LAT.cam);
+ var ups=$("ups");
+ if(ups)ups.innerHTML=
+  '<div class="item"><div class="t">Bo màn hình<small>Bản mới nhất: '+esc(LAT.ds||"—")+' (bo tự cập nhật khi bật nguồn)</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>'+
+  '<div class="item"><div class="t">DevKit (bánh xe)<small>'+(ver?(dkNew?esc(ver)+" → "+esc(LAT.dk):esc(ver)+", đã mới nhất"):"Chưa đọc được bản đang chạy")+'</small></div>'+
+  (dkNew?'<button class="btn" disabled>Tự cập nhật khi bật nguồn</button>':'<button class="btn ghost" disabled>Mới nhất</button>')+'</div>'+
+  '<div class="item"><div class="t">Camera<small>Bản mới nhất: '+esc(LAT.cam||"—")+' (bo tự cập nhật khi bật nguồn)</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>';
+ var al=document.querySelector(".alert"),dt=document.querySelector(".drawer .dot");
+ if(al){al.style.display=dkNew?"":"none";if(dkNew){var b=al.querySelector("b");if(b)b.textContent="DevKit có bản mới "+LAT.dk+".";var sp=al.querySelector("span");if(sp&&sp.lastChild&&sp.lastChild.nodeType===3)sp.lastChild.textContent=" Robot sẽ tự cập nhật khi bật nguồn lại."}}
+ if(dt)dt.style.display=dkNew?"":"none"}
+function conn(){var c=$("conn"),n=$("demonote");
+ if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa nối");
+ if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Các mục còn lại (đèn, trò chơi, bài hát, truyện, thẻ nhớ, camera) vẫn là mẫu."}
+function refresh(){return api("/api/status").then(function(j){ST=j}).catch(function(){ST=null}).then(loadLat).then(function(){render();conn()})}
+function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"}
+addEventListener("hashchange",function(){if(watching())refresh()});
+setInterval(function(){if(!document.hidden&&watching())refresh()},5000);
+refresh();
+}
 })();
