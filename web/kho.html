@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>Kho của Rubi</title>
+<style>
+:root{--bg:#f2f6ff;--card:#fff;--ink:#1b2440;--mut:#66708f;--pri:#2f6bff;--ok:#1f9d55;--bad:#d64545;--line:#dfe6f7}
+@media (prefers-color-scheme:dark){:root{--bg:#10162a;--card:#1a2240;--ink:#eef2ff;--mut:#9aa6cf;--line:#2b3560}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,sans-serif;padding:16px}
+main{max-width:640px;margin:0 auto}h1{font-size:22px;margin:4px 0 12px}h2{font-size:17px;margin:0 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+input,button{font:inherit}input[type=text],input[type=password]{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink)}
+input[type=file]{width:100%;margin:6px 0}
+button{background:var(--pri);color:#fff;border:0;border-radius:10px;padding:10px 14px;margin-top:8px}button:disabled{opacity:.5}
+button.del{background:var(--bad);padding:6px 10px;margin:0}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ok)}
+.mut{color:var(--mut);font-size:14px}.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+.row span{overflow-wrap:anywhere}#msg{white-space:pre-wrap;font-size:14px;margin-top:8px}
+</style></head><body><main>
+<h1>Kho của Rubi</h1>
+
+<div class="card" id="login">
+  <h2>Đăng nhập</h2>
+  <input type="password" id="pw" placeholder="Mật khẩu quản trị" autocomplete="current-password">
+  <button id="go">Vào</button>
+  <div class="mut" id="loginmsg"></div>
+</div>
+
+<div id="app" hidden>
+  <div class="card">
+    <h2>Dung lượng kho</h2>
+    <div class="bar"><i id="usedbar" style="width:0"></i></div>
+    <div class="mut" id="usedtxt"></div>
+    <div class="mut">Rubi tự tải đồ mới về thẻ nhớ khoảng 6 giờ một lần, hoặc ngay khi bấm "Đồng bộ kho ngay".</div>
+  </div>
+
+  <div class="card">
+    <h2>Thêm nhạc</h2>
+    <div class="mut">Chọn file nhạc (mp3, m4a, wav...). Trang tự đổi sang WAV cho Rubi. Tên bài viết không dấu.</div>
+    <input type="file" id="mf" accept="audio/*" multiple>
+    <button id="mup">Gửi nhạc lên kho</button>
+  </div>
+
+  <div class="card">
+    <h2>Thêm truyện tranh</h2>
+    <div class="mut">Tên truyện, các ảnh trang (xếp theo tên file: 01, 02, 03...) và lời đọc (không bắt buộc, đặt tên trùng ảnh: 01.mp3 cho 01.jpg).</div>
+    <input type="text" id="st" placeholder="Tên truyện (có dấu cũng được)">
+    <div class="mut" style="margin-top:8px">Ảnh các trang:</div>
+    <input type="file" id="si" accept="image/*" multiple>
+    <div class="mut">Lời đọc từng trang (nếu có):</div>
+    <input type="file" id="sa" accept="audio/*" multiple>
+    <button id="sup">Gửi truyện lên kho</button>
+  </div>
+
+  <div id="msg" class="mut"></div>
+
+  <div class="card">
+    <h2>Đang có trong kho</h2>
+    <div id="list" class="mut">...</div>
+  </div>
+</div>
+
+<script type="module">
+import { upload } from 'https://esm.sh/@vercel/blob@1.1.1/client';
+const $ = (id) => document.getElementById(id);
+let PW = '';
+try { PW = sessionStorage.getItem('kho_pw') || ''; } catch (e) {}
+
+function say(t) { $('msg').textContent = t; }
+function mb(n) { return (n / 1048576).toFixed(n > 10485760 ? 0 : 1) + ' MB'; }
+function ascii(s) {
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D')
+    .replace(/[^A-Za-z0-9 _().,'+&-]+/g, ' ').replace(/\s+/g, ' ').trim().replace(/^\.+/, '').slice(0, 60);
+}
+function slug(s) { return ascii(s).toLowerCase().replace(/ /g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 40); }
+function baseName(f) { return f.name.replace(/\.[^.]*$/, ''); }
+
+async function admin(body) {
+  const r = await fetch('/api/kho-admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: PW, ...body }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ('lỗi ' + r.status));
+  return j;
+}
+
+async function toWav(file, rate) {
+  const ab = await file.arrayBuffer();
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await ac.decodeAudioData(ab);
+  if (ac.close) ac.close();
+  const len = Math.ceil(buf.duration * rate);
+  const oc = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, len, rate);
+  const src = oc.createBufferSource(); src.buffer = buf; src.connect(oc.destination); src.start();
+  const out = await oc.startRendering(), d = out.getChannelData(0), n = d.length, w = new DataView(new ArrayBuffer(44 + n * 2));
+  const s = (o, t) => { for (let i = 0; i < t.length; i++) w.setUint8(o + i, t.charCodeAt(i)); };
+  s(0, 'RIFF'); w.setUint32(4, 36 + n * 2, true); s(8, 'WAVE'); s(12, 'fmt '); w.setUint32(16, 16, true); w.setUint16(20, 1, true); w.setUint16(22, 1, true);
+  w.setUint32(24, rate, true); w.setUint32(28, rate * 2, true); w.setUint16(32, 2, true); w.setUint16(34, 16, true); s(36, 'data'); w.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, d[i])); w.setInt16(44 + i * 2, v < 0 ? v * 32768 : v * 32767, true); }
+  return new Blob([w.buffer], { type: 'audio/wav' });
+}
+
+// Picture -> 320x240 RGB565, little endian (filled to the screen, extra edge cut), same as tools/tao_truyen.py
+async function toRgb565(file) {
+  const bmp = await createImageBitmap(file);
+  const c = document.createElement('canvas'); c.width = 320; c.height = 240;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  const k = Math.max(320 / bmp.width, 240 / bmp.height), w = bmp.width * k, h = bmp.height * k;
+  g.drawImage(bmp, (320 - w) / 2, (240 - h) / 2, w, h);
+  if (bmp.close) bmp.close();
+  const px = g.getImageData(0, 0, 320, 240).data, out = new Uint8Array(320 * 240 * 2);
+  for (let i = 0, o = 0; i < px.length; i += 4, o += 2) {
+    const v = ((px[i] >> 3) << 11) | ((px[i + 1] >> 2) << 5) | (px[i + 2] >> 3);
+    out[o] = v & 255; out[o + 1] = v >> 8;
+  }
+  return new Blob([out], { type: 'application/octet-stream' });
+}
+
+function put(path, blob) {
+  return upload('kho/' + path, blob, { access: 'public', handleUploadUrl: '/api/kho-token', clientPayload: PW, multipart: blob.size > 8 * 1048576, contentType: blob.type || 'application/octet-stream' });
+}
+
+async function refresh() {
+  const r = await admin({ action: 'list' });
+  $('usedbar').style.width = Math.min(100, r.used / r.limit * 100) + '%';
+  $('usedtxt').textContent = 'Đã dùng ' + mb(r.used) + ' / ' + mb(r.limit);
+  const music = r.items.filter((i) => i.p.startsWith('music/'));
+  const stories = {};
+  r.items.filter((i) => i.p.startsWith('truyen/')).forEach((i) => { const id = i.p.split('/')[1]; (stories[id] = stories[id] || { n: 0, s: 0 }); stories[id].n++; stories[id].s += i.s; });
+  const L = $('list'); L.textContent = '';
+  const add = (label, path) => {
+    const row = document.createElement('div'); row.className = 'row';
+    const sp = document.createElement('span'); sp.textContent = label; row.appendChild(sp);
+    const b = document.createElement('button'); b.className = 'del'; b.textContent = 'Xóa';
+    b.onclick = async () => {
+      if (!confirm('Xóa "' + path + '"? Rubi sẽ tự xóa trong lần đồng bộ sau.')) return;
+      b.disabled = true;
+      try { await admin({ action: 'delete', path }); } catch (e) { alert(e.message); }
+      refresh();
+    };
+    row.appendChild(b); L.appendChild(row);
+  };
+  if (!music.length && !Object.keys(stories).length) L.textContent = 'Kho còn trống.';
+  music.forEach((i) => add('♪ ' + i.p.slice(6) + ' (' + mb(i.s) + ')', i.p));
+  Object.keys(stories).forEach((id) => add('📖 ' + id + ' (' + stories[id].n + ' file, ' + mb(stories[id].s) + ')', 'truyen/' + id));
+}
+
+async function login() {
+  try {
+    PW = $('pw').value || PW;
+    await admin({ action: 'list' });
+    try { sessionStorage.setItem('kho_pw', PW); } catch (e) {}
+    $('login').hidden = true; $('app').hidden = false;
+    await refresh();
+  } catch (e) { $('loginmsg').textContent = 'Không vào được: ' + e.message; }
+}
+$('go').onclick = login;
+$('pw').onkeydown = (e) => { if (e.key === 'Enter') login(); };
+if (PW) login();
+
+$('mup').onclick = async () => {
+  const fs = [...$('mf').files];
+  if (!fs.length) return say('Chưa chọn bài nào');
+  $('mup').disabled = true;
+  try {
+    for (let i = 0; i < fs.length; i++) {
+      const nm = (ascii(baseName(fs[i])) || ('bai ' + (i + 1))) + '.wav';
+      say('(' + (i + 1) + '/' + fs.length + ') Đang đổi: ' + fs[i].name);
+      const wav = await toWav(fs[i], 22050);
+      say('(' + (i + 1) + '/' + fs.length + ') Đang gửi: ' + nm + ' (' + mb(wav.size) + ')');
+      await put('music/' + nm, wav);
+    }
+    say('Xong! Đã gửi ' + fs.length + ' bài. Rubi sẽ tự tải về khi có mạng.');
+    $('mf').value = '';
+  } catch (e) { say('Lỗi: ' + (e.message || e)); }
+  $('mup').disabled = false; refresh();
+};
+
+$('sup').onclick = async () => {
+  const title = $('st').value.trim();
+  const imgs = [...$('si').files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const auds = [...$('sa').files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const id = slug(title);
+  if (!id) return say('Hãy nhập tên truyện');
+  if (!imgs.length) return say('Chưa chọn ảnh nào');
+  if (imgs.length > 99) return say('Tối đa 99 trang');
+  $('sup').disabled = true;
+  try {
+    const byName = {}; auds.forEach((a) => { byName[baseName(a).toLowerCase()] = a; });
+    const pad = (n) => String(n + 1).padStart(2, '0');
+    const dir = 'truyen/' + id + '/';
+    say('Đang gửi tên truyện...');
+    await put(dir + 'ten.txt', new Blob([title + '\n'], { type: 'text/plain' }));
+    for (let i = 0; i < imgs.length; i++) {
+      say('Trang ' + (i + 1) + '/' + imgs.length + ': đổi ảnh...');
+      await put(dir + pad(i) + '.bin', await toRgb565(imgs[i]));
+      const a = byName[baseName(imgs[i]).toLowerCase()] || (auds.length === imgs.length ? auds[i] : null);
+      if (a) {
+        say('Trang ' + (i + 1) + '/' + imgs.length + ': đổi lời đọc...');
+        await put(dir + pad(i) + '.wav', await toWav(a, 16000));
+      }
+    }
+    say('Xong! Truyện "' + title + '" (' + imgs.length + ' trang) đã lên kho.');
+    $('st').value = ''; $('si').value = ''; $('sa').value = '';
+  } catch (e) { say('Lỗi: ' + (e.message || e)); }
+  $('sup').disabled = false; refresh();
+};
+</script></main></body></html>
