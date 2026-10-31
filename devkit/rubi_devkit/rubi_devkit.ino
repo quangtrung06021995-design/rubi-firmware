@@ -720,6 +720,12 @@ void webStop() {
     dungHet();
     webJson("{\"ok\":true}");
 }
+void webDance() {   // /api/dance[?t=<ma>] : spin on the spot for ~28 s, /api/stop or any drive command cancels
+    if (!webAuth()) { webTuChoi(); return; }
+    if (g_pin_thap) { webJson("{\"ok\":false,\"err\":\"pin\"}"); return; }
+    nhayBat();
+    webJson("{\"ok\":true}");
+}
 
 void webStatus() {
     bool ok = webAuth();
@@ -740,6 +746,7 @@ void webBatDau() {
     g_web.on("/", HTTP_GET, []() { g_web.sendHeader("Cache-Control", "no-store"); g_web.send_P(200, "text/html; charset=utf-8", PAGE_ROOT); });
     g_web.on("/api/drive", HTTP_GET, webDrive);
     g_web.on("/api/stop", HTTP_GET, webStop);
+    g_web.on("/api/dance", HTTP_GET, webDance);
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
     g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });

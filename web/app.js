@@ -35,7 +35,16 @@ $("estop").onclick=function(){stopAll();$("drv").textContent="Đứng yên";toas
 document.querySelectorAll(".pad button").forEach(function(b){b.onclick=function(){$("drv").textContent=b.dataset.m==="Dừng"?"Đứng yên":"Đang: "+b.dataset.m+" (mẫu)"}});
 $("spd").oninput=function(){$("spv").textContent=this.value};$("br").oninput=function(){$("brv").textContent=this.value};
 document.querySelectorAll("#leds button").forEach(function(b){b.onclick=function(){document.querySelectorAll("#leds button").forEach(function(x){x.classList.remove("on")});b.classList.add("on");toast("Đổi màu đèn (mẫu)")}});
-document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function(){document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Đang chơi: "+b.dataset.g+" (mẫu)";$("state").textContent=b.dataset.g}});
+document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function(){
+ if(LIVE){
+  if(b.dataset.g!=="Nhảy múa"){toast("Trò này chưa có trên Rubi");return}
+  api("/api/dance").then(function(j){
+   if(j&&j.ok){document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Rubi đang nhảy múa (xoay tại chỗ, khoảng 30 giây). Nhớ để robot ở chỗ rộng.";toast("Rubi đang nhảy múa")}
+   else if(j&&j.err==="pin")toast("Pin yếu, Rubi không nhảy được");
+  }).catch(function(){toast("Không gọi được Rubi")});
+  return}
+ document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Đang chơi: "+b.dataset.g+" (mẫu)";$("state").textContent=b.dataset.g}});
+if($("gstop"))$("gstop").onclick=function(){stopAll();document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});$("gst").textContent="Đã dừng.";toast("Đã gửi lệnh dừng"+M)};
 var LC={"l-chest":3,"l-fl":6,"l-fr":6,"l-ant":2};
 function est(){var n=0;for(var k in LC)if($(k).checked)n+=LC[k];var ma=Math.round(n*60*($("br").value/100));$("est").textContent="Đang bật "+n+"/17 đèn, khoảng "+ma+" mA (mẫu).";}
 document.querySelectorAll("[data-l]").forEach(function(c){c.onchange=est});
