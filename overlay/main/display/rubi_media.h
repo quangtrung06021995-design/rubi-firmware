@@ -717,6 +717,39 @@ private:
         NextMath();
     }
 
+    // Asks the cloud assistant (xiaozhi.me) to read the question aloud. Needs Wi-Fi; silent if the cloud is unreachable.
+    std::atomic<int> say_gen_{0};
+
+    void SayMath(const std::string& text) {
+        int gen = ++say_gen_;
+        std::string prompt = "Hãy đọc to, đúng từng chữ, không giải bài, không thêm lời nào khác: " + text;
+        RunTask([this, prompt, gen]() {
+            auto& app = Application::GetInstance();
+            for (int i = 0; i < 20; i++) {   // bring the assistant back to idle first (stops a previous reading)
+                if (gen != say_gen_) return;
+                if (app.GetDeviceState() == kDeviceStateIdle) break;
+                app.WakeWordInvoke("");
+                vTaskDelay(pdMS_TO_TICKS(300));
+            }
+            if (gen != say_gen_ || app.GetDeviceState() != kDeviceStateIdle) return;
+            app.WakeWordInvoke(prompt);
+            bool spoke = false;
+            for (int i = 0; i < 120 && gen == say_gen_; i++) {
+                vTaskDelay(pdMS_TO_TICKS(250));
+                auto st = app.GetDeviceState();
+                if (st == kDeviceStateSpeaking) spoke = true;
+                if (spoke && st == kDeviceStateListening) { app.WakeWordInvoke(""); break; }   // reading finished: stop listening
+                if (spoke && st == kDeviceStateIdle) break;
+            }
+        }, "math_say");
+    }
+
+    void StopSayMath() {
+        ++say_gen_;
+        auto st = Application::GetInstance().GetDeviceState();
+        if (st == kDeviceStateSpeaking || st == kDeviceStateListening) Application::GetInstance().WakeWordInvoke("");
+    }
+
     void NextMath() {
         if (math_idx_ >= kMathRound) {
             screen_ = Screen::kMathDone;
@@ -734,6 +767,7 @@ private:
         } else {
             RenderMath("");
         }
+        SayMath(math_q_.say);
     }
 
     void RenderMath(const std::string& note) {
@@ -749,6 +783,7 @@ private:
         keys_.push_back({X0, 179, KW, KH, "Xóa", 2, "", kSpecial});
         keys_.push_back({X0 + KW + G, 179, KW, KH, "0", 0, "0", kNum});
         keys_.push_back({X0 + 2 * (KW + G), 179, KW, KH, "OK", 5, "", kOk});
+        keys_.push_back({4, math_q_.story.empty() ? 56 : 98, 66, KH, "Nghe", 8, "", kStory});
         if (!math_q_.story.empty()) keys_.push_back({4, 56, 66, KH, "Đề", 7, "", kStory});
         std::string head = note.empty() ? ("(" + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound) + ") " + math_q_.ask) : note;
         std::string shown = math_buf_ + "_";
@@ -761,7 +796,8 @@ private:
             switch (k.kind) {
             case 0: if (math_buf_.size() < 3) math_buf_ += k.val; RenderMath(""); break;
             case 2: if (!math_buf_.empty()) math_buf_.pop_back(); RenderMath(""); break;
-            case 6: ShowMathMenu(); break;
+            case 6: StopSayMath(); ShowMathMenu(); break;
+            case 8: SayMath(math_q_.say); break;
             case 7:
                 screen_ = Screen::kMathStory;
                 if (display_) display_->MenuShowMessage((math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1);
@@ -774,6 +810,7 @@ private:
 
     void AnswerMath() {
         int v = atoi(math_buf_.c_str());
+        StopSayMath();
         screen_ = Screen::kMathBusy;
         bool right = v == math_q_.answer;
         bool reveal = false;

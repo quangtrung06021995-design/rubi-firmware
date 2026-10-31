@@ -17,19 +17,40 @@ public:
     struct Q {
         std::string story;   // full word problem (empty for a plain sum)
         std::string ask;     // short line shown above the keypad, e.g. "7 + 5 = ?"
+        std::string say;     // what the voice reads: "7 cộng 5 bằng mấy" or the whole story
         int answer = 0;
     };
 
     static Q Make(Mode mode, int index) {
+        Q q;
         switch (mode) {
-        case kWithin10: return Plain(10);
-        case kWithin20: return Plain(20);
-        case kWithin100: return Tens();
-        default: return Word(index < 4 ? 10 : 20);
+        case kWithin10: q = Plain(10); break;
+        case kWithin20: q = Plain(20); break;
+        case kWithin100: q = Tens(); break;
+        default: q = Word(index < 4 ? 10 : 20); break;
         }
+        q.say = Speech(q);
+        return q;
     }
 
 private:
+    static void ReplaceAll(std::string& s, const std::string& from, const std::string& to) {
+        for (size_t p = 0; (p = s.find(from, p)) != std::string::npos; p += to.size()) s.replace(p, from.size(), to);
+    }
+    static std::string Speech(const Q& q) {
+        std::string t = q.story.empty() ? q.ask : q.story;
+        if (q.story.empty()) {
+            ReplaceAll(t, "= ?", "bằng mấy");
+            ReplaceAll(t, " + ", " cộng ");
+            ReplaceAll(t, " - ", " trừ ");
+            ReplaceAll(t, "= ", "bằng ");
+            ReplaceAll(t, "?", "mấy");
+        } else {
+            ReplaceAll(t, "\n", " ");
+        }
+        return t;
+    }
+
     static uint32_t R() {
 #ifdef ESP_PLATFORM
         return esp_random();
@@ -166,7 +187,7 @@ int main() {
             }
         }
     }
-    for (int m = 0; m < 4; m++) { auto q = RubiMath::Make((RubiMath::Mode)m, 5); printf("[%d] %s | %s | %d\n", m, q.story.c_str(), q.ask.c_str(), q.answer); }
+    for (int m = 0; m < 4; m++) { auto q = RubiMath::Make((RubiMath::Mode)m, 5); printf("[%d] %s | %s | %s | %d\n", m, q.story.c_str(), q.ask.c_str(), q.say.c_str(), q.answer); }
     printf("bad=%d\n", bad);
     return bad != 0;
 }
