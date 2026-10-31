@@ -125,6 +125,22 @@ function refresh(){return api("/api/status").then(function(j){ST=j}).catch(funct
 function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"}
 addEventListener("hashchange",function(){if(watching())refresh()});
 setInterval(function(){if(!document.hidden&&watching())refresh()},5000);
+/* ---- Khóa khi đang cập nhật: bo màn hình báo "upd" qua DevKit; DevKit tự nạp/khởi động lại thì mất kết nối nên cũng khóa ---- */
+var LK=null,okOnce=false,fails=0,verPrev="";
+function lockUI(on,t,sub){
+ if(!LK){LK=document.createElement("div");LK.setAttribute("style","position:fixed;inset:0;z-index:99999;background:rgba(15,20,30,.92);color:#fff;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;font-family:inherit");
+  LK.innerHTML='<div><div style="font-size:42px">⏳</div><div id="lkt" style="font-size:22px;font-weight:700;margin:10px 0"></div><div id="lks" style="font-size:15px;opacity:.85;line-height:1.5"></div></div>';document.body.appendChild(LK)}
+ if(on){document.getElementById("lkt").textContent=t;document.getElementById("lks").textContent=sub;if(LK.style.display!=="flex"){stopAll();LK.style.display="flex"}}
+ else LK.style.display="none"}
+function pollUpd(){api("/api/status").then(function(j){
+  fails=0;okOnce=true;
+  if(j.upd){lockUI(true,"Đang cập nhật bo màn hình","Đừng tắt nguồn Rubi. Mọi tính năng bị khóa cho đến khi cập nhật xong.")}
+  else{var was=LK&&LK.style.display==="flex";lockUI(false);
+   if(was){toast(j.ver&&verPrev&&j.ver!==verPrev?"Cập nhật xong: DevKit bản "+j.ver:"Cập nhật xong, đã mở khóa");refresh()}}
+  if(j.ver)verPrev=String(j.ver)
+ }).catch(function(){
+  if(okOnce&&++fails>=2)lockUI(true,"Đang cập nhật hoặc khởi động lại","Rubi đang nạp bản mới hoặc mất kết nối. Đừng tắt nguồn, trang sẽ tự mở khóa khi Rubi nối lại.")})}
+setInterval(pollUpd,2500);
 refresh();
 }else{var c0=$("conn"),n0=$("demonote");
  if(c0){c0.className="pill warn";c0.innerHTML="<b></b>Chưa kết nối với Rubi"}

@@ -192,6 +192,16 @@ jobs:
           inc = '#include "application.h"\n'
           assert s.count(inc) == 1, 'include anchor not found'
           s = s.replace(inc, inc + 'void rubi_handle_speech(const char* text);  // defined in the board file\n')
+          a = '\n    SetDeviceState(kDeviceStateUpgrading);\n'
+          assert s.count(a) == 1, 'upgrading anchor not found'
+          s = s.replace(a, a + '    rubi_updating(true);\n')
+          b = 'Ota::Upgrade(upgrade_url, [this, display](int progress, size_t speed) {\n'
+          assert s.count(b) == 1, 'progress anchor not found'
+          s = s.replace(b, b + '        rubi_updating(true);\n')
+          c = '        audio_service_.Start();                              // Restart audio service\n'
+          assert s.count(c) == 1, 'fail anchor not found'
+          s = s.replace(c, c + '        rubi_updating(false);\n')
+          s = s.replace('void rubi_handle_speech(const char* text);  // defined in the board file\n', 'void rubi_handle_speech(const char* text);  // defined in the board file\nvoid rubi_updating(bool on);\n')
           open(p, 'w', encoding='utf-8').write(s)
           PY
           grep -n "rubi_handle_speech" main/application.cc

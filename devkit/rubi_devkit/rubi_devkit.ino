@@ -318,6 +318,8 @@ const char* OTA_MAT_KHAU = "rubi1234";   // Arduino IDE hoi mat khau nay khi nap
 Preferences g_pref;
 String g_ssid, g_pass;            // mang dang noi / dang thu
 bool g_ota_started = false;
+uint32_t g_upd_ds_den = 0;   // bo man hinh bao dang cap nhat ("U1"), het han sau 60 s neu khong nhac lai
+bool g_upd_ds = false;
 bool g_wifi_was = false;
 uint32_t g_auto_at = 0;      // thoi diem tu kiem tra GitHub (0 = chua dat / da xong)
 bool g_auto_done = false;
@@ -728,14 +730,19 @@ void webDance() {   // /api/dance[?t=<ma>] : spin on the spot for ~28 s, /api/st
     webJson("{\"ok\":true}");
 }
 
+String updJson() {
+    if (g_upd_ds && (int32_t)(g_upd_ds_den - millis()) <= 0) g_upd_ds = false;
+    return g_upd_ds ? String(",\"upd\":\"ds\"") : String("");
+}
+
 void webStatus() {
     bool ok = webAuth();
     if (!ok) {   // chua dang nhap: chi cho biet phien ban va can PIN
-        webJson(String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":true,\"auth\":false}");
+        webJson(String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":true,\"auth\":false" + updJson() + "}");
         return;
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
-               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) +
+               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() +
                ",\"bat_mv\":" + String((int)g_bat_mv) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
                ",\"r\":" + String(A_LA_BANH_TRAI ? g_cmd[1] : g_cmd[0]) +
@@ -984,6 +991,8 @@ void loop() {
                 else if (k > 0 && pinHopLe(moi) && (g_pin.length() == 0 || cu == g_pin)) { pinDat(moi); sai = 0; Serial.println("PIN doi tu man hinh"); Serial2.println("P1"); }
                 else { if (++sai >= 5) { sai = 0; khoa_den = millis() + 30000; } Serial2.println("P0"); }
             }
+            else if (line2 == "U1") { g_upd_ds = true; g_upd_ds_den = millis() + 60000; dungHet(); }   // man hinh dang nap ban moi
+            else if (line2 == "U0") { g_upd_ds = false; }
             else if (line2 == "D") nhayBat();       // nhay mua (chi xoay tai cho)
             else if (line2 == "X") dungHet();       // dung (huy nhay)
             else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
