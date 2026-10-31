@@ -102,12 +102,13 @@ public:
         ESP_LOGI("RubiTouch", "raw %u,%u -> screen %d,%d (screen %d)", (unsigned)raw_x, (unsigned)raw_y, sx, sy, (int)screen_);
         switch (screen_) {
         case Screen::kMain: {
-            int t = RubiDisplay::TileAt(sx, sy, 5);
+            int t = RubiDisplay::TileAt(sx, sy, 6);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
             else if (t == 2) { spage_ = 0; LoadStories(); ShowStoryList(); }
-            else if (t == 3) { ShowSettings(); }
-            else if (t == 4) { Close(); }
+            else if (t == 3) { ShowPlay(); }
+            else if (t == 4) { ShowSettings(); }
+            else if (t == 5) { Close(); }
             break;
         }
         case Screen::kSettings: {
@@ -121,6 +122,16 @@ public:
         }
         case Screen::kIp:
             ShowControl();
+            break;
+        case Screen::kPlay: {
+            int r = RubiDisplay::RowAt(sx, sy, 2);
+            if (r == 0) StartDance();
+            else if (r == 1) ShowMain();
+            break;
+        }
+        case Screen::kDance:
+            RubiBattery::Send("X\n", 2);   // stop the dance
+            ShowPlay();
             break;
         case Screen::kCtl: {
             int r = RubiDisplay::RowAt(sx, sy, 3);
@@ -340,7 +351,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -541,6 +552,7 @@ private:
             {&rubi_icon_nghe_nhac, ""},
             {&rubi_icon_song_ngu, ""},
             {&rubi_icon_truyen_tranh, ""},
+            {&rubi_icon_choi_cung, ""},
             {&rubi_icon_cai_dat, ""},
             {&rubi_icon_dong, ""},
         });
@@ -549,6 +561,22 @@ private:
     void ShowSettings() {
         screen_ = Screen::kSettings;
         if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+    }
+
+    // ---------------- play with Rubi ----------------
+    void ShowPlay() {
+        screen_ = Screen::kPlay;
+        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "<< Quay lại"}, "Rubi xoay tại chỗ, không đi đâu");
+    }
+
+    // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.
+    void StartDance() {
+        screen_ = Screen::kDance;
+        if (!RubiBattery::Send("D\n", 2)) {
+            if (display_) display_->MenuShowMessage("Chưa nối được với robot.\nKiểm tra dây TX0/RX0\n\nChạm để quay lại", -1, -1);
+            return;
+        }
+        if (display_) display_->MenuShowMessage("Rubi đang nhảy!\n\nChạm để dừng", -1, -1);
     }
 
     // ---------------- control: QR code and family PIN ----------------

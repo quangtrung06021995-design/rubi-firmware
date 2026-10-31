@@ -122,6 +122,7 @@ uint32_t g_stall_since[2] = {0, 0};
 int32_t g_stall_cnt[2] = {0, 0};
 uint32_t g_cmd_deadline = 0; // het gio thi tu dung (0 = khong dung gio)
 extern String g_pin;   // dinh nghia o duoi (PIN dieu khien)
+bool g_nhay = false;   // dang nhay (lenh "D" tu man hinh); lenh lai xe bat ky se huy
 bool g_pin_thap = false;
 
 void xuatMotor(int ch, int pct) {
@@ -155,6 +156,7 @@ void datToc(int ch, int pct) {
 }
 
 void dungHet() {
+    g_nhay = false;
     for (int ch = 0; ch < 2; ch++) {
         g_target[ch] = 0;
         g_cmd[ch] = 0;
@@ -544,6 +546,44 @@ WebServer g_web(80);
 const char* MDNS_TEN = "rubi";                       // -> http://rubi.local
 const uint32_t WEB_DEADMAN_MS = 500;                 // het 0.5 giay khong co lenh moi thi robot tu dung
 const bool A_LA_BANH_TRAI = false;                   // dat false neu motor A la banh PHAI (nhin tu phia sau robot)
+
+// ---------------- Nhay mua ----------------
+// Chi XOAY TAI CHO (hai banh nguoc chieu) nen robot khong tien/lui, khong roi khoi ban. Moi vong ~9 giay, 3 vong roi tu dung.
+struct BuocNhay { int8_t l, r; uint16_t ms; };
+const BuocNhay NHAY[] = {
+    {45, -45, 700}, {-45, 45, 700}, {0, 0, 150},
+    {50, -50, 220}, {-50, 50, 220}, {50, -50, 220}, {-50, 50, 220}, {0, 0, 150},
+    {55, -55, 1300}, {0, 0, 250}, {-55, 55, 1300}, {0, 0, 400},
+};
+const int NHAY_SO_BUOC = sizeof(NHAY) / sizeof(NHAY[0]);
+const int NHAY_SO_VONG = 3;
+int g_nhay_buoc = 0, g_nhay_vong = 0;
+uint32_t g_nhay_den = 0;
+
+void nhayDatBuoc(int i) {
+    int l = NHAY[i].l, r = NHAY[i].r;
+    datToc(0, A_LA_BANH_TRAI ? l : r);
+    datToc(1, A_LA_BANH_TRAI ? r : l);
+    g_nhay_den = millis() + NHAY[i].ms;
+    g_cmd_deadline = millis() + NHAY[i].ms + 1500;   // neu vong lap ket thi motor van tu dung
+}
+void nhayBat() {
+    if (g_pin_thap) { Serial.println("! Pin yeu, khong nhay"); return; }
+    for (int ch = 0; ch < 2; ch++) g_fault[ch] = false;
+    g_nhay = true; g_nhay_buoc = 0; g_nhay_vong = 0;
+    nhayDatBuoc(0);
+    Serial.println("Bat dau nhay");
+}
+void nhayTick() {   // goi moi 10 ms
+    if (!g_nhay) return;
+    if (g_fault[0] || g_fault[1]) { dungHet(); Serial.println("Nhay dung: motor ket"); return; }
+    if ((int32_t)(millis() - g_nhay_den) < 0) return;
+    if (++g_nhay_buoc >= NHAY_SO_BUOC) {
+        g_nhay_buoc = 0;
+        if (++g_nhay_vong >= NHAY_SO_VONG) { dungHet(); Serial.println("Nhay xong"); return; }
+    }
+    nhayDatBuoc(g_nhay_buoc);
+}
 bool g_web_started = false;
 bool g_mdns_started = false;
 
@@ -655,6 +695,7 @@ void webLogin() {   // /api/login?pin=1234
 
 void webDrive() {   // /api/drive?l=-100..100&r=-100..100[&t=<ma>]
     if (!webAuth()) { webTuChoi(); return; }
+    g_nhay = false;
     int l = constrain(g_web.arg("l").toInt(), -100, 100);
     int r = constrain(g_web.arg("r").toInt(), -100, 100);
     datToc(0, A_LA_BANH_TRAI ? l : r);
@@ -805,10 +846,11 @@ void xuLyLenh(String s) {
     char c = s[0];
     int v = s.substring(1).toInt();
     switch (c) {
+        case 'D': nhayBat(); break;
         case 't': thuTuDong(); break;
-        case 'a': datToc(0, v); g_cmd_deadline = millis() + LENH_TOI_DA_MS; break;
-        case 'b': datToc(1, v); g_cmd_deadline = millis() + LENH_TOI_DA_MS; break;
-        case 'd': datToc(0, v); datToc(1, v); g_cmd_deadline = millis() + LENH_TOI_DA_MS; break;
+        case 'a': g_nhay = false; datToc(0, v); g_cmd_deadline = millis() + LENH_TOI_DA_MS; break;
+        case 'b': g_nhay = false; datToc(1, v); g_cmd_deadline = millis() + LENH_TOI_DA_MS; break;
+        case 'd': g_nhay = false; datToc(0, v); datToc(1, v); g_cmd_deadline = millis() + LENH_TOI_DA_MS; break;
         case 's': dungHet(); Serial.println("Da dung"); break;
         case 'r': noInterrupts(); g_cnt[0] = g_cnt[1] = 0; interrupts(); Serial.println("Da dat lai dem"); break;
         case 'e': inDem(); break;
@@ -894,6 +936,7 @@ void loop() {
         last10 += 10;
         if (now - last10 > 100) last10 = now;
         capNhatMotor();
+        nhayTick();
     }
     doPin();
     wifiTick();
@@ -921,6 +964,8 @@ void loop() {
                 else if (k > 0 && pinHopLe(moi) && (g_pin.length() == 0 || cu == g_pin)) { pinDat(moi); sai = 0; Serial.println("PIN doi tu man hinh"); Serial2.println("P1"); }
                 else { if (++sai >= 5) { sai = 0; khoa_den = millis() + 30000; } Serial2.println("P0"); }
             }
+            else if (line2 == "D") nhayBat();       // nhay mua (chi xoay tai cho)
+            else if (line2 == "X") dungHet();       // dung (huy nhay)
             else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
                 if (line2[0] == 'w') {   // dang w<ten>|<mk> tu man hinh: xu ly nhu mang moi (lap lai thi im lang)
                     String r = line2.substring(1); r.trim();
