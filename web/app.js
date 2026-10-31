@@ -133,14 +133,22 @@ function lockUI(on,t,sub){
   LK.innerHTML='<div><div style="font-size:42px">⏳</div><div id="lkt" style="font-size:22px;font-weight:700;margin:10px 0"></div><div id="lks" style="font-size:15px;opacity:.85;line-height:1.5"></div></div>';document.body.appendChild(LK)}
  if(on){document.getElementById("lkt").textContent=t;document.getElementById("lks").textContent=sub;if(LK.style.display!=="flex"){stopAll();LK.style.display="flex"}}
  else LK.style.display="none"}
+var failAt=0;
 function pollUpd(){api("/api/status").then(function(j){
-  fails=0;okOnce=true;
+  fails=0;failAt=0;okOnce=true;
+  if(!ST||ST.auth!==j.auth){ST=j;render()}else ST=j;
+  conn();
   if(j.upd){lockUI(true,"Đang cập nhật bo màn hình","Đừng tắt nguồn Rubi. Mọi tính năng bị khóa cho đến khi cập nhật xong.")}
   else{var was=LK&&LK.style.display==="flex";lockUI(false);
-   if(was){toast(j.ver&&verPrev&&j.ver!==verPrev?"Cập nhật xong: DevKit bản "+j.ver:"Cập nhật xong, đã mở khóa");refresh()}}
+   if(was){toast(j.ver&&verPrev&&j.ver!==verPrev?"Cập nhật xong: DevKit bản "+j.ver:"Đã nối lại, mở khóa");refresh()}}
   if(j.ver)verPrev=String(j.ver)
  }).catch(function(){
-  if(okOnce&&++fails>=2)lockUI(true,"Đang cập nhật hoặc khởi động lại","Rubi đang nạp bản mới hoặc mất kết nối. Đừng tắt nguồn, trang sẽ tự mở khóa khi Rubi nối lại.")})}
+  if(!okOnce)return;
+  if(++fails<2)return;
+  if(!failAt)failAt=Date.now();
+  if(Date.now()-failAt<45000)lockUI(true,"Đang cập nhật hoặc khởi động lại","Rubi đang nạp bản mới hoặc vừa mất kết nối. Trang sẽ tự mở khóa khi Rubi nối lại.");
+  else{lockUI(false);if(ST){ST=null;render()}}
+  conn()})}
 setInterval(pollUpd,2500);
 refresh();
 }else{var c0=$("conn"),n0=$("demonote");
