@@ -39,6 +39,7 @@
 #include "rubi_learn_data.h"
 #include "rubi_upload.h"
 #include "rubi_sync.h"
+#include "rubi_math.h"
 #include "settings.h"
 
 class RubiMedia {
@@ -136,15 +137,33 @@ public:
             ShowControl();
             break;
         case Screen::kPlay: {
-            int r = RubiDisplay::RowAt(sx, sy, 2);
+            int r = RubiDisplay::RowAt(sx, sy, 3);
             if (r == 0) StartDance();
-            else if (r == 1) ShowMain();
+            else if (r == 1) ShowMathMenu();
+            else if (r == 2) ShowMain();
             break;
         }
         case Screen::kUpload:
             RubiUpload::Stop();
             LoadSongs();
             ShowControl();
+            break;
+        case Screen::kMathMenu: {
+            int r = RubiDisplay::RowAt(sx, sy, 5);
+            if (r >= 0 && r <= 3) StartMath((RubiMath::Mode)r);
+            else if (r == 4) ShowPlay();
+            break;
+        }
+        case Screen::kMathStory:
+            RenderMath("");
+            break;
+        case Screen::kMathKeys:
+            HandleMathTouch(sx, sy);
+            break;
+        case Screen::kMathBusy:
+            break;
+        case Screen::kMathDone:
+            ShowMathMenu();
             break;
         case Screen::kSync:
             sync_cancel_ = true;
@@ -376,7 +395,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -681,10 +700,101 @@ private:
         }
     }
 
+    // ---------------- maths for a first grader ----------------
+    static constexpr int kMathRound = 10;
+    RubiMath::Mode math_mode_ = RubiMath::kWithin10;
+    RubiMath::Q math_q_;
+    std::string math_buf_;
+    int math_idx_ = 0, math_score_ = 0, math_tries_ = 0;
+
+    void ShowMathMenu() {
+        screen_ = Screen::kMathMenu;
+        if (display_) display_->MenuShowList("HỌC TOÁN", {"Cộng trừ trong 10", "Cộng trừ trong 20", "Cộng trừ trong 100", "Toán lời văn", "<< Quay lại"}, "Mỗi lượt 10 câu");
+    }
+
+    void StartMath(RubiMath::Mode m) {
+        math_mode_ = m; math_idx_ = 0; math_score_ = 0;
+        NextMath();
+    }
+
+    void NextMath() {
+        if (math_idx_ >= kMathRound) {
+            screen_ = Screen::kMathDone;
+            const char* praise = math_score_ >= 9 ? "Giỏi quá, tuyệt vời!" : (math_score_ >= 7 ? "Giỏi lắm!" : (math_score_ >= 5 ? "Khá lắm, luyện thêm nhé!" : "Cố lên, mình chơi lại nhé!"));
+            std::string t = "Xong rồi!\nĐúng ngay " + std::to_string(math_score_) + "/" + std::to_string(kMathRound) + " câu\n" + praise + "\n\nChạm để chơi tiếp";
+            if (display_) display_->MenuShowMessage(t.c_str(), -1, -1);
+            return;
+        }
+        math_q_ = RubiMath::Make(math_mode_, math_idx_);
+        math_buf_.clear();
+        math_tries_ = 0;
+        if (!math_q_.story.empty()) {
+            screen_ = Screen::kMathStory;
+            if (display_) display_->MenuShowMessage((std::string("Câu ") + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound) + "\n" + math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1);
+        } else {
+            RenderMath("");
+        }
+    }
+
+    void RenderMath(const std::string& note) {
+        screen_ = Screen::kMathKeys;
+        keys_.clear();
+        const uint32_t kNum = 0xE6F0FF, kSpecial = 0xBBD0F0, kOk = 0xA5D6A7, kCancel = 0xFFC9C9, kStory = 0xFFE082;
+        const int KH = 38, KW = 56, G = 4, X0 = 76;
+        keys_.push_back({4, 2, 64, 22, "< Thoát", 6, "", kCancel});
+        static const char* rows[3] = {"123", "456", "789"};
+        for (int r = 0; r < 3; r++)
+            for (int c = 0; c < 3; c++)
+                keys_.push_back({X0 + c * (KW + G), 56 + r * 41, KW, KH, std::string(1, rows[r][c]), 0, std::string(1, rows[r][c]), kNum});
+        keys_.push_back({X0, 179, KW, KH, "Xóa", 2, "", kSpecial});
+        keys_.push_back({X0 + KW + G, 179, KW, KH, "0", 0, "0", kNum});
+        keys_.push_back({X0 + 2 * (KW + G), 179, KW, KH, "OK", 5, "", kOk});
+        if (!math_q_.story.empty()) keys_.push_back({4, 56, 66, KH, "Đề", 7, "", kStory});
+        std::string head = note.empty() ? ("(" + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound) + ") " + math_q_.ask) : note;
+        std::string shown = math_buf_ + "_";
+        if (display_) display_->MenuShowKeyboard(head, shown, keys_, true);
+    }
+
+    void HandleMathTouch(int sx, int sy) {
+        for (const auto& k : keys_) {
+            if (sx < k.x - 1 || sx >= k.x + k.w + 1 || sy < k.y - 1 || sy >= k.y + k.h + 1) continue;
+            switch (k.kind) {
+            case 0: if (math_buf_.size() < 3) math_buf_ += k.val; RenderMath(""); break;
+            case 2: if (!math_buf_.empty()) math_buf_.pop_back(); RenderMath(""); break;
+            case 6: ShowMathMenu(); break;
+            case 7:
+                screen_ = Screen::kMathStory;
+                if (display_) display_->MenuShowMessage((math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1);
+                break;
+            case 5: if (!math_buf_.empty()) AnswerMath(); break;
+            }
+            return;
+        }
+    }
+
+    void AnswerMath() {
+        int v = atoi(math_buf_.c_str());
+        screen_ = Screen::kMathBusy;
+        bool right = v == math_q_.answer;
+        bool reveal = false;
+        if (right) { if (math_tries_ == 0) math_score_++; }
+        else { math_tries_++; reveal = math_tries_ >= 2; }
+        std::string msg = right ? "Đúng rồi!\nGiỏi quá!" : (reveal ? "Đáp án là " + std::to_string(math_q_.answer) + "\nMình làm câu tiếp nhé" : "Chưa đúng,\nthử lại nhé!");
+        if (display_) display_->MenuShowMessage(msg.c_str(), -1, -1);
+        bool next = right || reveal;
+        RunTask([this, next, ms = (right ? 900 : (reveal ? 2200 : 1100))]() {
+            vTaskDelay(pdMS_TO_TICKS(ms));
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            if (screen_ != Screen::kMathBusy) return;
+            if (next) { math_idx_++; NextMath(); }
+            else { math_buf_.clear(); RenderMath(""); }
+        }, "math_next");
+    }
+
     // ---------------- play with Rubi ----------------
     void ShowPlay() {
         screen_ = Screen::kPlay;
-        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "<< Quay lại"}, "Rubi xoay tại chỗ, không đi đâu");
+        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Học toán", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
     }
 
     // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.
