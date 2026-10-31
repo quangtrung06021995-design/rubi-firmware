@@ -39,7 +39,7 @@ document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function()
  if(LIVE){
   if(b.dataset.g!=="Nhảy múa"){toast("Trò này chưa có trên Rubi");return}
   api("/api/dance").then(function(j){
-   if(j&&j.ok){document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Rubi đang nhảy múa (xoay tại chỗ, khoảng 30 giây). Nhớ để robot ở chỗ rộng.";toast("Rubi đang nhảy múa")}
+   if(j&&j.ok){document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Rubi đang nhảy múa (xoay tại chỗ) cho đến khi bạn bấm Dừng lại, tối đa 10 phút. Nhớ để robot ở chỗ rộng.";toast("Rubi đang nhảy múa")}
    else if(j&&j.err==="pin")toast("Pin yếu, Rubi không nhảy được");
   }).catch(function(){toast("Không gọi được Rubi")});
   return}

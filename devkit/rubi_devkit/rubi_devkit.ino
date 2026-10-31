@@ -556,7 +556,7 @@ const BuocNhay NHAY[] = {
     {55, -55, 1300}, {0, 0, 250}, {-55, 55, 1300}, {0, 0, 400},
 };
 const int NHAY_SO_BUOC = sizeof(NHAY) / sizeof(NHAY[0]);
-const int NHAY_SO_VONG = 3;
+const int NHAY_SO_VONG = 65;   // moi vong ~9 giay: nhay den khi bam Dung, toi da ~10 phut cho an toan
 int g_nhay_buoc = 0, g_nhay_vong = 0;
 uint32_t g_nhay_den = 0;
 
@@ -577,6 +577,7 @@ void nhayBat() {
 void nhayTick() {   // goi moi 10 ms
     if (!g_nhay) return;
     if (g_fault[0] || g_fault[1]) { dungHet(); Serial.println("Nhay dung: motor ket"); return; }
+    if (g_pin_thap) { dungHet(); Serial.println("Nhay dung: pin yeu"); return; }
     if ((int32_t)(millis() - g_nhay_den) < 0) return;
     if (++g_nhay_buoc >= NHAY_SO_BUOC) {
         g_nhay_buoc = 0;
