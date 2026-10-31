@@ -37,6 +37,7 @@
 #include "rubi_face.h"
 #include "rubi_icons.h"
 #include "rubi_learn_data.h"
+#include "rubi_upload.h"
 #include "settings.h"
 
 class RubiMedia {
@@ -129,15 +130,21 @@ public:
             else if (r == 1) ShowMain();
             break;
         }
+        case Screen::kUpload:
+            RubiUpload::Stop();
+            LoadSongs();
+            ShowControl();
+            break;
         case Screen::kDance:
             RubiBattery::Send("X\n", 2);   // stop the dance
             ShowPlay();
             break;
         case Screen::kCtl: {
-            int r = RubiDisplay::RowAt(sx, sy, 3);
+            int r = RubiDisplay::RowAt(sx, sy, 4);
             if (r == 0) ShowRobotAddress();
             else if (r == 1) StartPinChange();
-            else if (r == 2) ShowSettings();
+            else if (r == 2) StartUpload();
+            else if (r == 3) ShowSettings();
             break;
         }
         case Screen::kPinKeys:
@@ -351,7 +358,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -563,6 +570,28 @@ private:
         if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "<< Quay lại"}, "");
     }
 
+    // ---------------- phone -> Rubi music upload ----------------
+    static std::string OwnIp() {
+        esp_netif_t* nif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+        esp_netif_ip_info_t info;
+        if (!nif || esp_netif_get_ip_info(nif, &info) != ESP_OK || info.ip.addr == 0) return std::string();
+        char b[20];
+        snprintf(b, sizeof(b), "%d.%d.%d.%d", (int)(info.ip.addr & 0xFF), (int)((info.ip.addr >> 8) & 0xFF), (int)((info.ip.addr >> 16) & 0xFF), (int)((info.ip.addr >> 24) & 0xFF));
+        return std::string(b);
+    }
+
+    void StartUpload() {
+        screen_ = Screen::kUpload;   // any touch goes back (also after an error message)
+        if (!display_) return;
+        std::string ip = OwnIp();
+        if (ip.empty()) { display_->MenuShowMessage("Rubi chưa có Wi-Fi.\nVào Cài đặt > Wi-Fi\n\nChạm để quay lại", -1, -1); return; }
+        if (!MountSd()) { display_->MenuShowMessage("Không đọc được thẻ nhớ.\n\nChạm để quay lại", -1, -1); return; }
+        char code[8];
+        snprintf(code, sizeof(code), "%04u", (unsigned)(esp_random() % 10000));
+        if (!RubiUpload::Start(code)) { display_->MenuShowMessage("Không bật được máy chủ.\n\nChạm để quay lại", -1, -1); return; }
+        display_->MenuShowQr(("http://" + ip).c_str(), (std::string("Quét bằng\nđiện thoại\n(cùng Wi-Fi)\nMã: ") + code + "\n\nChạm để\nthoát").c_str());
+    }
+
     // ---------------- play with Rubi ----------------
     void ShowPlay() {
         screen_ = Screen::kPlay;
@@ -584,7 +613,7 @@ private:
         screen_ = Screen::kCtl;
         int has = RubiBattery::PinSet();
         std::string hint = has == 1 ? "Robot đang có mã PIN" : (has == 0 ? "CHƯA có PIN: ai cũng điều khiển được!" : "Chưa biết PIN (robot chưa trả lời)");
-        if (display_) display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "<< Quay lại"}, hint.c_str());
+        if (display_) display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "<< Quay lại"}, hint.c_str());
     }
 
     std::string pin_old_, pin_new_, pin_buf_;
