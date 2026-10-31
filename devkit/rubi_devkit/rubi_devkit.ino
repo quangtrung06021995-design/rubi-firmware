@@ -320,6 +320,11 @@ String g_ssid, g_pass;            // mang dang noi / dang thu
 bool g_ota_started = false;
 uint32_t g_upd_ds_den = 0;   // bo man hinh bao dang cap nhat ("U1"), het han sau 60 s neu khong nhac lai
 bool g_upd_ds = false;
+// Danh sach truyen tren the nho (bo man hinh gui: "TC<n>" roi "T<thu muc>\t<ten>")
+#define MAX_TRUYEN 16
+String g_ty_id[MAX_TRUYEN], g_ty_ten[MAX_TRUYEN];
+int g_ty_n = 0, g_ty_dang = 0;
+bool g_ty_co = false;
 bool g_wifi_was = false;
 uint32_t g_auto_at = 0;      // thoi diem tu kiem tra GitHub (0 = chua dat / da xong)
 bool g_auto_done = false;
@@ -723,6 +728,40 @@ void webStop() {
     dungHet();
     webJson("{\"ok\":true}");
 }
+static String jsonThoat(const String& v) {
+    String o;
+    for (unsigned i = 0; i < v.length(); i++) {
+        char c = v[i];
+        if (c == '"' || c == '\\') { o += '\\'; o += c; }
+        else if ((uint8_t)c >= 32) o += c;
+    }
+    return o;
+}
+
+void webTruyen() {   // /api/truyen : danh sach truyen tren the nho; /api/truyen?mo=<thu muc> : mo truyen do tren man hinh Rubi
+    if (!webAuth()) { webTuChoi(); return; }
+    String mo = g_web.arg("mo");
+    if (mo.length()) {
+        for (int i = 0; i < g_ty_n; i++) {
+            if (g_ty_id[i] == mo) {
+                dungHet();
+                Serial2.printf("O%s\n", mo.c_str());
+                webJson("{\"ok\":true}");
+                return;
+            }
+        }
+        webJson("{\"ok\":false,\"err\":\"khong thay truyen\"}");
+        return;
+    }
+    String j = String("{\"ok\":true,\"co\":") + (g_ty_co ? "true" : "false") + ",\"list\":[";
+    for (int i = 0; i < g_ty_n; i++) {
+        if (i) j += ",";
+        j += String("{\"id\":\"") + jsonThoat(g_ty_id[i]) + "\",\"t\":\"" + jsonThoat(g_ty_ten[i]) + "\"}";
+    }
+    j += "]}";
+    webJson(j);
+}
+
 void webDance() {   // /api/dance[?t=<ma>] : spin on the spot for ~28 s, /api/stop or any drive command cancels
     if (!webAuth()) { webTuChoi(); return; }
     if (g_pin_thap) { webJson("{\"ok\":false,\"err\":\"pin\"}"); return; }
@@ -755,6 +794,7 @@ void webBatDau() {
     g_web.on("/api/drive", HTTP_GET, webDrive);
     g_web.on("/api/stop", HTTP_GET, webStop);
     g_web.on("/api/dance", HTTP_GET, webDance);
+    g_web.on("/api/truyen", HTTP_GET, webTruyen);
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
     g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });
@@ -990,6 +1030,11 @@ void loop() {
                 if (k > 0 && (int32_t)(khoa_den - millis()) > 0) { Serial2.println("P0"); }
                 else if (k > 0 && pinHopLe(moi) && (g_pin.length() == 0 || cu == g_pin)) { pinDat(moi); sai = 0; Serial.println("PIN doi tu man hinh"); Serial2.println("P1"); }
                 else { if (++sai >= 5) { sai = 0; khoa_den = millis() + 30000; } Serial2.println("P0"); }
+            }
+            else if (line2.length() >= 3 && line2[0] == 'T' && line2[1] == 'C') { g_ty_dang = 0; g_ty_n = 0; g_ty_co = true; }   // bat dau danh sach moi
+            else if (line2.length() > 3 && line2[0] == 'T') {
+                int k = line2.indexOf('\t');
+                if (k > 1 && g_ty_dang < MAX_TRUYEN) { g_ty_id[g_ty_dang] = line2.substring(1, k); g_ty_ten[g_ty_dang] = line2.substring(k + 1); g_ty_dang++; g_ty_n = g_ty_dang; }
             }
             else if (line2 == "U1") { g_upd_ds = true; g_upd_ds_den = millis() + 60000; dungHet(); }   // man hinh dang nap ban moi
             else if (line2 == "U0") { g_upd_ds = false; }

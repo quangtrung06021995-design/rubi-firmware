@@ -126,6 +126,20 @@ function refresh(){return api("/api/status").then(function(j){ST=j}).catch(funct
 function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"}
 addEventListener("hashchange",function(){if(watching())refresh()});
 setInterval(function(){if(!document.hidden&&watching())refresh()},5000);
+/* ---- Truyện tranh thật: danh sách từ thẻ nhớ của Rubi (qua DevKit), bấm để mở trên màn hình Rubi ---- */
+var tyKey="";
+function loadTruyen(){var c=document.querySelector("#v-truyen-tranh .card");if(!c)return;
+ api("/api/truyen").then(function(j){
+  if(j&&j.err==="pin")return;
+  var l=(j&&j.list)||[],k=JSON.stringify(l)+(j&&j.co);if(k===tyKey)return;tyKey=k;
+  if(!l.length){c.innerHTML='<h2>Truyện tranh</h2>'+note(j&&j.co?"Thẻ nhớ của Rubi chưa có truyện nào.":"Chưa nhận được danh sách từ bo màn hình. Bo gửi mỗi 20 giây khi đang rảnh, đợi một chút rồi thử lại.")}
+  else c.innerHTML='<h2>Truyện tranh ('+l.length+')</h2><div class="list">'+l.map(function(b){return '<div class="item"><div class="t">'+esc(b.t)+'</div><button class="btn" data-id="'+esc(b.id)+'">▶ Mở trên Rubi</button></div>'}).join("")+'</div>'+note("Truyện sẽ hiện và được đọc trên màn hình Rubi. Muốn dừng, chạm vào màn hình Rubi.");
+ }).catch(function(){})}
+document.addEventListener("click",function(e){var b=e.target.closest("#v-truyen-tranh button[data-id]");if(!b)return;
+ b.disabled=true;api("/api/truyen?mo="+encodeURIComponent(b.dataset.id)).then(function(j){toast(j&&j.ok?"Đã gửi lệnh, xem màn hình Rubi":"Không mở được truyện")}).catch(function(){toast("Không gọi được Rubi")}).then(function(){setTimeout(function(){b.disabled=false},2500)})});
+addEventListener("hashchange",function(){if((location.hash||"").slice(1)==="truyen-tranh")loadTruyen()});
+setInterval(function(){if(!document.hidden&&(location.hash||"").slice(1)==="truyen-tranh")loadTruyen()},5000);
+if((location.hash||"").slice(1)==="truyen-tranh")loadTruyen();
 /* ---- Khóa khi đang cập nhật: bo màn hình báo "upd" qua DevKit; DevKit tự nạp/khởi động lại thì mất kết nối nên cũng khóa ---- */
 var LK=null,okOnce=false,fails=0,verPrev="";
 function lockUI(on,t,sub){

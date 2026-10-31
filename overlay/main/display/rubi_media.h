@@ -55,6 +55,8 @@ public:
         if (!started && d != nullptr) {
             started = true;
             xTaskCreatePinnedToCore(&RubiMedia::AutoSyncTask, "rubi_autosync", 10240, this, 2, nullptr, 1);
+            xTaskCreatePinnedToCore(&RubiMedia::StoryReportTask, "rubi_storyrep", 6144, this, 2, nullptr, 1);
+            RubiBattery::OnOpenStory() = [](const std::string& dir) { RubiMedia::Get().RemoteOpenStory(dir); };
         }
     }
     void SetWifiCallback(std::function<void()> cb) { wifi_cb_ = std::move(cb); }
@@ -699,6 +701,82 @@ private:
             if (OwnIp().empty()) continue;
             self->RunSync(false);
         }
+    }
+
+    // ---------------- web control page: story list out, "open this story" in ----------------
+    // Every ~20 s while idle Rubi tells the DevKit which stories are on the card ("TC<n>" then "T<dir>\t<title>" lines),
+    // so the web page can list them. The web page asks the DevKit to open one with "O<dir>".
+    static void StoryReportTask(void* arg) {
+        RubiMedia* self = static_cast<RubiMedia*>(arg);
+        vTaskDelay(pdMS_TO_TICKS(20000));
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(20000));
+            self->ReportStories();
+        }
+    }
+
+    void ReportStories() {
+        if (IsOpen() || playing_ || syncing_) return;
+        if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) return;
+        bool expected = false;
+        if (!syncing_.compare_exchange_strong(expected, true)) return;   // shares the "SD busy" flag with the store sync
+        sync_cancel_ = false;
+        std::vector<Story> keep = stories_;
+        bool mounted_here = (card_ == nullptr);
+        bool ok = !IsOpen() && MountSd();
+        if (ok) LoadStories();
+        std::vector<Story> list = stories_;
+        stories_ = keep;
+        if (mounted_here && !IsOpen() && !playing_) UnmountSd();
+        syncing_ = false;
+        if (!ok) return;
+        std::vector<Story> use;
+        for (auto& st : list) {
+            if (st.dir.size() > 40 || st.dir.find('\t') != std::string::npos) continue;
+            bool ascii = true;
+            for (unsigned char c : st.dir) if (c < 33 || c > 126) ascii = false;
+            if (ascii && use.size() < 16) use.push_back(st);
+        }
+        std::string head = "TC" + std::to_string(use.size()) + "\n";
+        if (!RubiBattery::Send(head.c_str(), head.size())) return;
+        for (auto& st : use) {
+            std::string t = st.title;
+            for (auto& c : t) if (c == '\t' || c == '\n' || c == '\r') c = ' ';
+            if (t.size() > 48) {   // cut on a UTF-8 character boundary
+                size_t n = 48;
+                while (n > 0 && ((unsigned char)t[n] & 0xC0) == 0x80) n--;
+                t.resize(n);
+            }
+            std::string line = "T" + st.dir + "\t" + t + "\n";
+            RubiBattery::Send(line.c_str(), line.size());
+            vTaskDelay(pdMS_TO_TICKS(30));
+        }
+    }
+
+    void RemoteOpenStory(const std::string& dir) {
+        RunTask([this, dir]() {
+            if (display_ == nullptr) return;
+            if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) return;
+            if (!IsOpen()) {
+                sync_cancel_ = true;
+                for (int i = 0; i < 150 && syncing_; i++) vTaskDelay(pdMS_TO_TICKS(20));
+                if (syncing_) return;
+                Application::GetInstance().GetAudioService().EnableWakeWordDetection(false);
+                LoadCalibration();
+            } else if (screen_ == Screen::kCalib1 || screen_ == Screen::kCalib2 || screen_ == Screen::kCalib3 || screen_ == Screen::kCalib4) {
+                return;
+            }
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            StopPlayback();
+            scene_gen_++;
+            if (!MountSd()) { screen_ = Screen::kStoryEmpty; display_->MenuShowMessage("Không đọc được thẻ nhớ\n\nChạm để quay lại", -1, -1); return; }
+            LoadStories();
+            for (int i = 0; i < (int)stories_.size(); i++) {
+                if (stories_[i].dir == dir) { OpenStory(i); return; }
+            }
+            screen_ = Screen::kStoryEmpty;
+            display_->MenuShowMessage("Không thấy truyện này\n\nChạm để quay lại", -1, -1);
+        }, "rubi_remote");
     }
 
     // ---------------- maths for a first grader ----------------

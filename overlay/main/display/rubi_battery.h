@@ -56,6 +56,9 @@ public:
         return 100;
     }
 
+    // The DevKit passes on "open this story" from the web page: "O<folder name>\n".
+    static std::function<void(const std::string&)>& OnOpenStory() { static std::function<void(const std::string&)> f; return f; }
+
     static int PinSet() { return PinSetRef().load(); }
     static void PinReplyClear() { PinReplyRef().store(-1); }
     static int PinReply() { return PinReplyRef().load(); }
@@ -81,7 +84,7 @@ private:
             return;
         }
         Ready().store(true);
-        char line[24];
+        char line[64];
         int n = 0;
         float mv_avg = 0;
         int64_t last_ok = 0;
@@ -97,6 +100,7 @@ private:
                         memcpy(IpBuf(), line + 1, n);   // includes the terminating 0
                         IpAt().store(now);
                     }
+                    if (n >= 2 && n <= 41 && line[0] == 'O' && OnOpenStory()) OnOpenStory()(std::string(line + 1));
                     if (n == 2 && line[0] == 'K' && (line[1] == '0' || line[1] == '1')) PinSetRef().store(line[1] - '0');
                     if (n == 2 && line[0] == 'P' && (line[1] == '0' || line[1] == '1')) PinReplyRef().store(line[1] - '0');
                     if (n >= 2 && line[0] == 'B') {
