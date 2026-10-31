@@ -1,14 +1,8 @@
 {
   "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        }
-      ]
-    }
+    { "source": "/(.*)", "headers": [ { "key": "Access-Control-Allow-Origin", "value": "*" } ] }
   ],
-  "cleanUrls": true
+  "rewrites": [
+    { "source": "/kho", "destination": "/kho.html" }
+  ]
 }
