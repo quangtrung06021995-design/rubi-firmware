@@ -137,7 +137,7 @@ public:
             ShowControl();
             break;
         case Screen::kPlay: {
-            int r = RubiDisplay::RowAt(sx, sy, 3);
+            int r = RubiDisplay::TileAt(sx, sy, 3);
             if (r == 0) StartDance();
             else if (r == 1) ShowMathMenu();
             else if (r == 2) ShowMain();
@@ -794,7 +794,7 @@ private:
     // ---------------- play with Rubi ----------------
     void ShowPlay() {
         screen_ = Screen::kPlay;
-        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Học toán", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
+        if (display_) display_->MenuShowTiles({{nullptr, "Nhảy múa"}, {&rubi_icon_toan_lop1, ""}, {&rubi_icon_dong, "Quay lại"}});
     }
 
     // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.
