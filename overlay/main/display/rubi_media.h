@@ -726,13 +726,19 @@ private:
         std::string prompt = "Hãy đọc to, đúng từng chữ, không giải bài, không thêm lời nào khác: " + text;
         RunTask([this, prompt, gen]() {
             auto& app = Application::GetInstance();
+            auto fail = [this, gen](const std::string& why) {
+                if (gen != say_gen_) return;
+                std::lock_guard<std::recursive_mutex> lk(mutex_);
+                if (screen_ == Screen::kMathKeys) RenderMath("Chưa có giọng: " + why);
+            };
             for (int i = 0; i < 20; i++) {   // bring the assistant back to idle first (stops a previous reading)
                 if (gen != say_gen_) return;
                 if (app.GetDeviceState() == kDeviceStateIdle) break;
                 app.WakeWordInvoke("");
                 vTaskDelay(pdMS_TO_TICKS(300));
             }
-            if (gen != say_gen_ || app.GetDeviceState() != kDeviceStateIdle) return;
+            if (gen != say_gen_) return;
+            if (app.GetDeviceState() != kDeviceStateIdle) { fail("không về trạng thái rảnh, state=" + std::to_string((int)app.GetDeviceState())); return; }
             app.WakeWordInvoke(prompt);
             bool spoke = false;
             std::string trace = "I";   // states seen, e.g. I C L S: Idle, Connecting, Listening, Speaking
