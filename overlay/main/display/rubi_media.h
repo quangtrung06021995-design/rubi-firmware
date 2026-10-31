@@ -38,6 +38,7 @@
 #include "rubi_icons.h"
 #include "rubi_learn_data.h"
 #include "rubi_upload.h"
+#include "rubi_sync.h"
 #include "settings.h"
 
 class RubiMedia {
@@ -47,7 +48,14 @@ public:
         return m;
     }
 
-    void SetDisplay(RubiDisplay* d) { display_ = d; }
+    void SetDisplay(RubiDisplay* d) {
+        display_ = d;
+        static bool started = false;
+        if (!started && d != nullptr) {
+            started = true;
+            xTaskCreatePinnedToCore(&RubiMedia::AutoSyncTask, "rubi_autosync", 10240, this, 2, nullptr, 1);
+        }
+    }
     void SetWifiCallback(std::function<void()> cb) { wifi_cb_ = std::move(cb); }
     bool IsOpen() const { return screen_ != Screen::kNone; }
     bool CalibrationValid() { LoadCalibration(); return cal_.valid; }
@@ -55,6 +63,9 @@ public:
     void OpenMenu() {
         if (display_ == nullptr || IsOpen()) return;
         if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) return;
+        sync_cancel_ = true;   // a background store sync must stop before the menu uses the SD card
+        for (int i = 0; i < 150 && syncing_; i++) vTaskDelay(pdMS_TO_TICKS(20));
+        if (syncing_) return;
         Application::GetInstance().GetAudioService().EnableWakeWordDetection(false);
         LoadCalibration();
         if (cal_.valid) ShowMain(); else StartCalibration();
@@ -135,16 +146,23 @@ public:
             LoadSongs();
             ShowControl();
             break;
+        case Screen::kSync:
+            sync_cancel_ = true;
+            for (int i = 0; i < 150 && syncing_; i++) vTaskDelay(pdMS_TO_TICKS(20));
+            LoadSongs();
+            ShowControl();
+            break;
         case Screen::kDance:
             RubiBattery::Send("X\n", 2);   // stop the dance
             ShowPlay();
             break;
         case Screen::kCtl: {
-            int r = RubiDisplay::RowAt(sx, sy, 4);
+            int r = RubiDisplay::RowAt(sx, sy, 5);
             if (r == 0) ShowRobotAddress();
             else if (r == 1) StartPinChange();
             else if (r == 2) StartUpload();
-            else if (r == 3) ShowSettings();
+            else if (r == 3) StartSync();
+            else if (r == 4) ShowSettings();
             break;
         }
         case Screen::kPinKeys:
@@ -358,7 +376,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -592,6 +610,77 @@ private:
         display_->MenuShowQr(("http://" + ip).c_str(), (std::string("Quét bằng\nđiện thoại\n(cùng Wi-Fi)\nMã: ") + code + "\n\nChạm để\nthoát").c_str());
     }
 
+    // ---------------- store ("Kho") sync: Rubi downloads new songs / stories by itself ----------------
+    std::atomic<bool> syncing_{false};
+    std::atomic<bool> sync_cancel_{false};
+    int64_t last_sync_ok_ms_ = 0;     // 0 = never
+    int64_t last_sync_try_ms_ = 0;
+
+    static std::string SyncText(const RubiSync::Result& r) {
+        if (!r.catalog_ok) return "Chưa tải được kho:\n" + r.err;
+        std::string t = r.interrupted ? "Đã dừng giữa chừng\n" : "Xong!\n";
+        t += "Tải mới: " + std::to_string(r.downloaded) + "\nĐã xóa: " + std::to_string(r.deleted);
+        if (r.failed) t += "\nLỗi: " + std::to_string(r.failed) + " tệp";
+        if (r.low_space) t += "\nThẻ nhớ sắp đầy!";
+        return t;
+    }
+
+    // Runs one sync. manual = started from the menu (the SD card is already mounted and the menu is open).
+    void RunSync(bool manual) {
+        bool expected = false;
+        if (!syncing_.compare_exchange_strong(expected, true)) return;
+        sync_cancel_ = false;
+        bool mounted_here = (card_ == nullptr);
+        RubiSync::Result res;
+        if (MountSd()) {
+            res = RubiSync::Once([this, manual]() {
+                if (sync_cancel_) return false;
+                if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) return false;
+                if (!manual && (IsOpen() || playing_)) return false;
+                return true;
+            });
+        } else {
+            res.err = "khong doc duoc the nho";
+        }
+        last_sync_try_ms_ = esp_timer_get_time() / 1000;
+        if (res.catalog_ok && !res.interrupted) last_sync_ok_ms_ = last_sync_try_ms_;
+        if (mounted_here && !IsOpen() && !playing_) UnmountSd();
+        syncing_ = false;
+        if (manual && screen_ == Screen::kSync && display_ && !sync_cancel_) {
+            display_->MenuShowMessage((SyncText(res) + "\n\nChạm để quay lại").c_str(), -1, -1);
+        }
+        ESP_LOGI("RubiSync", "done: ok=%d new=%d del=%d fail=%d int=%d low=%d %s", (int)res.catalog_ok, res.downloaded, res.deleted, res.failed, (int)res.interrupted, (int)res.low_space, res.err.c_str());
+    }
+
+    void StartSync() {
+        screen_ = Screen::kSync;
+        if (!display_) return;
+        if (OwnIp().empty()) { display_->MenuShowMessage("Rubi chưa có Wi-Fi.\nVào Cài đặt > Wi-Fi\n\nChạm để quay lại", -1, -1); return; }
+        if (syncing_) { display_->MenuShowMessage("Đang đồng bộ...\n\nChạm để dừng", -1, -1); return; }
+        display_->MenuShowMessage("Đang đồng bộ kho...\nRubi tải nhạc, truyện mới\n\nChạm để dừng", -1, -1);
+        BaseType_t ok = xTaskCreatePinnedToCore([](void* a) {
+            static_cast<RubiMedia*>(a)->RunSync(true);
+            vTaskDelete(nullptr);
+        }, "rubi_sync", 10240, this, 3, nullptr, 1);
+        if (ok != pdPASS) display_->MenuShowMessage("Không bắt đầu được.\n\nChạm để quay lại", -1, -1);
+    }
+
+    // Quietly checks the store every ~6 hours (retry after 30 min on failure) while Rubi is idle and the menu is closed.
+    static void AutoSyncTask(void* arg) {
+        RubiMedia* self = static_cast<RubiMedia*>(arg);
+        vTaskDelay(pdMS_TO_TICKS(90000));
+        while (true) {
+            vTaskDelay(pdMS_TO_TICKS(30000));
+            int64_t now = esp_timer_get_time() / 1000;
+            bool due = self->last_sync_ok_ms_ == 0 ? (now - self->last_sync_try_ms_ > 1800000 || self->last_sync_try_ms_ == 0)
+                                                    : (now - self->last_sync_ok_ms_ > 6 * 3600 * 1000LL);
+            if (!due || self->IsOpen() || self->playing_ || self->syncing_) continue;
+            if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) continue;
+            if (OwnIp().empty()) continue;
+            self->RunSync(false);
+        }
+    }
+
     // ---------------- play with Rubi ----------------
     void ShowPlay() {
         screen_ = Screen::kPlay;
@@ -613,7 +702,7 @@ private:
         screen_ = Screen::kCtl;
         int has = RubiBattery::PinSet();
         std::string hint = has == 1 ? "Robot đang có mã PIN" : (has == 0 ? "CHƯA có PIN: ai cũng điều khiển được!" : "Chưa biết PIN (robot chưa trả lời)");
-        if (display_) display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "<< Quay lại"}, hint.c_str());
+        if (display_) display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "Đồng bộ kho ngay", "<< Quay lại"}, hint.c_str());
     }
 
     std::string pin_old_, pin_new_, pin_buf_;
