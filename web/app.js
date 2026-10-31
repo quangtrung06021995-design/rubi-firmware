@@ -110,12 +110,14 @@ function render(){
  if(al){al.style.display=dkNew?"":"none";if(dkNew){var b=al.querySelector("b");if(b)b.textContent="DevKit có bản mới "+LAT.dk+".";var sp=al.querySelector("span");if(sp&&sp.lastChild&&sp.lastChild.nodeType===3)sp.lastChild.textContent=" Robot sẽ tự cập nhật khi bật nguồn lại."}}
  if(dt)dt.style.display=dkNew?"":"none"}
 function conn(){var c=$("conn"),n=$("demonote");
- if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa nối");
+ if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
  if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Các mục còn lại (đèn, trò chơi, bài hát, truyện, thẻ nhớ, camera) vẫn là mẫu."}
 function refresh(){return api("/api/status").then(function(j){ST=j}).catch(function(){ST=null}).then(loadLat).then(function(){render();conn()})}
 function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"}
 addEventListener("hashchange",function(){if(watching())refresh()});
 setInterval(function(){if(!document.hidden&&watching())refresh()},5000);
 refresh();
-}
+}else{var c0=$("conn"),n0=$("demonote");
+ if(c0){c0.className="pill warn";c0.innerHTML="<b></b>Chưa kết nối với Rubi"}
+ if(n0)n0.innerHTML="<b>Chưa kết nối với Rubi.</b> Bạn đang xem bản mẫu: số liệu và nút bấm chưa điều khiển robot. Để điều khiển, nối điện thoại vào cùng Wi-Fi với Rubi rồi mở <b>http://rubi.local</b> hoặc quét mã QR trên màn hình của Rubi."}
 })();
