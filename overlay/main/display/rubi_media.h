@@ -735,12 +735,24 @@ private:
             if (gen != say_gen_ || app.GetDeviceState() != kDeviceStateIdle) return;
             app.WakeWordInvoke(prompt);
             bool spoke = false;
+            std::string trace = "I";   // states seen, e.g. I C L S: Idle, Connecting, Listening, Speaking
+            auto last = kDeviceStateIdle;
             for (int i = 0; i < 120 && gen == say_gen_; i++) {
                 vTaskDelay(pdMS_TO_TICKS(250));
                 auto st = app.GetDeviceState();
+                if (st != last && trace.size() < 14) {
+                    last = st;
+                    trace += ' ';
+                    trace += st == kDeviceStateIdle ? 'I' : st == kDeviceStateConnecting ? 'C' : st == kDeviceStateListening ? 'L' : st == kDeviceStateSpeaking ? 'S' : '?';
+                }
                 if (st == kDeviceStateSpeaking) spoke = true;
                 if (spoke && st == kDeviceStateListening) { app.WakeWordInvoke(""); break; }   // reading finished: stop listening
                 if (spoke && st == kDeviceStateIdle) break;
+                if (!spoke && i == 48) break;   // 12 s and still no voice
+            }
+            if (!spoke && gen == say_gen_) {   // tell what happened, so it can be fixed
+                std::lock_guard<std::recursive_mutex> lk(mutex_);
+                if (screen_ == Screen::kMathKeys) RenderMath("Chưa có giọng: " + trace);
             }
         }, "math_say");
     }
