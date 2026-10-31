@@ -115,13 +115,14 @@ public:
         ESP_LOGI("RubiTouch", "raw %u,%u -> screen %d,%d (screen %d)", (unsigned)raw_x, (unsigned)raw_y, sx, sy, (int)screen_);
         switch (screen_) {
         case Screen::kMain: {
-            int t = RubiDisplay::TileAt(sx, sy, 6);
+            int t = RubiDisplay::TileAt(sx, sy, 7);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
             else if (t == 2) { spage_ = 0; LoadStories(); ShowStoryList(); }
-            else if (t == 3) { ShowPlay(); }
-            else if (t == 4) { ShowSettings(); }
-            else if (t == 5) { Close(); }
+            else if (t == 3) { ShowMathMenu(); }
+            else if (t == 4) { ShowPlay(); }
+            else if (t == 5) { ShowSettings(); }
+            else if (t == 6) { Close(); }
             break;
         }
         case Screen::kSettings: {
@@ -137,10 +138,9 @@ public:
             ShowControl();
             break;
         case Screen::kPlay: {
-            int r = RubiDisplay::TileAt(sx, sy, 3);
+            int r = RubiDisplay::RowAt(sx, sy, 2);
             if (r == 0) StartDance();
-            else if (r == 1) ShowMathMenu();
-            else if (r == 2) ShowMain();
+            else if (r == 1) ShowMain();
             break;
         }
         case Screen::kUpload:
@@ -151,7 +151,7 @@ public:
         case Screen::kMathMenu: {
             int r = RubiDisplay::RowAt(sx, sy, 5);
             if (r >= 0 && r <= 3) StartMath((RubiMath::Mode)r);
-            else if (r == 4) ShowPlay();
+            else if (r == 4) ShowMain();
             break;
         }
         case Screen::kMathStory:
@@ -596,6 +596,7 @@ private:
             {&rubi_icon_nghe_nhac, ""},
             {&rubi_icon_song_ngu, ""},
             {&rubi_icon_truyen_tranh, ""},
+            {&rubi_icon_toan_lop1, ""},
             {&rubi_icon_choi_cung, ""},
             {&rubi_icon_cai_dat, ""},
             {&rubi_icon_dong, ""},
@@ -831,7 +832,7 @@ private:
     // ---------------- play with Rubi ----------------
     void ShowPlay() {
         screen_ = Screen::kPlay;
-        if (display_) display_->MenuShowTiles({{nullptr, "Nhảy múa"}, {&rubi_icon_toan_lop1, ""}, {&rubi_icon_dong, "Quay lại"}});
+        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
     }
 
     // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.

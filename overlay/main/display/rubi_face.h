@@ -202,7 +202,7 @@ public:
         const lv_image_dsc_t* icon;
         std::string label;
     };
-    static constexpr int kMaxTiles = 6;
+    static constexpr int kMaxTiles = 8;
     static constexpr int kMenuRows = 5;
 
     // Hit tests in screen coordinates (320x240). Return the index or -1.
@@ -211,8 +211,13 @@ public:
 
     static int TileAt(int x, int y, int count) {
         for (int i = 0; i < count && i < kMaxTiles; i++) {
-            int x0 = 8 + (i % 3) * 102, y0 = 4 + (i / 3) * 118;
-            if (x >= x0 && x < x0 + 100 && y >= y0 && y < y0 + 114) return i;
+            if (count > 6) {   // 4 columns when there are more than 6 tiles
+                int x0 = 4 + (i % 4) * 78, y0 = 6 + (i / 4) * 118;
+                if (x >= x0 && x < x0 + 76 && y >= y0 && y < y0 + 114) return i;
+            } else {
+                int x0 = 8 + (i % 3) * 102, y0 = 4 + (i / 3) * 118;
+                if (x >= x0 && x < x0 + 100 && y >= y0 && y < y0 + 114) return i;
+            }
         }
         return -1;
     }
@@ -283,7 +288,17 @@ public:
         DisplayLockGuard lock(this);
         EnsureMenu();
         MenuClearAll();
+        const bool wide = tiles.size() > 6;
         for (int i = 0; i < kMaxTiles; i++) {
+            if (wide) {   // 4 columns, icons drawn at 82 %
+                lv_obj_set_size(tile_box_[i], 76, 112);
+                lv_obj_set_pos(tile_box_[i], 4 + (i % 4) * 78, 6 + (i / 4) * 118);
+                lv_image_set_scale(tile_img_[i], 209);
+            } else {
+                lv_obj_set_size(tile_box_[i], 100, 112);
+                lv_obj_set_pos(tile_box_[i], 8 + (i % 3) * 102, 4 + (i / 3) * 118);
+                lv_image_set_scale(tile_img_[i], 256);
+            }
             if (i < (int)tiles.size()) {
                 if (tiles[i].icon != nullptr) {
                     lv_image_set_src(tile_img_[i], tiles[i].icon);
