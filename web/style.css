@@ -104,3 +104,4 @@ body[data-v="dieu-khien"] .stopbar,body[data-v="dieu-khien"] .note{display:none}
 .pincard h2{margin:0 0 6px}.pincard p{margin:0 0 12px;color:var(--mute)}
 .pincard input{width:100%;font-size:26px;text-align:center;letter-spacing:.3em;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--fg);margin-bottom:12px}
 .hint{color:var(--mute);margin:8px 0}
+html,body,button,.btn{touch-action:manipulation}
