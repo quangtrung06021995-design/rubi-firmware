@@ -598,11 +598,11 @@ h1{font-size:20px;margin:8px 0 2px}p{margin:4px 0 14px;color:#9fb0c0}
 button{height:84px;border:0;border-radius:14px;background:#24384a;color:#fff;font-size:26px;touch-action:none}
 button:active{background:#e0553a}.s{background:#a33}
 </style></head><body>
-<h1>Rubi</h1><p id="st">Đang tải giao diện đầy đủ...</p>
+<div id="basic"><h1>Rubi</h1><p id="st">Đang tải giao diện đầy đủ...</p>
 <div class="g">
 <span></span><button data-l="60" data-r="60">▲</button><span></span>
 <button data-l="-45" data-r="45">◀</button><button class="s" data-l="0" data-r="0">■</button><button data-l="45" data-r="-45">▶</button>
-<span></span><button data-l="-50" data-r="-50">▼</button><span></span></div>
+<span></span><button data-l="-50" data-r="-50">▼</button><span></span></div></div>
 <script>
 var UI='https://rubi-web-eight.vercel.app/',cur=[0,0],tm=null;
 var TK='';try{TK=localStorage.getItem('rubi_t')||''}catch(e){}
@@ -614,10 +614,22 @@ function halt(){clearInterval(tm);tm=null;cur=[0,0];fetch('/api/stop',{cache:'no
 document.querySelectorAll('button').forEach(function(b){
  b.addEventListener('pointerdown',function(e){e.preventDefault();var l=+b.dataset.l,r=+b.dataset.r;if(!l&&!r){halt();return}cur=[l,r];send();if(!tm)tm=setInterval(send,150)});
  ['pointerup','pointercancel','pointerleave'].forEach(function(n){b.addEventListener(n,function(){if(+b.dataset.l||+b.dataset.r)halt()})})});
-(function(){var c=new AbortController(),t=setTimeout(function(){c.abort()},5000);
+(function(){
+ var basic=document.getElementById('basic'),links=[],box=null,done=false;
+ function fail(){if(done)return;done=true;links.forEach(function(l){l.remove()});if(box)box.remove();basic.style.display='';document.getElementById('st').textContent='Chế độ cơ bản (chưa tải được giao diện đầy đủ)'}
+ var c=new AbortController(),t=setTimeout(function(){c.abort()},6000);
  fetch(UI+'index.html',{signal:c.signal,cache:'no-cache'}).then(function(r){if(!r.ok)throw 0;return r.text()}).then(function(h){
-  clearTimeout(t);h=h.replace('<head>','<head><base href="'+UI+'">');document.open();document.write(h);document.close()
- }).catch(function(){document.getElementById('st').textContent='Chế độ cơ bản (chưa có Internet)'})})();
+  clearTimeout(t);
+  var d=new DOMParser().parseFromString(h,'text/html');
+  d.querySelectorAll('link[rel=stylesheet]').forEach(function(l){var n=document.createElement('link');n.rel='stylesheet';n.href=new URL(l.getAttribute('href'),UI).href;document.head.appendChild(n);links.push(n)});
+  var sc=[].map.call(d.body.querySelectorAll('script'),function(x){var u=x.getAttribute('src');x.remove();return u}).filter(function(u){return u});
+  d.body.querySelectorAll('[src]').forEach(function(e){var u=e.getAttribute('src');if(u&&!/^(https?:|data:|#)/.test(u))e.setAttribute('src',new URL(u,UI).href)});
+  box=document.createElement('div');box.id='ui';box.innerHTML=d.body.innerHTML;document.body.appendChild(box);
+  basic.style.display='none';
+  var s=document.createElement('script');s.src=new URL(sc[0],UI).href;
+  s.onload=function(){setTimeout(function(){if(!document.querySelector('#ui .view.on'))fail();else done=true},1500)};
+  s.onerror=fail;document.body.appendChild(s);
+ }).catch(fail)})();
 </script></body></html>)RAW";
 
 static void webJson(const String& j) {
