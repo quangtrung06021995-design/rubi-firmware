@@ -81,6 +81,10 @@ const bool CO_MODULE_DO_PIN = false;
 const float TI_LE_CHIA = 5.0f;           // module 30k/7.5k
 const float HE_SO_HIEU_CHINH = 1.000f;   // do pin bang dong ho van nang roi sua so nay
 const int PIN_THAP_MV = 6200;            // duoi muc nay (2S, 3.1 V/cell) -> khong cho motor chay
+const int PIN_YEU_PCT = 30;              // pin duoi muc nay -> chay cham lai (do sut ap khi motor khoi dong)
+const int PIN_YEU_THOAT_PCT = 40;        // chi tro lai toc do thuong khi pin (luc motor dung) len tren muc nay
+const int GIOI_HAN_PIN_YEU = 60;         // % toc do toi da khi pin yeu
+const int SLEW_PIN_YEU = 1;              // tang toc cham hon khi pin yeu (SLEW_STEP binh thuong)
 const uint32_t LENH_TOI_DA_MS = 5000;
 
 // ---------------- PWM tuong thich Arduino-ESP32 2.x va 3.x ----------------
@@ -124,6 +128,7 @@ uint32_t g_cmd_deadline = 0; // het gio thi tu dung (0 = khong dung gio)
 extern String g_pin;   // dinh nghia o duoi (PIN dieu khien)
 bool g_nhay = false;   // dang nhay (lenh "D" tu man hinh); lenh lai xe bat ky se huy
 bool g_pin_thap = false;
+bool g_pin_yeu = false;      // pin duoi PIN_YEU_PCT: chay cham
 
 void xuatMotor(int ch, int pct) {
     int in1 = (ch == 0) ? PIN_AIN1 : PIN_BIN1;
@@ -141,6 +146,7 @@ void xuatMotor(int ch, int pct) {
     digitalWrite(in2, tien ? LOW : HIGH);
     int a = abs(pct);
     if (a > GIOI_HAN_TOC_DO) a = GIOI_HAN_TOC_DO;
+    if (g_pin_yeu && a > GIOI_HAN_PIN_YEU) a = GIOI_HAN_PIN_YEU;
     PWM_WRITE(ch, (a * PWM_MAX) / 100);
 }
 
@@ -172,8 +178,9 @@ void capNhatMotor() {
     uint32_t now = millis();
     for (int ch = 0; ch < 2; ch++) {
         int t = g_fault[ch] ? 0 : g_target[ch];
-        if (g_cmd[ch] < t) g_cmd[ch] = min(g_cmd[ch] + SLEW_STEP, t);
-        else if (g_cmd[ch] > t) g_cmd[ch] = max(g_cmd[ch] - SLEW_STEP, t);
+        int buoc = g_pin_yeu ? SLEW_PIN_YEU : SLEW_STEP;
+        if (g_cmd[ch] < t) g_cmd[ch] = min(g_cmd[ch] + buoc, t);
+        else if (g_cmd[ch] > t) g_cmd[ch] = max(g_cmd[ch] - buoc, t);
         xuatMotor(ch, g_cmd[ch]);
 
         // chong ket
@@ -228,6 +235,18 @@ int g_bat_n = 0;
 uint32_t g_bat_last_sample = 0, g_bat_last_send = 0;
 float g_bat_mv = 0;
 
+// pack mV (2S) -> % (cung duong cong voi man hinh)
+int pinPhanTram(float pack_mv) {
+    static const float v[] = {3300, 3400, 3500, 3600, 3700, 3800, 3900, 4000, 4100, 4200};
+    static const float p[] = {0, 5, 10, 20, 35, 50, 65, 80, 90, 100};
+    float c = pack_mv / 2.0f;
+    if (c <= v[0]) return 0;
+    if (c >= v[9]) return 100;
+    for (int i = 1; i < 10; i++)
+        if (c <= v[i]) return (int)(p[i - 1] + (p[i] - p[i - 1]) * (c - v[i - 1]) / (v[i] - v[i - 1]) + 0.5f);
+    return 100;
+}
+
 void doPin() {
     if (!CO_MODULE_DO_PIN) return;
     uint32_t now = millis();
@@ -244,6 +263,12 @@ void doPin() {
         Serial2.printf("B%d\n", (int)g_bat_mv);
         // chi khoa motor khi co so do hop ly (module chua noi thi doc ~0, bo qua)
         g_pin_thap = (g_bat_mv > 4000 && g_bat_mv < PIN_THAP_MV);
+        if (g_bat_mv > 4000) {
+            int pc = pinPhanTram(g_bat_mv);
+            bool dung = (g_cmd[0] == 0 && g_cmd[1] == 0);   // chi do "luc nghi" moi tin de thoat che do cham
+            if (pc < PIN_YEU_PCT) g_pin_yeu = true;
+            else if (pc >= PIN_YEU_THOAT_PCT && dung) g_pin_yeu = false;
+        }
         if (g_pin_thap) {
             g_target[0] = g_target[1] = 0;
             static uint32_t lastMsg = 0;
