@@ -190,5 +190,12 @@ setInterval(pollUpd,2500);
 refresh();
 }else{var c0=$("conn"),n0=$("demonote");
  if(c0){c0.className="pill warn";c0.innerHTML="<b></b>Chưa kết nối với Rubi"}
+ var RAW2="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/";
+ function man2(br){return fetch(RAW2+br+"/manifest.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){return j&&j.version?String(j.version):""}).catch(function(){return ""})}
+ var al0=document.querySelector(".alert"),dt0=document.querySelector(".drawer .dot");if(al0)al0.style.display="none";if(dt0)dt0.style.display="none";
+ Promise.all([man2("ota"),man2("ota-devkit"),man2("ota-cam")]).then(function(a){
+  var nm=["Bo màn hình","DevKit (bánh xe)","Camera"],tb0=$("vtb"),up0=$("ups");
+  if(tb0)tb0.innerHTML=nm.map(function(n,i){return '<tr><td>'+n+'</td><td>—</td><td>'+(a[i]||"—")+'</td><td>Mở từ rubi.local để biết bản đang chạy</td></tr>'}).join("");
+  if(up0)up0.innerHTML=nm.map(function(n,i){return '<div class="item"><div class="t">'+n+'<small>Bản mới nhất: '+(a[i]||"—")+'. Bản đang chạy chỉ hiện khi mở từ http://rubi.local</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>'}).join("")});
  if(n0)n0.innerHTML="<b>Chưa kết nối với Rubi.</b> Bạn đang xem bản mẫu: số liệu và nút bấm chưa điều khiển robot. Để điều khiển, nối điện thoại vào cùng Wi-Fi với Rubi rồi mở <b>http://rubi.local</b> hoặc quét mã QR trên màn hình của Rubi."}
 })();
