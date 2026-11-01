@@ -59,6 +59,9 @@ public:
     // The DevKit passes on "open this story" from the web page: "O<folder name>\n".
     static std::function<void(const std::string&)>& OnOpenStory() { static std::function<void(const std::string&)> f; return f; }
 
+    // The DevKit passes on a web-page command: "C<word>\n" (sleep, t5, m1, p3 ...).
+    static std::function<void(const std::string&)>& OnCommand() { static std::function<void(const std::string&)> f; return f; }
+
     static int PinSet() { return PinSetRef().load(); }
     static void PinReplyClear() { PinReplyRef().store(-1); }
     static int PinReply() { return PinReplyRef().load(); }
@@ -100,6 +103,7 @@ private:
                         memcpy(IpBuf(), line + 1, n);   // includes the terminating 0
                         IpAt().store(now);
                     }
+                    if (n >= 2 && n <= 16 && line[0] == 'C' && OnCommand()) OnCommand()(std::string(line + 1));
                     if (n >= 2 && n <= 41 && line[0] == 'O' && OnOpenStory()) OnOpenStory()(std::string(line + 1));
                     if (n == 2 && line[0] == 'K' && (line[1] == '0' || line[1] == '1')) PinSetRef().store(line[1] - '0');
                     if (n == 2 && line[0] == 'P' && (line[1] == '0' || line[1] == '1')) PinReplyRef().store(line[1] - '0');

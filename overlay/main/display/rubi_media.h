@@ -57,6 +57,7 @@ public:
             started = true;
             xTaskCreatePinnedToCore(&RubiMedia::AutoSyncTask, "rubi_autosync", 10240, this, 2, nullptr, 1);
             xTaskCreatePinnedToCore(&RubiMedia::StoryReportTask, "rubi_storyrep", 6144, this, 2, nullptr, 1);
+            RubiBattery::OnCommand() = [](const std::string& c) { RubiMedia::Get().RemoteAction(c); };
             RubiBattery::OnOpenStory() = [](const std::string& dir) { RubiMedia::Get().RemoteOpenStory(dir); };
         }
     }
@@ -749,11 +750,14 @@ private:
         if (!syncing_.compare_exchange_strong(expected, true)) return;   // shares the "SD busy" flag with the store sync
         sync_cancel_ = false;
         std::vector<Story> keep = stories_;
+        std::vector<std::string> keep_songs = songs_;
         bool mounted_here = (card_ == nullptr);
         bool ok = !IsOpen() && MountSd();
-        if (ok) LoadStories();
+        if (ok) { LoadStories(); LoadSongs(); }
         std::vector<Story> list = stories_;
+        std::vector<std::string> songs = songs_;
         stories_ = keep;
+        songs_ = keep_songs;
         if (mounted_here && !IsOpen() && !playing_) UnmountSd();
         syncing_ = false;
         if (!ok) return;
@@ -778,6 +782,74 @@ private:
             RubiBattery::Send(line.c_str(), line.size());
             vTaskDelay(pdMS_TO_TICKS(30));
         }
+        // songs: "YC<n>" then "Y<index>\t<name>" (the index is the position in the sorted music folder)
+        int ns = (int)std::min<size_t>(songs.size(), 30);
+        std::string sh = "YC" + std::to_string(ns) + "\n";
+        RubiBattery::Send(sh.c_str(), sh.size());
+        for (int i = 0; i < ns; i++) {
+            std::string t = songs[i];
+            if (t.size() > 4) t.resize(t.size() - 4);   // drop ".wav"
+            for (auto& c : t) if (c == '\t' || c == '\n' || c == '\r') c = ' ';
+            if (t.size() > 48) {
+                size_t n = 48;
+                while (n > 0 && ((unsigned char)t[n] & 0xC0) == 0x80) n--;
+                t.resize(n);
+            }
+            std::string line = "Y" + std::to_string(i) + "\t" + t + "\n";
+            RubiBattery::Send(line.c_str(), line.size());
+            vTaskDelay(pdMS_TO_TICKS(30));
+        }
+    }
+
+    // Opens the touch menu for a command that came from the web page (same checks as the menu button).
+    bool RemotePrepare() {
+        if (display_ == nullptr) return false;
+        if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) return false;
+        if (!IsOpen()) {
+            sync_cancel_ = true;
+            for (int i = 0; i < 150 && syncing_; i++) vTaskDelay(pdMS_TO_TICKS(20));
+            if (syncing_) return false;
+            Application::GetInstance().GetAudioService().EnableWakeWordDetection(false);
+            LoadCalibration();
+        } else if (screen_ == Screen::kCalib1 || screen_ == Screen::kCalib2 || screen_ == Screen::kCalib3 || screen_ == Screen::kCalib4) {
+            return false;
+        }
+        return true;
+    }
+
+    // Web page commands: vup/vdown volume, huy (stop everything and close), sleep, clock, t<min>, m<0-3> maths, h<0-3> learning topic, p<n> play song n.
+    void RemoteAction(const std::string& c) {
+        RunTask([this, c]() {
+            if (c == "vup" || c == "vdown") {
+                auto* codec = Board::GetInstance().GetAudioCodec();
+                int v = codec->output_volume();
+                codec->SetOutputVolume(c == "vup" ? std::min(100, v + 10) : std::max(10, v - 10));
+                return;
+            }
+            if (c == "huy") {
+                if (!IsOpen()) return;
+                std::lock_guard<std::recursive_mutex> lk(mutex_);
+                Close();
+                return;
+            }
+            if (!RemotePrepare()) return;
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            tick_gen_++;
+            sleep_mode_ = false;
+            StopPlayback();
+            RestoreBacklight();
+            if (c == "sleep") StartSleep();
+            else if (c == "clock") ShowClock();
+            else if (c.size() >= 2 && c[0] == 't') { int m = atoi(c.c_str() + 1); if (m == 2 || m == 5 || m == 10 || m == 20) StartTimer(m); }
+            else if (c.size() == 2 && c[0] == 'm' && c[1] >= '0' && c[1] <= '3') StartMath((RubiMath::Mode)(c[1] - '0'));
+            else if (c.size() == 2 && c[0] == 'h' && c[1] >= '0' && c[1] <= '3') { ShowLearnTopics(); OpenTopic(c[1] - '0'); }
+            else if (c.size() >= 2 && c[0] == 'p') {
+                int idx = atoi(c.c_str() + 1);
+                MountSd();
+                LoadSongs();
+                if (idx >= 0 && idx < (int)songs_.size()) { page_ = idx / kSongsPerPage; StartPlayback(idx); }
+            }
+        }, "rubi_remote2");
     }
 
     void RemoteOpenStory(const std::string& dir) {

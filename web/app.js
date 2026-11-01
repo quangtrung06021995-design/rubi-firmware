@@ -1,8 +1,8 @@
 
 (function(){
 var lt=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lt<350)e.preventDefault();lt=n},{passive:false});document.addEventListener("gesturestart",function(e){e.preventDefault()});
-var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","the-nho","cai-dat"];
-var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
+var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","hoc-tap","the-nho","cai-dat"];
+var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","hoc-tap":"Học tập","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
 var $=function(i){return document.getElementById(i)},tt;
 function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){t.classList.remove("on")},1600)}
 var LIVE=location.protocol==="http:"&&!/vercel\.app$/.test(location.hostname),M=LIVE?"":" (mẫu)";
@@ -38,6 +38,7 @@ $("spd").oninput=function(){$("spv").textContent=this.value};$("br").oninput=fun
 document.querySelectorAll("#leds button").forEach(function(b){b.onclick=function(){document.querySelectorAll("#leds button").forEach(function(x){x.classList.remove("on")});b.classList.add("on");toast("Đổi màu đèn (mẫu)")}});
 document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function(){
  if(LIVE){
+  if(b.dataset.g==="Đi ngủ"){lenh("sleep");return}
   if(b.dataset.g!=="Nhảy múa"){toast("Trò này chưa có trên Rubi");return}
   api("/api/dance").then(function(j){
    if(j&&j.ok){document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Rubi đang nhảy múa (xoay tại chỗ) cho đến khi bạn bấm Dừng lại, tối đa 10 phút. Nhớ để robot ở chỗ rộng.";toast("Rubi đang nhảy múa")}
@@ -45,7 +46,7 @@ document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function()
   }).catch(function(){toast("Không gọi được Rubi")});
   return}
  document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Đang chơi: "+b.dataset.g+" (mẫu)";$("state").textContent=b.dataset.g}});
-if($("gstop"))$("gstop").onclick=function(){stopAll();document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});$("gst").textContent="Đã dừng.";toast("Đã gửi lệnh dừng"+M)};
+if($("gstop"))$("gstop").onclick=function(){stopAll();if(LIVE)api("/api/lenh?c=huy").catch(function(){});document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});$("gst").textContent="Đã dừng.";toast("Đã gửi lệnh dừng"+M)};
 var LC={"l-chest":3,"l-fl":6,"l-fr":6,"l-ant":2};
 function est(){var n=0;for(var k in LC)if($(k).checked)n+=LC[k];var ma=Math.round(n*60*($("br").value/100));$("est").textContent="Đang bật "+n+"/17 đèn, khoảng "+ma+" mA (mẫu).";}
 document.querySelectorAll("[data-l]").forEach(function(c){c.onchange=est});
@@ -140,6 +141,30 @@ document.addEventListener("click",function(e){var b=e.target.closest("#v-truyen-
 addEventListener("hashchange",function(){if((location.hash||"").slice(1)==="truyen-tranh")loadTruyen()});
 setInterval(function(){if(!document.hidden&&(location.hash||"").slice(1)==="truyen-tranh")loadTruyen()},5000);
 if((location.hash||"").slice(1)==="truyen-tranh")loadTruyen();
+/* ---- Mọi mục trong menu của Rubi cũng có trên web: lệnh gửi qua DevKit xuống bo màn hình ---- */
+function lenh(c,msg){return api("/api/lenh?c="+c).then(function(j){toast(j&&j.ok?(msg||"Đã gửi, xem màn hình Rubi"):"Không gửi được lệnh")}).catch(function(){toast("Không gọi được Rubi")})}
+function btns(arr){return '<div class="acts">'+arr.map(function(b){return '<button class="btn" data-c="'+b[0]+'">'+b[1]+'</button>'}).join("")+'</div>'}
+var HOLD='<p class="hint">Rubi sẽ mở mục này trên màn hình. Muốn dừng, bấm "Dừng" hoặc chạm màn hình Rubi.</p>';
+(function(){
+ var c=$("c-toan");if(c)c.innerHTML='<h2>Toán lớp 1</h2>'+btns([["m0","Cộng trừ trong 10"],["m1","Cộng trừ trong 20"],["m2","Cộng trừ trong 100"],["m3","Toán lời văn"]])+HOLD;
+ c=$("c-hoc");if(c)c.innerHTML='<h2>Học song ngữ</h2>'+btns([["h0","Trái cây"],["h1","Động vật"],["h2","Đồ vật"],["h3","Hình khối"]])+HOLD;
+ var cc=document.querySelector("#v-choi-cung");
+ if(cc){var d=document.createElement("div");d.className="card";d.innerHTML='<h2>Đi ngủ, đồng hồ, hẹn giờ</h2>'+btns([["sleep","Đi ngủ (hát ru 30 phút)"],["clock","Đồng hồ"],["t2","Hẹn 2 phút"],["t5","Hẹn 5 phút"],["t10","Hẹn 10 phút"],["t20","Hẹn 20 phút"],["huy","■ Dừng và đóng menu"]])+HOLD;cc.appendChild(d)}
+ var st=$("v-cai-dat");
+ if(st){var e=document.createElement("div");e.className="card";e.innerHTML='<h2>Âm lượng Rubi</h2>'+btns([["vdown","− Nhỏ bớt"],["vup","+ To hơn"]]);st.insertBefore(e,st.firstChild)}
+ document.addEventListener("click",function(ev){var b=ev.target.closest("button[data-c]");if(!b)return;b.disabled=true;lenh(b.dataset.c);setTimeout(function(){b.disabled=false},1500)});
+})();
+var nhKey="";
+function loadNhac(){var c=document.querySelector("#v-bai-hat .card");if(!c)return;
+ api("/api/nhac").then(function(j){
+  if(j&&j.err==="pin")return;
+  var l=(j&&j.list)||[],k=JSON.stringify(l)+(j&&j.co);if(k===nhKey)return;nhKey=k;
+  if(!l.length){c.innerHTML='<h2>Bài hát</h2>'+note(j&&j.co?"Thẻ nhớ của Rubi chưa có bài hát nào.":"Chưa nhận được danh sách từ bo màn hình. Bo gửi mỗi 20 giây khi đang rảnh, đợi một chút rồi thử lại.")}
+  else c.innerHTML='<h2>Bài hát ('+l.length+')</h2><div class="list">'+l.map(function(b){return '<div class="item"><div class="t">'+esc(b.t)+'</div><button class="btn" data-c="p'+b.i+'">▶ Phát</button></div>'}).join("")+'</div><button class="btn" data-c="huy" style="margin-top:10px;background:#d64545">■ Dừng nhạc</button>'+note("Nhạc phát trên loa Rubi. Muốn dừng, bấm Dừng nhạc hoặc chạm màn hình Rubi.");
+ }).catch(function(){})}
+addEventListener("hashchange",function(){if((location.hash||"").slice(1)==="bai-hat")loadNhac()});
+setInterval(function(){if(!document.hidden&&(location.hash||"").slice(1)==="bai-hat")loadNhac()},5000);
+if((location.hash||"").slice(1)==="bai-hat")loadNhac();
 /* ---- Khóa khi đang cập nhật: bo màn hình báo "upd" qua DevKit; DevKit tự nạp/khởi động lại thì mất kết nối nên cũng khóa ---- */
 var LK=null,okOnce=false,fails=0,verPrev="";
 function lockUI(on,t,sub){
