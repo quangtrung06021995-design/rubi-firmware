@@ -170,7 +170,7 @@ def main():
     except ImportError:
         sys.exit("Can cai: pip install google-genai")
 
-    client = genai.Client(api_key=key)
+    client = genai.Client(api_key=key, http_options=types.HttpOptions(timeout=60000))
     os.makedirs(args.ra, exist_ok=True)
     ds = danh_sach()
     if args.thu:
