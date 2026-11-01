@@ -1041,7 +1041,7 @@ private:
         }
         if (!ru.empty()) songs_ = ru;
         if (songs_.empty()) {
-            screen_ = Screen::kStoryEmpty;
+            screen_ = Screen::kClock;   // a touch goes back to the play menu
             if (display_) display_->MenuShowMessage("Chưa có nhạc ru ngủ\n(đặt tên tệp bắt đầu bằng ru)\n\nChạm để quay lại", -1, -1);
             return;
         }
