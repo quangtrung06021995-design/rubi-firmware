@@ -2,19 +2,19 @@
 """Tao bo giong doc cho "Toan lop 1" cua Rubi bang Gemini (giong nguoi, tieng Viet).
 
 Cach dung (Python 3.9+):
-    pip install google-genai
+    pip install -U google-genai        (can ban 2.25 tro len)
     Windows (PowerShell):   $env:GEMINI_API_KEY = "khoa-cua-ban"
     Windows (cmd):          set GEMINI_API_KEY=khoa-cua-ban
     Mac/Linux:              export GEMINI_API_KEY=khoa-cua-ban
 
-    python tao_giong_toan.py --thu          # chi tao 6 file nghe thu (tot nhat chay truoc)
-    python tao_giong_toan.py                # tao TAT CA (khoang 145 file), chay lai se bo qua file da co
-    python tao_giong_toan.py --giong Aoede  # doi giong (Kore, Aoede, Puck, Leda, Zephyr, Charon...)
+    py tao_giong_toan.py --thu          # chi tao 6 file nghe thu (tot nhat chay truoc)
+    py tao_giong_toan.py                # tao TAT CA (khoang 145 file), chay lai se bo qua file da co
+    py tao_giong_toan.py --giong Aoede  # doi giong (Kore, Aoede, Puck, Leda, Zephyr, Charon...)
 
 Ket qua nam trong thu muc  giong_rubi/  (WAV 22,05 kHz, mono, 16 bit, da cat khoang lang).
 Khoa API (API key): KHONG gui cho ai, KHONG dan vao chat.
 """
-import argparse, array, os, sys, time, wave
+import argparse, array, base64, io, os, sys, time, wave
 
 OUT_RATE = 22050
 
@@ -111,11 +111,53 @@ def ghi_wav(path, pcm):
         w.writeframes(pcm.tobytes())
 
 
+KIEU = "slow, warm and clear, like a kind teacher talking to a 7-year-old child"
+
+
+def lay_pcm(client, types, model, giong, noidung):
+    """Tra ve (pcm int16, toc do lay mau). Model 3.x dung Interactions API, model 2.5 dung generate_content."""
+    if model.startswith("gemini-3"):
+        it = client.interactions.create(
+            model=model,
+            input=[{"type": "user_input", "content": [{
+                "type": "text", "text": noidung,
+                "annotations": [{"type": "speech_metadata", "style": KIEU}]}]}],
+            response_format={"type": "audio"},
+            generation_config={"speech_config": [{"voice": giong}]},
+        )
+        data = base64.b64decode(it.output_audio.data)
+    else:
+        prompt = "Đọc bằng tiếng Việt, giọng ấm áp, rõ ràng, chậm rãi như cô giáo nói với bé 7 tuổi: " + noidung
+        r = client.models.generate_content(
+            model=model, contents=prompt,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=giong)))))
+        cand = r.candidates[0] if r.candidates else None
+        if cand is None or cand.content is None or not cand.content.parts:
+            raise RuntimeError("model khong tra am thanh (finish_reason=%s)" % (getattr(cand, "finish_reason", None),))
+        data = cand.content.parts[0].inline_data.data
+    rate = 24000
+    if data[:4] == b"RIFF":      # file WAV day du
+        with wave.open(io.BytesIO(data), "rb") as w:
+            rate = w.getframerate()
+            frames = w.readframes(w.getnframes())
+            if w.getnchannels() == 2:
+                tmp = array.array("h")
+                tmp.frombytes(frames[: len(frames) // 4 * 4])
+                frames = tmp[::2].tobytes()
+        data = frames
+    pcm = array.array("h")
+    pcm.frombytes(data[: len(data) // 2 * 2])
+    return pcm, rate
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--thu", action="store_true", help="chi tao vai file nghe thu")
     ap.add_argument("--giong", default="Kore", help="ten giong Gemini (mac dinh Kore)")
-    ap.add_argument("--model", default="gemini-2.5-flash-preview-tts")
+    ap.add_argument("--model", default="gemini-3.8-flash-tts")
     ap.add_argument("--ra", default="giong_rubi", help="thu muc dau ra")
     args = ap.parse_args()
 
@@ -139,35 +181,22 @@ def main():
         path = os.path.join(args.ra, ten + ".wav")
         if os.path.exists(path):
             continue
-        # Chi dan phong cach nam trong cau, giong doc cham, ro rang, am ap.
-        prompt = "Đọc bằng tiếng Việt, giọng ấm áp, rõ ràng, chậm rãi như cô giáo nói với bé 7 tuổi: " + noidung
         pcm = None
+        rate = 24000
         for lan in range(6):
             try:
-                r = client.models.generate_content(
-                    model=args.model,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_modalities=["AUDIO"],
-                        speech_config=types.SpeechConfig(
-                            voice_config=types.VoiceConfig(
-                                prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=args.giong))),
-                    ),
-                )
-                data = r.candidates[0].content.parts[0].inline_data.data
-                pcm = array.array("h")
-                pcm.frombytes(data[: len(data) // 2 * 2])
+                pcm, rate = lay_pcm(client, types, args.model, args.giong, noidung)
                 break
             except Exception as e:
                 msg = str(e)
                 wait = 25 if ("429" in msg or "RESOURCE_EXHAUSTED" in msg) else 5
-                print("  loi (%s), thu lai sau %ds..." % (msg[:80], wait))
+                print("  loi (%s), thu lai sau %ds..." % (msg[:200], wait))
                 time.sleep(wait)
         if pcm is None:
             print("[%d/%d] %s: BO QUA (that bai)" % (i, len(ds), ten))
             loi += 1
             continue
-        pcm = doi_toc_do(cat_lang(pcm, 24000), 24000, OUT_RATE)
+        pcm = doi_toc_do(cat_lang(pcm, rate), rate, OUT_RATE)
         ghi_wav(path, pcm)
         print("[%d/%d] %s = %s  (%.1f giay)" % (i, len(ds), ten, noidung, len(pcm) / OUT_RATE))
         time.sleep(1.0)
