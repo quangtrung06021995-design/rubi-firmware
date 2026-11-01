@@ -28,6 +28,7 @@
 #include <sdmmc_cmd.h>
 
 #include "application.h"
+#include "assets/lang_config.h"
 #include <esp_wifi.h>
 #include <esp_netif.h>
 #include <ssid_manager.h>
@@ -140,11 +141,33 @@ public:
             ShowControl();
             break;
         case Screen::kPlay: {
-            int r = RubiDisplay::RowAt(sx, sy, 2);
+            int r = RubiDisplay::RowAt(sx, sy, 5);
             if (r == 0) StartDance();
-            else if (r == 1) ShowMain();
+            else if (r == 1) StartSleep();
+            else if (r == 2) ShowClock();
+            else if (r == 3) ShowTimerMenu();
+            else if (r == 4) ShowMain();
             break;
         }
+        case Screen::kClock:
+        case Screen::kTimerDone:
+            tick_gen_++;
+            ShowPlay();
+            break;
+        case Screen::kTimerMenu: {
+            int r = RubiDisplay::RowAt(sx, sy, 5);
+            static const int mins[4] = {2, 5, 10, 20};
+            if (r >= 0 && r <= 3) StartTimer(mins[r]);
+            else if (r == 4) ShowPlay();
+            break;
+        }
+        case Screen::kTimerRun:
+            tick_gen_++;
+            ShowTimerMenu();
+            break;
+        case Screen::kSleep:
+            EndSleep();
+            break;
         case Screen::kUpload:
             RubiUpload::Stop();
             LoadSongs();
@@ -397,7 +420,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -926,9 +949,134 @@ private:
     }
 
     // ---------------- play with Rubi ----------------
+    // ---------------- clock, countdown timer, bedtime ----------------
+    // The time comes from the server at start-up (already in local time); without it the year is 1970.
+    std::atomic<int> tick_gen_{0};
+    int64_t timer_end_ms_ = 0, sleep_end_ms_ = 0;
+    int alarm_n_ = 0;
+    bool sleep_mode_ = false, dimmed_ = false;
+    uint8_t saved_bright_ = 100;
+
+    static int64_t NowMs() { return esp_timer_get_time() / 1000; }
+
+    static std::string ClockText() {
+        time_t t = time(nullptr);
+        struct tm tm;
+        localtime_r(&t, &tm);
+        if (tm.tm_year + 1900 < 2024) return "Chưa có giờ\n(cần Wi-Fi, chờ\nvài phút sau khi bật)\n\nChạm để quay lại";
+        static const char* const wd[] = {"Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"};
+        char b[96];
+        snprintf(b, sizeof(b), "%02d:%02d\n%s\n%02d/%02d/%04d\n\nChạm để quay lại", tm.tm_hour, tm.tm_min, wd[tm.tm_wday % 7], tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900);
+        return b;
+    }
+
+    void StartTicker() {
+        int gen = ++tick_gen_;
+        RunTask([this, gen]() {
+            while (tick_gen_ == gen) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                std::lock_guard<std::recursive_mutex> lk(mutex_);
+                if (tick_gen_ != gen) break;
+                TickOnce(gen);
+            }
+        }, "rubi_tick");
+    }
+
+    void TickOnce(int gen) {
+        if (display_ == nullptr) return;
+        switch (screen_) {
+        case Screen::kClock:
+            display_->MenuSetMessage(ClockText().c_str());
+            break;
+        case Screen::kTimerRun: {
+            int remain = (int)((timer_end_ms_ - NowMs() + 999) / 1000);
+            if (remain <= 0) {
+                screen_ = Screen::kTimerDone;
+                alarm_n_ = 0;
+                display_->MenuShowMessage("Hết giờ rồi!\n\nChạm để tắt", -1, -1);
+                break;
+            }
+            char b[64];
+            snprintf(b, sizeof(b), "Hẹn giờ\n%02d:%02d\n\nChạm để hủy", remain / 60, remain % 60);
+            display_->MenuSetMessage(b);
+            break;
+        }
+        case Screen::kTimerDone:
+            Application::GetInstance().PlaySound(Lang::Sounds::OGG_VIBRATION);
+            if (++alarm_n_ >= 15) { tick_gen_++; ShowPlay(); }
+            break;
+        case Screen::kSleep:
+            if (NowMs() >= sleep_end_ms_ || !playing_) EndSleep();
+            break;
+        default:
+            if (tick_gen_ == gen) tick_gen_++;
+            break;
+        }
+    }
+
+    void ShowClock() {
+        screen_ = Screen::kClock;
+        if (display_) display_->MenuShowMessage(ClockText().c_str(), -1, -1);
+        StartTicker();
+    }
+
+    void ShowTimerMenu() {
+        screen_ = Screen::kTimerMenu;
+        if (display_) display_->MenuShowList("HẸN GIỜ", {"2 phút", "5 phút", "10 phút", "20 phút", "<< Quay lại"}, "Chạm để bắt đầu đếm ngược");
+    }
+
+    void StartTimer(int minutes) {
+        timer_end_ms_ = NowMs() + (int64_t)minutes * 60000;
+        screen_ = Screen::kTimerRun;
+        if (display_) display_->MenuShowMessage("Hẹn giờ\nĐang bắt đầu...\n\nChạm để hủy", -1, -1);
+        StartTicker();
+    }
+
+    // Bedtime: quiet the screen, sing lullabies (files in music/ whose name starts with "ru"; all songs if there are none) for 30 minutes.
+    void StartSleep() {
+        LoadSongs();
+        std::vector<std::string> ru;
+        for (auto& n : songs_) {
+            if (n.size() >= 2 && tolower((unsigned char)n[0]) == 'r' && tolower((unsigned char)n[1]) == 'u') ru.push_back(n);
+        }
+        if (!ru.empty()) songs_ = ru;
+        if (songs_.empty()) {
+            screen_ = Screen::kStoryEmpty;
+            if (display_) display_->MenuShowMessage("Chưa có nhạc ru ngủ\n(đặt tên tệp bắt đầu bằng ru)\n\nChạm để quay lại", -1, -1);
+            return;
+        }
+        sleep_mode_ = true;
+        sleep_end_ms_ = NowMs() + 30 * 60000LL;
+        screen_ = Screen::kSleep;
+        if (display_) display_->MenuShowMessage("Chúc bé ngủ ngon\nRubi hát ru 30 phút\n\nChạm để dừng", -1, -1);
+        if (Backlight* bl = Board::GetInstance().GetBacklight()) {
+            if (!dimmed_) { saved_bright_ = bl->brightness(); dimmed_ = true; }
+            bl->SetBrightness(6);
+        }
+        stop_ = false;
+        playing_ = true;
+        now_index_ = 0;
+        xTaskCreatePinnedToCore(&RubiMedia::PlayTask, "rubi_play", 8192, this, 4, nullptr, 1);
+        StartTicker();
+    }
+
+    void RestoreBacklight() {
+        if (!dimmed_) return;
+        dimmed_ = false;
+        if (Backlight* bl = Board::GetInstance().GetBacklight()) bl->SetBrightness(saved_bright_ < 10 ? 100 : saved_bright_);
+    }
+
+    void EndSleep() {
+        sleep_mode_ = false;
+        tick_gen_++;
+        StopPlayback();
+        RestoreBacklight();
+        ShowPlay();
+    }
+
     void ShowPlay() {
         screen_ = Screen::kPlay;
-        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
+        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Đồng hồ", "Hẹn giờ", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
     }
 
     // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.
@@ -1671,7 +1819,10 @@ private:
     }
 
     void Close() {
+        sleep_mode_ = false;
+        tick_gen_++;
         StopPlayback();
+        RestoreBacklight();
         UnmountSd();
         screen_ = Screen::kNone;
         if (display_) display_->MenuHide();
@@ -1782,16 +1933,20 @@ private:
             }
             if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) stop_ = true;
         }
-        for (int i = now_index_; i < (int)songs_.size() && !stop_; i++) {
-            {
-                if (stop_) break;
-                std::lock_guard<std::recursive_mutex> lk(mutex_);
-                if (stop_) break;
-                now_index_ = i;
-                ShowPlaying();
+        do {
+            for (int i = now_index_; i < (int)songs_.size() && !stop_; i++) {
+                {
+                    if (stop_) break;
+                    std::lock_guard<std::recursive_mutex> lk(mutex_);
+                    if (stop_) break;
+                    now_index_ = i;
+                    if (!sleep_mode_) ShowPlaying();
+                }
+                PlayFile(std::string(kMusicDir) + "/" + songs_[i], out_rate, as);
+                if (sleep_mode_) vTaskDelay(pdMS_TO_TICKS(1500));   // a short pause between lullabies (also avoids a busy loop on a bad file)
             }
-            PlayFile(std::string(kMusicDir) + "/" + songs_[i], out_rate, as);
-        }
+            now_index_ = 0;
+        } while (sleep_mode_ && !stop_ && NowMs() < sleep_end_ms_);
         bool finished_by_itself = !stop_;
         bool was_voice = voice_mode_;
         if (was_voice) {

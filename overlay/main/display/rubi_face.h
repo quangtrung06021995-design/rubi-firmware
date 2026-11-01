@@ -358,6 +358,12 @@ public:
         ShowMenuLayer();
     }
 
+    // Changes the text of the message that is already showing (no clearing, no flicker): clock, countdown.
+    void MenuSetMessage(const char* msg) {
+        DisplayLockGuard lock(this);
+        if (menu_msg_ != nullptr) lv_label_set_text(menu_msg_, msg);
+    }
+
     // A QR code of `text` (max 26 bytes) on the left, `caption` on the right. Falls back to the caption alone if it cannot be drawn.
     void MenuShowQr(const char* text, const char* caption) {
         DisplayLockGuard lock(this);
