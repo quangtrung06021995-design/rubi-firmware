@@ -118,14 +118,15 @@ public:
         ESP_LOGI("RubiTouch", "raw %u,%u -> screen %d,%d (screen %d)", (unsigned)raw_x, (unsigned)raw_y, sx, sy, (int)screen_);
         switch (screen_) {
         case Screen::kMain: {
-            int t = RubiDisplay::TileAt(sx, sy, 7);
+            int t = RubiDisplay::TileAt(sx, sy, 8);
             if (t == 0) { LoadSongs(); page_ = 0; ShowMusic(); }
             else if (t == 1) { ShowLearnTopics(); }
             else if (t == 2) { spage_ = 0; LoadStories(); ShowStoryList(); }
             else if (t == 3) { ShowMathMenu(); }
-            else if (t == 4) { ShowPlay(); }
-            else if (t == 5) { ShowSettings(); }
-            else if (t == 6) { Close(); }
+            else if (t == 4) { ShowClock(); }
+            else if (t == 5) { ShowPlay(); }
+            else if (t == 6) { ShowSettings(); }
+            else if (t == 7) { Close(); }
             break;
         }
         case Screen::kSettings: {
@@ -141,15 +142,17 @@ public:
             ShowControl();
             break;
         case Screen::kPlay: {
-            int r = RubiDisplay::RowAt(sx, sy, 5);
+            int r = RubiDisplay::RowAt(sx, sy, 4);
             if (r == 0) StartDance();
             else if (r == 1) StartSleep();
-            else if (r == 2) ShowClock();
-            else if (r == 3) ShowTimerMenu();
-            else if (r == 4) ShowMain();
+            else if (r == 2) ShowTimerMenu();
+            else if (r == 3) ShowMain();
             break;
         }
         case Screen::kClock:
+            tick_gen_++;
+            if (back_play_) ShowPlay(); else ShowMain();
+            break;
         case Screen::kTimerDone:
             tick_gen_++;
             ShowPlay();
@@ -622,6 +625,7 @@ private:
             {&rubi_icon_song_ngu, ""},
             {&rubi_icon_truyen_tranh, ""},
             {&rubi_icon_toan_lop1, ""},
+            {&rubi_icon_dong_ho, ""},
             {&rubi_icon_choi_cung, ""},
             {&rubi_icon_cai_dat, ""},
             {&rubi_icon_dong, ""},
@@ -954,7 +958,7 @@ private:
     std::atomic<int> tick_gen_{0};
     int64_t timer_end_ms_ = 0, sleep_end_ms_ = 0;
     int alarm_n_ = 0;
-    bool sleep_mode_ = false, dimmed_ = false;
+    bool sleep_mode_ = false, dimmed_ = false, back_play_ = false;
     uint8_t saved_bright_ = 100;
 
     static int64_t NowMs() { return esp_timer_get_time() / 1000; }
@@ -1015,6 +1019,7 @@ private:
     }
 
     void ShowClock() {
+        back_play_ = false;
         screen_ = Screen::kClock;
         if (display_) display_->MenuShowMessage(ClockText().c_str(), -1, -1);
         StartTicker();
@@ -1041,6 +1046,7 @@ private:
         }
         if (!ru.empty()) songs_ = ru;
         if (songs_.empty()) {
+            back_play_ = true;
             screen_ = Screen::kClock;   // a touch goes back to the play menu
             if (display_) display_->MenuShowMessage("Chưa có nhạc ru ngủ\n(đặt tên tệp bắt đầu bằng ru)\n\nChạm để quay lại", -1, -1);
             return;
@@ -1076,7 +1082,7 @@ private:
 
     void ShowPlay() {
         screen_ = Screen::kPlay;
-        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Đồng hồ", "Hẹn giờ", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
+        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
     }
 
     // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.
