@@ -28,6 +28,7 @@
 #include <sdmmc_cmd.h>
 
 #include "application.h"
+#include <esp_app_desc.h>
 #include "assets/lang_config.h"
 #include <esp_wifi.h>
 #include <esp_netif.h>
@@ -736,9 +737,11 @@ private:
     // so the web page can list them. The web page asks the DevKit to open one with "O<dir>".
     static void StoryReportTask(void* arg) {
         RubiMedia* self = static_cast<RubiMedia*>(arg);
-        vTaskDelay(pdMS_TO_TICKS(20000));
+        vTaskDelay(pdMS_TO_TICKS(5000));
         while (true) {
-            vTaskDelay(pdMS_TO_TICKS(20000));
+            std::string v = std::string("V") + esp_app_get_description()->version + "\n";
+            RubiBattery::Send(v.c_str(), v.size());
+            vTaskDelay(pdMS_TO_TICKS(15000));
             self->ReportStories();
         }
     }

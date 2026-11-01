@@ -1,8 +1,8 @@
 
 (function(){
 var lt=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lt<350)e.preventDefault();lt=n},{passive:false});document.addEventListener("gesturestart",function(e){e.preventDefault()});
-var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","hoc-tap","the-nho","cai-dat"];
-var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","hoc-tap":"Học tập","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
+var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","song-ngu","toan","the-nho","cai-dat"];
+var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","song-ngu":"Học song ngữ","toan":"Toán lớp 1","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
 var $=function(i){return document.getElementById(i)},tt;
 function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){t.classList.remove("on")},1600)}
 var LIVE=location.protocol==="http:"&&!/vercel\.app$/.test(location.hostname),M=LIVE?"":" (mẫu)";
@@ -105,21 +105,19 @@ function render(){
   setCard("cnet","Mạng",stat("Wi-Fi",s.ssid||"—")+stat("Tín hiệu",(s.rssi!=null?s.rssi+" dBm":"—"))+stat("Địa chỉ",s.ip||"—"));
   setCard("csen","Bánh xe",stat("Bánh trái",(s.l!=null?s.l+"%":"—"))+stat("Bánh phải",(s.r!=null?s.r+"%":"—"))+stat("Lỗi motor",s.fault?"Có lỗi":"Không")+note("Cảm biến khoảng cách chưa có số thật."));
   bindPin()}
- var dkNew=!!(ver&&LAT.dk&&ver!==LAT.dk);
  function pill(c,t){return '<span class="pill '+c+'"><b></b>'+t+'</span>'}
- function unk(n,l){return '<tr><td>'+n+'</td><td>—</td><td>'+esc(l||"—")+'</td><td>Chưa đọc bản đang chạy</td></tr>'}
+ var B=[{n:"Bo màn hình",run:s&&s.dsv?String(s.dsv):"",lat:LAT.ds},{n:"DevKit (bánh xe)",run:ver,lat:LAT.dk},{n:"Camera",run:s&&s.cv?String(s.cv):"",lat:LAT.cam}];
+ B.forEach(function(x){x.neu=!!(x.run&&x.lat&&x.run!==x.lat)});
+ var moi=B.filter(function(x){return x.neu}).map(function(x){return x.n});
  var tb=$("vtb");
- if(tb)tb.innerHTML=unk("Bo màn hình",LAT.ds)+
-  '<tr><td>DevKit (bánh xe)</td><td>'+esc(ver||"—")+'</td><td>'+esc(LAT.dk||"—")+'</td><td>'+(!ver||!LAT.dk?"—":dkNew?pill("warn","Có bản mới"):pill("ok","Mới nhất"))+'</td></tr>'+unk("Camera",LAT.cam);
+ if(tb)tb.innerHTML=B.map(function(x){return '<tr><td>'+x.n+'</td><td>'+esc(x.run||"—")+'</td><td>'+esc(x.lat||"—")+'</td><td>'+(!x.run?"Chưa đọc được (bo tắt?)":!x.lat?"—":x.neu?pill("warn","Có bản mới"):pill("ok","Mới nhất"))+'</td></tr>'}).join("");
  var ups=$("ups");
- if(ups)ups.innerHTML=
-  '<div class="item"><div class="t">Bo màn hình<small>Bản mới nhất: '+esc(LAT.ds||"—")+' (bo tự cập nhật khi bật nguồn)</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>'+
-  '<div class="item"><div class="t">DevKit (bánh xe)<small>'+(ver?(dkNew?esc(ver)+" → "+esc(LAT.dk):esc(ver)+", đã mới nhất"):"Chưa đọc được bản đang chạy")+'</small></div>'+
-  (dkNew?'<button class="btn" disabled>Tự cập nhật khi bật nguồn</button>':'<button class="btn ghost" disabled>Mới nhất</button>')+'</div>'+
-  '<div class="item"><div class="t">Camera<small>Bản mới nhất: '+esc(LAT.cam||"—")+' (bo tự cập nhật khi bật nguồn)</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>';
- var al=document.querySelector(".alert"),dt=document.querySelector(".drawer .dot");
- if(al){al.style.display=dkNew?"":"none";if(dkNew){var b=al.querySelector("b");if(b)b.textContent="DevKit có bản mới "+LAT.dk+".";var sp=al.querySelector("span");if(sp&&sp.lastChild&&sp.lastChild.nodeType===3)sp.lastChild.textContent=" Robot sẽ tự cập nhật khi bật nguồn lại."}}
- if(dt)dt.style.display=dkNew?"":"none"}
+ if(ups)ups.innerHTML=B.map(function(x){return '<div class="item"><div class="t">'+x.n+'<small>'+(!x.run?"Chưa đọc được bản đang chạy (bo đang tắt hoặc chưa nối)":x.neu?esc(x.run)+" → "+esc(x.lat)+" (bo tự cập nhật khi bật nguồn)":esc(x.run)+", đã mới nhất")+'</small></div>'+(x.neu?'<button class="btn" disabled>Tự cập nhật khi bật nguồn</button>':'<button class="btn ghost" disabled>'+(x.run?"Mới nhất":"—")+'</button>')+'</div>'}).join("");
+ var al=document.querySelector(".alert"),dt=document.querySelector(".drawer .dot"),dkNew=moi.length>0;
+ if(al){al.style.display=dkNew?"":"none";if(dkNew){var b=al.querySelector("b");if(b)b.textContent=moi.join(", ")+" có bản mới.";var sp=al.querySelector("span");if(sp&&sp.lastChild&&sp.lastChild.nodeType===3)sp.lastChild.textContent=" Robot sẽ tự cập nhật khi bật nguồn lại."}}
+ if(dt)dt.style.display=dkNew?"":"none";
+ var hp=$("hpv"),hb=$("hpb"),hw=$("hwv"),stt=$("state");
+ if(hp){var mv2=ok?(+s.bat_mv||0):0,pp=mv2>2000?Math.max(0,Math.min(100,Math.round((mv2-6000)/24))):null;hp.textContent=pp==null?"—":pp+"%";if(hb)hb.style.width=(pp||0)+"%";if(hw)hw.textContent=ok&&s.rssi!=null?s.rssi+" dBm":"—";if(stt)stt.textContent=!s?"Chưa kết nối với Rubi":"Sẵn sàng chơi cùng bé"}}
 function conn(){var c=$("conn"),n=$("demonote");
  if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
  if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Các mục còn lại (đèn, trò chơi, bài hát, truyện, thẻ nhớ, camera) vẫn là mẫu."}
@@ -152,7 +150,7 @@ var HOLD='<p class="hint">Rubi sẽ mở mục này trên màn hình. Muốn d�
  if(cc){var d=document.createElement("div");d.className="card";d.innerHTML='<h2>Đi ngủ, đồng hồ, hẹn giờ</h2>'+btns([["sleep","Đi ngủ (hát ru 30 phút)"],["clock","Đồng hồ"],["t2","Hẹn 2 phút"],["t5","Hẹn 5 phút"],["t10","Hẹn 10 phút"],["t20","Hẹn 20 phút"],["huy","■ Dừng và đóng menu"]])+HOLD;cc.appendChild(d)}
  var st=$("v-cai-dat");
  if(st){var e=document.createElement("div");e.className="card";e.innerHTML='<h2>Âm lượng Rubi</h2>'+btns([["vdown","− Nhỏ bớt"],["vup","+ To hơn"]]);st.insertBefore(e,st.firstChild)}
- document.addEventListener("click",function(ev){var b=ev.target.closest("button[data-c]");if(!b)return;b.disabled=true;lenh(b.dataset.c);setTimeout(function(){b.disabled=false},1500)});
+ document.addEventListener("click",function(ev){var b=ev.target.closest("[data-c]");if(!b)return;if(b.tagName==="BUTTON")b.disabled=true;lenh(b.dataset.c);setTimeout(function(){b.disabled=false},1500)});
 })();
 var nhKey="";
 function loadNhac(){var c=document.querySelector("#v-bai-hat .card");if(!c)return;
@@ -177,7 +175,7 @@ function pollUpd(){api("/api/status").then(function(j){
   fails=0;failAt=0;okOnce=true;
   if(!ST||ST.auth!==j.auth){ST=j;render()}else ST=j;
   conn();
-  if(j.upd){lockUI(true,"Đang cập nhật bo màn hình","Đừng tắt nguồn Rubi. Mọi tính năng bị khóa cho đến khi cập nhật xong.")}
+  if(j.upd){lockUI(true,"Đang cập nhật "+(j.upd==="cam"?"camera":"bo màn hình"),"Đừng tắt nguồn Rubi. Mọi tính năng bị khóa cho đến khi cập nhật xong.")}
   else{var was=LK&&LK.style.display==="flex";lockUI(false);
    if(was){toast(j.ver&&verPrev&&j.ver!==verPrev?"Cập nhật xong: DevKit bản "+j.ver:"Đã nối lại, mở khóa");refresh()}}
   if(j.ver)verPrev=String(j.ver)

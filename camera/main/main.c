@@ -585,6 +585,27 @@ static bool boot_button_held(void) {
     return true;
 }
 
+// Tells the DevKit (http://rubi.local/api/cam) which version is running and whether an update is in progress,
+// so the control page can show the camera's real version and lock itself during an update.
+static void report_task(void *arg) {
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    for (;;) {
+        esp_ip4_addr_t addr;
+        addr.addr = 0;
+        if (mdns_query_a("rubi", 2000, &addr) == ESP_OK && addr.addr != 0) {
+            char url[112];
+            snprintf(url, sizeof(url), "http://" IPSTR "/api/cam?v=%s&u=%d", IP2STR(&addr), version(), g_updating ? 1 : 0);
+            esp_http_client_config_t hc = {.url = url, .timeout_ms = 3000};
+            esp_http_client_handle_t cl = esp_http_client_init(&hc);
+            if (cl != NULL) {
+                esp_http_client_perform(cl);
+                esp_http_client_cleanup(cl);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(g_updating ? 3000 : 10000));
+    }
+}
+
 void app_main(void) {
     esp_err_t e = nvs_flash_init();
     if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -636,4 +657,5 @@ void app_main(void) {
     ESP_LOGI(TAG, "Open http://rubi-cam.local/?k=<your key>");
 
     xTaskCreate(ota_task, "ota", 8192, NULL, 4, NULL);
+    xTaskCreate(report_task, "report", 4096, NULL, 3, NULL);
 }

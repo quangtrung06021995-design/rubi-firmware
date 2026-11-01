@@ -320,6 +320,11 @@ String g_ssid, g_pass;            // mang dang noi / dang thu
 bool g_ota_started = false;
 uint32_t g_upd_ds_den = 0;   // bo man hinh bao dang cap nhat ("U1"), het han sau 60 s neu khong nhac lai
 bool g_upd_ds = false;
+String g_ds_v;                  // phien ban dang chay cua bo man hinh ("V3.0.86" qua UART)
+uint32_t g_ds_at = 0;
+String g_cam_v;                 // phien ban camera (camera tu bao qua /api/cam)
+bool g_cam_u = false;
+uint32_t g_cam_at = 0;
 // Danh sach truyen tren the nho (bo man hinh gui: "TC<n>" roi "T<thu muc>\t<ten>")
 #define MAX_TRUYEN 16
 String g_ty_id[MAX_TRUYEN], g_ty_ten[MAX_TRUYEN];
@@ -802,7 +807,25 @@ void webDance() {   // /api/dance[?t=<ma>] : spin on the spot for ~28 s, /api/st
 
 String updJson() {
     if (g_upd_ds && (int32_t)(g_upd_ds_den - millis()) <= 0) g_upd_ds = false;
-    return g_upd_ds ? String(",\"upd\":\"ds\"") : String("");
+    bool camMoi = g_cam_at != 0 && millis() - g_cam_at < 40000;
+    if (g_upd_ds) return String(",\"upd\":\"ds\"");
+    if (camMoi && g_cam_u) return String(",\"upd\":\"cam\"");
+    return String("");
+}
+
+String phienBanJson() {   // phien ban dang chay cua bo man hinh va camera (neu gan day co bao)
+    String j;
+    if (g_ds_at != 0 && millis() - g_ds_at < 120000) j += String(",\"dsv\":\"") + g_ds_v + "\"";
+    if (g_cam_at != 0 && millis() - g_cam_at < 120000) j += String(",\"cv\":\"") + g_cam_v + "\"";
+    return j;
+}
+
+void webCam() {   // /api/cam?v=<ban>&u=<0|1> : camera tu bao phien ban va dang cap nhat hay khong
+    String v = g_web.arg("v");
+    bool ok = v.length() > 0 && v.length() < 16;
+    for (unsigned i = 0; ok && i < v.length(); i++) ok = isalnum((unsigned char)v[i]) || v[i] == '.' || v[i] == '-';
+    if (ok) { g_cam_v = v; g_cam_u = g_web.arg("u") == "1"; g_cam_at = millis() | 1; }
+    webJson("{\"ok\":true}");
 }
 
 void webStatus() {
@@ -812,7 +835,7 @@ void webStatus() {
         return;
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
-               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() +
+               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() +
                ",\"bat_mv\":" + String((int)g_bat_mv) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
                ",\"r\":" + String(A_LA_BANH_TRAI ? g_cmd[1] : g_cmd[0]) +
@@ -827,6 +850,7 @@ void webBatDau() {
     g_web.on("/api/dance", HTTP_GET, webDance);
     g_web.on("/api/truyen", HTTP_GET, webTruyen);
     g_web.on("/api/nhac", HTTP_GET, webNhac);
+    g_web.on("/api/cam", HTTP_GET, webCam);
     g_web.on("/api/lenh", HTTP_GET, webLenh);
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
@@ -1074,6 +1098,7 @@ void loop() {
                 int k = line2.indexOf('\t');
                 if (k > 1 && g_ty_dang < MAX_TRUYEN) { g_ty_id[g_ty_dang] = line2.substring(1, k); g_ty_ten[g_ty_dang] = line2.substring(k + 1); g_ty_dang++; g_ty_n = g_ty_dang; }
             }
+            else if (line2.length() > 2 && line2.length() < 20 && line2[0] == 'V') { g_ds_v = line2.substring(1); g_ds_at = millis() | 1; }
             else if (line2 == "U1") { g_upd_ds = true; g_upd_ds_den = millis() + 60000; dungHet(); }   // man hinh dang nap ban moi
             else if (line2 == "U0") { g_upd_ds = false; }
             else if (line2 == "D") nhayBat();       // nhay mua (chi xoay tai cho)
