@@ -1162,7 +1162,10 @@ private:
 
     void ShowTimerMenu() {
         screen_ = Screen::kTimerMenu;
-        if (display_) display_->MenuShowList("HẸN GIỜ", {"2 phút", "5 phút", "10 phút", "20 phút", "<< Quay lại"}, "Chạm để bắt đầu đếm ngược");
+        if (display_) {
+            static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_hen_gio, &rubi_icon_hen_gio, &rubi_icon_hen_gio, &rubi_icon_hen_gio};
+            display_->MenuShowList("HẸN GIỜ", {"2 phút", "5 phút", "10 phút", "20 phút", "<< Quay lại"}, "Chạm để bắt đầu đếm ngược", nullptr, &ico);
+        }
     }
 
     void StartTimer(int minutes) {
@@ -1239,7 +1242,7 @@ private:
         screen_ = Screen::kCtl;
         int has = RubiBattery::PinSet();
         std::string hint = has == 1 ? "Robot đang có mã PIN" : (has == 0 ? "CHƯA có PIN: ai cũng điều khiển được!" : "Chưa biết PIN (robot chưa trả lời)");
-        if (display_) display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "Đồng bộ kho ngay", "<< Quay lại"}, hint.c_str());
+        if (display_) { static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_dieu_khien}; display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "Đồng bộ kho ngay", "<< Quay lại"}, hint.c_str(), nullptr, &ico); }
     }
 
     std::string pin_old_, pin_new_, pin_buf_;
