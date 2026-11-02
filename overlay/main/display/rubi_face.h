@@ -296,7 +296,7 @@ public:
             lv_obj_set_style_bg_color(menu_, lv_color_hex(0x1E88E5), 0);
             lv_obj_set_style_bg_grad_color(menu_, lv_color_hex(0x7CCBF8), 0);
             lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_VER, 0);
-            lv_obj_clear_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);   // sky + hills picture (stored 144x108, drawn 2.22x) over the gradient
+            lv_obj_clear_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);   // sky + hills picture (320x240) over the gradient
         }
         for (int i = 0; i < kMaxTiles; i++) {
             if (sky) {
@@ -561,8 +561,6 @@ private:
         lv_obj_align(menu_, LV_ALIGN_TOP_LEFT, 0, 0);
         bg_img_ = lv_image_create(menu_);   // first-page background, behind the tiles
         lv_image_set_src(bg_img_, &rubi_bg_menu);
-        lv_image_set_pivot(bg_img_, 0, 0);
-        lv_image_set_scale(bg_img_, 569);    // 144 px -> 320 px
         lv_obj_set_pos(bg_img_, 0, 0);
         lv_obj_remove_flag(bg_img_, LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);

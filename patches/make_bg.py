@@ -1,8 +1,8 @@
-# Converts icons/nen_menu.png into main/display/rubi_bg.h (LVGL RGB565 image 144x108 (shown scaled to 320x240), background of the first menu page).
+# Converts icons/nen_menu.png into main/display/rubi_bg.h (LVGL RGB565 image 320x240 , background of the first menu page).
 # Run from overlay/:  python3 ../patches/make_bg.py ../icons/nen_menu.png
 import sys
 from PIL import Image
-W, H = 144, 108   # drawn 2.222x larger on the 320x240 screen (a full-size picture would not fit in the app partition)
+W, H = 320, 240   # full resolution (the app partition is now 5.7 MB)
 src = sys.argv[1] if len(sys.argv) > 1 else '../icons/nen_menu.png'
 im = Image.open(src).convert('RGB').resize((W, H), Image.LANCZOS)
 data = bytearray()
