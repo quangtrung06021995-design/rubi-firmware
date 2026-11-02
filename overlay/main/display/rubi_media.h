@@ -662,7 +662,7 @@ private:
             {&rubi_icon_dong_ho, ""},
             {&rubi_icon_choi_cung, ""},
             {&rubi_icon_cai_dat, ""},
-            {&rubi_icon_dong, ""},
+            {&rubi_icon_dong_c, ""},
         });
     }
 

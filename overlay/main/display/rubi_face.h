@@ -289,8 +289,19 @@ public:
         EnsureMenu();
         MenuClearAll();
         const bool wide = tiles.size() > 6;
+        // First menu page (8 icons, no labels): sky-blue background, each icon on a pale rounded card.
+        const bool sky = tiles.size() == 8 && tiles[0].icon != nullptr && tiles[0].label.empty();
+        if (sky) {
+            lv_obj_set_style_bg_color(menu_, lv_color_hex(0x1E88E5), 0);
+            lv_obj_set_style_bg_grad_color(menu_, lv_color_hex(0x7CCBF8), 0);
+            lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_VER, 0);
+        }
         for (int i = 0; i < kMaxTiles; i++) {
-            if (wide) {   // 4 columns, icons drawn at 82 %
+            if (sky) {
+                lv_obj_set_size(tile_box_[i], 76, 92);
+                lv_obj_set_pos(tile_box_[i], 2 + (i % 4) * 80, 10 + (i / 4) * 102);
+                lv_image_set_scale(tile_img_[i], 209);
+            } else if (wide) {   // 4 columns, icons drawn at 82 %
                 lv_obj_set_size(tile_box_[i], 76, 112);
                 lv_obj_set_pos(tile_box_[i], 4 + (i % 4) * 78, 6 + (i / 4) * 118);
                 lv_image_set_scale(tile_img_[i], 209);
@@ -303,10 +314,17 @@ public:
                 if (tiles[i].icon != nullptr) {
                     lv_image_set_src(tile_img_[i], tiles[i].icon);
                     lv_obj_clear_flag(tile_img_[i], LV_OBJ_FLAG_HIDDEN);
+                    if (sky) {   // pale card (0xDDEFFC, same colour as the icon background)
+                        lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_COVER, 0);
+                        lv_obj_set_style_bg_color(tile_box_[i], lv_color_hex(0xDDEFFC), 0);
+                        lv_obj_set_style_radius(tile_box_[i], 18, 0);
+                        lv_obj_align(tile_img_[i], LV_ALIGN_CENTER, 0, 0);
+                    } else {
                     lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_TRANSP, 0);
                     lv_obj_align(tile_lbl_[i], LV_ALIGN_TOP_MID, 0, 92);
                     // no label: the icon alone, centred in the tile
                     lv_obj_align(tile_img_[i], LV_ALIGN_TOP_MID, 0, tiles[i].label.empty() ? 12 : 0);
+                    }
                 } else {
                     // text-only tile (no icon drawn yet): soft blue card with the label centred
                     lv_obj_add_flag(tile_img_[i], LV_OBJ_FLAG_HIDDEN);
@@ -487,6 +505,10 @@ private:
     }
 
     void MenuClearAll() {
+        if (menu_ != nullptr) {   // back to the plain white background (the first menu page switches to a sky gradient)
+            lv_obj_set_style_bg_color(menu_, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_NONE, 0);
+        }
         for (int i = 0; i < kMaxTiles; i++) lv_obj_add_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < kMenuRows; i++) lv_obj_add_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(menu_title_, LV_OBJ_FLAG_HIDDEN);
