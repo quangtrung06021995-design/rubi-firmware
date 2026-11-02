@@ -2056,6 +2056,7 @@ private:
 
     std::vector<std::string> speak_paths_;
     int speak_gap_ms_ = 300;
+    bool norm_gain_ = false;   // PlayFile: even out the loudness of spoken clips
 
     static void SpeakTask(void* arg) {
         static_cast<RubiMedia*>(arg)->SpeakLoop();
@@ -2066,10 +2067,12 @@ private:
         auto& as = Application::GetInstance().GetAudioService();
         int out_rate = Board::GetInstance().GetAudioCodec()->output_sample_rate();
         std::vector<std::string> paths = speak_paths_;
+        norm_gain_ = true;
         for (size_t i = 0; i < paths.size() && !stop_; i++) {
             PlayFile(paths[i], out_rate, as);
             if (i + 1 < paths.size() && !stop_) vTaskDelay(pdMS_TO_TICKS(speak_gap_ms_));
         }
+        norm_gain_ = false;
         playing_ = false;
     }
 
@@ -2256,6 +2259,23 @@ private:
             fclose(f);
             return;
         }
+        // Spoken clips (maths, word cards) are normalised so that every clip is equally loud: gain = 29000 / peak, at most x6.
+        float gain = 1.0f;
+        if (norm_gain_) {
+            long data_pos = ftell(f);
+            int peak = 1;
+            std::vector<int16_t> tmp(1024);
+            uint32_t left = data_size;
+            while (left > 0) {
+                size_t got = fread(tmp.data(), 1, std::min<size_t>(tmp.size() * 2, left), f);
+                if (got == 0) break;
+                left -= got;
+                for (size_t k = 0; k < got / 2; k++) { int v = tmp[k] < 0 ? -tmp[k] : tmp[k]; if (v > peak) peak = v; }
+            }
+            fseek(f, data_pos, SEEK_SET);
+            gain = std::min(6.0f, 29000.0f / (float)peak);
+            if (gain < 1.0f) gain = 1.0f;
+        }
         const double step = (double)in_rate / (double)out_rate;
         std::vector<int16_t> raw(1024 * channels);
         std::vector<float> in;      // mono input waiting to be resampled
@@ -2280,7 +2300,8 @@ private:
             while (pos + 1 < (double)in.size()) {
                 size_t idx = (size_t)pos;
                 float frac = (float)(pos - idx);
-                out.push_back((int16_t)(in[idx] * (1.0f - frac) + in[idx + 1] * frac));
+                float smp = (in[idx] * (1.0f - frac) + in[idx + 1] * frac) * gain;
+                out.push_back((int16_t)(smp > 32767.0f ? 32767 : (smp < -32768.0f ? -32768 : smp)));
                 pos += step;
                 if (out.size() >= 1200) {
                     while (!stop_ && !as.PushPcmToPlayback(std::move(out))) {
