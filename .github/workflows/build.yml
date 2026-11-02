@@ -288,9 +288,21 @@ jobs:
           git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "OTA $RUBI_VERSION"
           git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ota
 
+      - name: Files for a USB flash that keeps Wi-Fi and touch settings
+        shell: bash
+        run: |
+          # xiaozhi.bin = the app only (flash at 0x20000); otadata_blank.bin (flash at 0xd000) makes the chip boot ota_0 again.
+          # Neither touches the nvs partition, so saved Wi-Fi and touch calibration stay.
+          cp upstream/build/xiaozhi.bin upstream/build/rubi_app_0x20000.bin
+          head -c 8192 /dev/zero | tr '\0' '\377' > upstream/build/otadata_blank_0xd000.bin
+          ls -la upstream/build/rubi_app_0x20000.bin upstream/build/otadata_blank_0xd000.bin
+
       - name: Upload firmware
         uses: actions/upload-artifact@v4
         with:
           name: rubi-firmware
-          path: upstream/build/merged-binary.bin
+          path: |
+            upstream/build/merged-binary.bin
+            upstream/build/rubi_app_0x20000.bin
+            upstream/build/otadata_blank_0xd000.bin
           if-no-files-found: error

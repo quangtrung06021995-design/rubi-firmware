@@ -70,6 +70,14 @@ def danh_sach():
                  ("an", "ăn"), ("trongroconlaibaonhieu", "Hỏi trong rổ còn lại bao nhiêu"),
                  ("nhieuhon", "nhiều hơn"), ("baonhieu", "bao nhiêu")]:
         ds.append(("cau_" + k, v))
+    # Loi khen / nhac nho khi be tra loi (Rubi doc sau moi cau)
+    for k, v in [("dung1", "Đúng rồi! Giỏi quá!"), ("dung2", "Chính xác! Con giỏi lắm!"), ("dung3", "Tuyệt vời! Con làm đúng rồi!"),
+                 ("sai1", "Chưa đúng. Con thử lại nhé!"), ("sai2", "Chưa đúng rồi. Con suy nghĩ lại nhé!"),
+                 ("dapan", "Đáp án là"), ("tiep", "Mình làm câu tiếp nhé!"), ("xong", "Xong rồi!"),
+                 ("condung", "Con trả lời đúng ngay"), ("cau", "câu"),
+                 ("khen9", "Giỏi quá, tuyệt vời!"), ("khen7", "Giỏi lắm!"),
+                 ("khen5", "Khá lắm, luyện thêm nhé!"), ("khen0", "Cố lên, mình chơi lại nhé!")]:
+        ds.append(("ph_" + k, v))
     return ds
 
 

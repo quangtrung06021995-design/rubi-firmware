@@ -1049,6 +1049,11 @@ private:
             paths.push_back(dir + file + ".wav");
             i += used;
         }
+        return StartClipPaths(paths);
+    }
+
+    // Plays the given WAV files one after another (all must exist, otherwise nothing is played and false is returned).
+    bool StartClipPaths(const std::vector<std::string>& paths) {
         for (const auto& p : paths) {
             FILE* f = fopen(p.c_str(), "rb");
             if (f == nullptr) return false;
@@ -1063,6 +1068,14 @@ private:
         playing_ = true;
         xTaskCreatePinnedToCore(&RubiMedia::SpeakTask, "rubi_say", 8192, this, 4, nullptr, 1);
         return true;
+    }
+
+    // Spoken feedback of the maths game: clip names without folder and ".wav" (made by tao_giong_toan*.py, names ph_*, so_*).
+    bool SayMathNames(const std::vector<std::string>& names) {
+        if (!MountSd()) return false;
+        std::vector<std::string> paths;
+        for (const auto& n : names) paths.push_back("/sdcard/rubi/hoc/toan/" + n + ".wav");
+        return StartClipPaths(paths);
     }
 
     void SayMath(const std::string& text) {
@@ -1121,6 +1134,9 @@ private:
             const char* praise = math_score_ >= 9 ? "Giỏi quá, tuyệt vời!" : (math_score_ >= 7 ? "Giỏi lắm!" : (math_score_ >= 5 ? "Khá lắm, luyện thêm nhé!" : "Cố lên, mình chơi lại nhé!"));
             std::string t = "Xong rồi!\nĐúng ngay " + std::to_string(math_score_) + "/" + std::to_string(kMathRound) + " câu\n" + praise + "\n\nChạm để chơi tiếp";
             if (display_) display_->MenuShowMessage(t.c_str(), -1, -1, true);
+            StopSayMath();
+            SayMathNames({"ph_xong", "ph_condung", "so_" + std::to_string(math_score_), "ph_cau",
+                          math_score_ >= 9 ? "ph_khen9" : (math_score_ >= 7 ? "ph_khen7" : (math_score_ >= 5 ? "ph_khen5" : "ph_khen0"))});
             return;
         }
         math_q_ = RubiMath::Make(math_mode_, math_idx_);
@@ -1181,9 +1197,13 @@ private:
         else { math_tries_++; reveal = math_tries_ >= 2; }
         std::string msg = right ? "Đúng rồi!\nGiỏi quá!" : (reveal ? "Đáp án là " + std::to_string(math_q_.answer) + "\nMình làm câu tiếp nhé" : "Chưa đúng,\nthử lại nhé!");
         if (display_) display_->MenuShowMessage(msg.c_str(), -1, -1, true);
+        if (right) SayMathNames({"ph_dung" + std::to_string(1 + (int)(esp_random() % 3))});
+        else if (reveal) SayMathNames({"ph_dapan", "so_" + std::to_string(math_q_.answer), "ph_tiep"});
+        else SayMathNames({"ph_sai" + std::to_string(1 + (int)(esp_random() % 2))});
         bool next = right || reveal;
         RunTask([this, next, ms = (right ? 900 : (reveal ? 2200 : 1100))]() {
             vTaskDelay(pdMS_TO_TICKS(ms));
+            for (int i = 0; i < 60 && playing_; i++) vTaskDelay(pdMS_TO_TICKS(100));   // let the spoken feedback finish
             std::lock_guard<std::recursive_mutex> lk(mutex_);
             if (screen_ != Screen::kMathBusy) return;
             if (next) { math_idx_++; NextMath(); }
