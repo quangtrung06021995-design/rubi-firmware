@@ -668,7 +668,11 @@ private:
 
     void ShowSettings() {
         screen_ = Screen::kSettings;
-        if (display_) display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "<< Quay lại"}, "");
+        if (display_) {
+            static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, &rubi_icon_wifi_s, &rubi_icon_dieu_khien, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
+            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "<< Quay lại"}, "", nullptr,
+            &ico);
+        }
     }
 
     // ---------------- phone -> Rubi music upload ----------------
@@ -1213,7 +1217,11 @@ private:
 
     void ShowPlay() {
         screen_ = Screen::kPlay;
-        if (display_) display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ");
+        if (display_) {
+            static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_nhay_mua, &rubi_icon_hat_ru, &rubi_icon_hen_gio, &rubi_icon_quay_lai};
+            display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ", nullptr,
+            &ico);
+        }
     }
 
     // The DevKit does the moving (spins on the spot only, so Rubi cannot drive off a table); any touch stops it.
