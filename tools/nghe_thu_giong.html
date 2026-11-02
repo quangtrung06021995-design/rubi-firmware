@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nghe thử giọng đọc Rubi</title>
+<style>
+  :root { --bg:#f3f8ff; --card:#fff; --ink:#0b2e94; --muted:#5a6b80; --line:#cfe0f5; --btn:#e8f2ff; --btn2:#1e78e6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1b2d; --card:#17263d; --ink:#dbe8ff; --muted:#9db2d0; --line:#2a3f5e; --btn:#1f3350; --btn2:#4a9bff; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,Segoe UI,Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
+  h1 { font-size:1.4rem; margin:6px 0 0; }
+  p { margin:0; color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px; }
+  label { display:block; font-weight:600; margin-bottom:6px; }
+  select, input[type=range] { width:100%; }
+  select { padding:10px; font-size:1rem; border-radius:10px; border:1px solid var(--line); background:var(--btn); color:var(--ink); }
+  .grid { display:flex; flex-wrap:wrap; gap:8px; }
+  button { font:inherit; padding:10px 14px; border-radius:12px; border:1px solid var(--line); background:var(--btn); color:var(--ink); cursor:pointer; }
+  button:hover { border-color:var(--btn2); }
+  button.main { background:var(--btn2); color:#fff; border-color:var(--btn2); font-weight:600; }
+  h2 { font-size:1.05rem; margin:0 0 8px; }
+  .warn { color:#d4380d; font-weight:600; }
+  #log { font-size:.9rem; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Nghe thử giọng đọc cho Rubi</h1>
+  <p>Trang này dùng giọng có sẵn trong trình duyệt của bạn. <b>Mở bằng Microsoft Edge</b> để có giọng Bắc tự nhiên "HoaiMy" (nữ) và "NamMinh" (nam), đây cũng chính là giọng sẽ dùng để tạo file cho Rubi.</p>
+
+  <div class="card">
+    <label for="voice">Giọng đọc</label>
+    <select id="voice"></select>
+    <p id="vinfo" style="margin-top:8px"></p>
+    <label for="rate" style="margin-top:12px">Tốc độ: <span id="rv">0.9</span></label>
+    <input id="rate" type="range" min="0.5" max="1.3" step="0.05" value="0.9">
+  </div>
+
+  <div class="card">
+    <h2>Các từ hay bị đọc sai</h2>
+    <div class="grid" id="tricky"></div>
+  </div>
+
+  <div class="card">
+    <h2>Số và phép tính</h2>
+    <div class="grid" id="nums"></div>
+  </div>
+
+  <div class="card">
+    <h2>Câu hỏi đầy đủ</h2>
+    <div class="grid" id="sent"></div>
+  </div>
+
+  <div class="card">
+    <label for="own">Tự gõ chữ để nghe</label>
+    <input id="own" type="text" value="Lan có năm quả cam" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);font:inherit;background:var(--btn);color:var(--ink)">
+    <div class="grid" style="margin-top:8px">
+      <button class="main" id="playown">Đọc</button>
+      <button id="stop">Dừng</button>
+    </div>
+    <p id="log" style="margin-top:8px"></p>
+  </div>
+</main>
+<script>
+var voiceSel = document.getElementById('voice'), rate = document.getElementById('rate');
+var voices = [];
+function load() {
+  voices = speechSynthesis.getVoices().filter(function (v) { return /^vi/i.test(v.lang) || /vietnam/i.test(v.name); });
+  voiceSel.innerHTML = '';
+  if (!voices.length) {
+    var o = document.createElement('option');
+    o.textContent = 'Không thấy giọng tiếng Việt nào';
+    voiceSel.appendChild(o);
+    document.getElementById('vinfo').innerHTML = '<span class="warn">Trình duyệt này chưa có giọng tiếng Việt. Hãy mở trang bằng Microsoft Edge (bản mới).</span>';
+    return;
+  }
+  voices.sort(function (a, b) { return (/natural|online/i.test(b.name) ? 1 : 0) - (/natural|online/i.test(a.name) ? 1 : 0); });
+  voices.forEach(function (v, i) {
+    var o = document.createElement('option');
+    o.value = i;
+    o.textContent = v.name + (v.localService ? ' (trong máy)' : ' (trực tuyến)');
+    voiceSel.appendChild(o);
+  });
+  info();
+}
+function info() {
+  var v = voices[voiceSel.value || 0];
+  document.getElementById('vinfo').textContent = v ? 'Đang chọn: ' + v.name + ' - ' + v.lang : '';
+}
+function say(t) {
+  speechSynthesis.cancel();
+  var v = voices[voiceSel.value || 0];
+  var u = new SpeechSynthesisUtterance(t);
+  if (v) { u.voice = v; u.lang = v.lang; } else { u.lang = 'vi-VN'; }
+  u.rate = parseFloat(rate.value);
+  speechSynthesis.speak(u);
+  document.getElementById('log').textContent = 'Đang đọc: ' + t;
+}
+function addButtons(id, items) {
+  var box = document.getElementById(id);
+  items.forEach(function (t) {
+    var b = document.createElement('button');
+    b.textContent = t;
+    b.onclick = function () { say(t); };
+    box.appendChild(b);
+  });
+}
+addButtons('tricky', ['trừ', 'Mai', 'mấy', 'bằng mấy', 'cộng', 'bằng', 'Hỏi', 'quả cam', 'nhiều hơn', 'còn lại bao nhiêu']);
+addButtons('nums', ['bảy', 'mười lăm', 'hai mươi mốt', 'ba mươi lăm', 'bốn mươi tư', 'chín mươi chín', '7 cộng 5 bằng mấy', '12 trừ 4 bằng mấy', '34 cộng 25 bằng mấy']);
+addButtons('sent', ['Lan có năm quả cam. Mẹ cho thêm ba quả cam. Hỏi Lan có tất cả bao nhiêu quả cam?', 'Trong rổ có chín quả táo. Nam ăn bốn quả táo. Hỏi trong rổ còn lại bao nhiêu quả táo?']);
+document.getElementById('playown').onclick = function () { say(document.getElementById('own').value); };
+document.getElementById('stop').onclick = function () { speechSynthesis.cancel(); };
+voiceSel.onchange = info;
+rate.oninput = function () { document.getElementById('rv').textContent = rate.value; };
+speechSynthesis.onvoiceschanged = load;
+load();
+</script>
+</body>
+</html>
