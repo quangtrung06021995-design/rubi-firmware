@@ -13,6 +13,7 @@
 #include <cmath>
 #include <cstring>
 #include <dirent.h>
+#include <sys/stat.h>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -447,6 +448,37 @@ private:
     std::atomic<bool> stop_{false};
     std::atomic<bool> playing_{false};
     sdmmc_card_t* card_ = nullptr;
+    // SD usage report for the web page: total/free from the FAT, folder sizes cached and refreshed about once a minute
+    uint64_t sd_kb_[3] = {0, 0, 0};
+    int sd_n_[3] = {0, 0, 0};
+    int sd_tick_ = 0;
+    static void DirSum(const std::string& path, int depth, uint64_t& bytes, int& files) {
+        DIR* d = opendir(path.c_str());
+        if (!d) return;
+        while (dirent* e = readdir(d)) {
+            std::string n = e->d_name;
+            if (n == "." || n == "..") continue;
+            std::string full = path + "/" + n;
+            struct stat st;
+            if (stat(full.c_str(), &st) != 0) continue;
+            if (S_ISDIR(st.st_mode)) { if (depth < 4) DirSum(full, depth + 1, bytes, files); }
+            else { bytes += (uint64_t)st.st_size; files++; }
+        }
+        closedir(d);
+    }
+    static int CountDirs(const std::string& path) {
+        int c = 0;
+        if (DIR* d = opendir(path.c_str())) {
+            while (dirent* e = readdir(d)) {
+                std::string n = e->d_name;
+                if (n == "." || n == "..") continue;
+                struct stat st;
+                if (stat((path + "/" + n).c_str(), &st) == 0 && S_ISDIR(st.st_mode)) c++;
+            }
+            closedir(d);
+        }
+        return c;
+    }
     Calib cal_;
     bool cal_loaded_ = false;
     std::recursive_mutex voice_mutex_;
@@ -757,6 +789,21 @@ private:
         bool mounted_here = (card_ == nullptr);
         bool ok = !IsOpen() && MountSd();
         if (ok) { LoadStories(); LoadSongs(); }
+        uint64_t sd_total = 0, sd_free = 0;
+        bool sd_ok = false;
+        if (ok) {
+            sd_ok = esp_vfs_fat_info("/sdcard", &sd_total, &sd_free) == ESP_OK;
+            if (sd_ok && (sd_tick_++ % 4) == 0) {   // folder scan only every 4th report (about once a minute)
+                const char* sub[3] = {"music", "truyen", "hoc"};
+                for (int i = 0; i < 3; i++) {
+                    uint64_t b = 0; int f = 0;
+                    std::string dir = std::string("/sdcard/rubi/") + sub[i];
+                    DirSum(dir, 0, b, f);
+                    sd_kb_[i] = b / 1024;
+                    sd_n_[i] = (i == 1) ? CountDirs(dir) : f;
+                }
+            }
+        }
         std::vector<Story> list = stories_;
         std::vector<std::string> songs = songs_;
         stories_ = keep;
@@ -801,6 +848,15 @@ private:
             std::string line = "Y" + std::to_string(i) + "\t" + t + "\n";
             RubiBattery::Send(line.c_str(), line.size());
             vTaskDelay(pdMS_TO_TICKS(30));
+        }
+        // SD usage: "S<total_kb>\t<free_kb>\t<music_kb>\t<music_n>\t<truyen_kb>\t<truyen_n>\t<hoc_kb>\t<hoc_n>"
+        if (sd_ok) {
+            char buf[160];
+            int len = snprintf(buf, sizeof(buf), "S%llu\t%llu\t%llu\t%d\t%llu\t%d\t%llu\t%d\n",
+                               (unsigned long long)(sd_total / 1024), (unsigned long long)(sd_free / 1024),
+                               (unsigned long long)sd_kb_[0], sd_n_[0], (unsigned long long)sd_kb_[1], sd_n_[1],
+                               (unsigned long long)sd_kb_[2], sd_n_[2]);
+            if (len > 0) RubiBattery::Send(buf, len);
         }
     }
 

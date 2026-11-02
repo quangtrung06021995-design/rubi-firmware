@@ -360,6 +360,9 @@ bool g_ty_co = false;
 String g_nh_ten[MAX_NHAC];
 int g_nh_n = 0, g_nh_dang = 0;
 bool g_nh_co = false;
+// Dung luong the nho (bo man hinh gui: "S<tong_kb>\t<con_trong_kb>\t<nhac_kb>\t<nhac_n>\t<truyen_kb>\t<truyen_n>\t<hoc_kb>\t<hoc_n>")
+uint32_t g_sd[8];
+uint32_t g_sd_at = 0;
 bool g_wifi_was = false;
 uint32_t g_auto_at = 0;      // thoi diem tu kiem tra GitHub (0 = chua dat / da xong)
 bool g_auto_done = false;
@@ -838,6 +841,13 @@ String updJson() {
     return String("");
 }
 
+String sdJson() {   // dung luong the nho neu bo man hinh bao trong 3 phut gan day: "sd":[tong_kb,trong_kb,nhac_kb,nhac_n,truyen_kb,truyen_n,hoc_kb,hoc_n]
+    if (g_sd_at == 0 || millis() - g_sd_at > 180000) return String("");
+    String j = ",\"sd\":[";
+    for (int i = 0; i < 8; i++) { if (i) j += ","; j += String((unsigned long)g_sd[i]); }
+    return j + "]";
+}
+
 String phienBanJson() {   // phien ban dang chay cua bo man hinh va camera (neu gan day co bao)
     String j;
     if (g_ds_at != 0 && millis() - g_ds_at < 120000) j += String(",\"dsv\":\"") + g_ds_v + "\"";
@@ -860,7 +870,7 @@ void webStatus() {
         return;
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
-               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() +
+               "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
                ",\"bat_mv\":" + String((int)g_bat_mv) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
                ",\"r\":" + String(A_LA_BANH_TRAI ? g_cmd[1] : g_cmd[0]) +
@@ -1122,6 +1132,11 @@ void loop() {
             else if (line2.length() > 3 && line2[0] == 'T') {
                 int k = line2.indexOf('\t');
                 if (k > 1 && g_ty_dang < MAX_TRUYEN) { g_ty_id[g_ty_dang] = line2.substring(1, k); g_ty_ten[g_ty_dang] = line2.substring(k + 1); g_ty_dang++; g_ty_n = g_ty_dang; }
+            }
+            else if (line2.length() > 8 && line2[0] == 'S') {   // dung luong the nho
+                unsigned long a[8] = {0};
+                int n = sscanf(line2.c_str() + 1, "%lu\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu\t%lu", &a[0], &a[1], &a[2], &a[3], &a[4], &a[5], &a[6], &a[7]);
+                if (n == 8) { for (int i = 0; i < 8; i++) g_sd[i] = a[i]; g_sd_at = millis() | 1; }
             }
             else if (line2.length() > 2 && line2.length() < 20 && line2[0] == 'V') { g_ds_v = line2.substring(1); g_ds_at = millis() | 1; }
             else if (line2 == "U1") { g_upd_ds = true; g_upd_ds_den = millis() + 60000; dungHet(); }   // man hinh dang nap ban moi

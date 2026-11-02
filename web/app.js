@@ -92,6 +92,22 @@ function stat(k,v){return '<div class="stat"><span>'+k+'</span><span>'+esc(v)+'<
 function note(t){return '<p style="color:var(--mute);font-size:13px;margin:8px 0 0">'+t+'</p>'}
 function setCard(id,h,body){var c=$(id);if(c)c.innerHTML='<h2>'+h+'</h2>'+body}
 function pinBtn(){return '<button class="btn" id="pinbtn" style="margin-top:8px">Nhập PIN</button>'}
+function fmtKb(kb){kb=+kb||0;var s;if(kb>=1048576)s=(kb/1048576).toFixed(kb>=10485760?0:1)+" GB";else if(kb>=1024)s=(kb/1024).toFixed(kb>=10240?0:1)+" MB";else s=kb+" KB";return s.replace(".",",")}
+function renderSd(s,ok){
+ var big=null;
+ if(!s){big=note("Chưa nối được Rubi.")}
+ else if(!ok){big=note("Cần mã PIN để xem.")+pinBtn()}
+ else if(!s.sd){big=note("Chưa nhận được thông tin thẻ từ bo màn hình. Bo gửi mỗi 15 giây khi đang rảnh, đợi một chút rồi thử lại. Nếu vẫn không có, bo màn hình cần cập nhật bản mới.")}
+ var c1=$("csd"),c2=$("csd2");
+ if(big){if(c2)c2.innerHTML='<h2>Thẻ nhớ</h2>'+big;if(c1){var a=c1.querySelector(".sdinfo");if(!a){a=document.createElement("div");a.className="sdinfo";c1.insertBefore(a,c1.querySelector("div[style]"))}a.innerHTML=big;var hn0=c1.querySelector("p.hint");if(hn0)hn0.style.display="none"}return}
+ var d=s.sd,tot=d[0],fr=d[1],used=Math.max(0,tot-fr),pc=tot>0?Math.max(0,Math.min(100,Math.round(used*100/tot))):0;
+ var other=Math.max(0,used-d[2]-d[4]-d[6]);
+ var head='<div class="big">'+fmtKb(used).replace(/ (GB|MB|KB)$/,' <span style="font-size:16px;font-weight:500">$1</span>')+' <span style="font-size:16px;font-weight:500">/ '+fmtKb(tot)+'</span></div><div class="bar"><i style="width:'+pc+'%;background:var(--accent)"></i></div>';
+ var rows=stat("Còn trống",fmtKb(fr));
+ if(c2)c2.innerHTML='<h2>Thẻ nhớ</h2>'+head+rows;
+ if(c1){var a2=c1.querySelector(".sdinfo");if(!a2){a2=document.createElement("div");a2.className="sdinfo";c1.insertBefore(a2,c1.querySelector("div[style]"))}
+  a2.innerHTML=head+'<div style="margin-top:8px">'+stat("Bài hát",d[3]+" file, "+fmtKb(d[2]))+stat("Truyện tranh",d[5]+" truyện, "+fmtKb(d[4]))+stat("Học tập",d[7]+" file, "+fmtKb(d[6]))+stat("Khác",fmtKb(other))+stat("Còn trống",fmtKb(fr))+'</div>';
+  var hn=c1.querySelector("p.hint");if(hn)hn.style.display="none"}}
 function bindPin(){var b=$("pinbtn");if(b)b.onclick=askPin}
 function render(){
  var s=ST,ok=s&&s.auth!==false,ver=s&&s.ver?String(s.ver):"",bad=s?null:note("Chưa nối được Rubi. Kiểm tra Wi-Fi và nguồn.");
@@ -116,13 +132,14 @@ function render(){
  var al=document.querySelector(".alert"),dt=document.querySelector(".drawer .dot"),dkNew=moi.length>0;
  if(al){al.style.display=dkNew?"":"none";if(dkNew){var b=al.querySelector("b");if(b)b.textContent=moi.join(", ")+" có bản mới.";var sp=al.querySelector("span");if(sp&&sp.lastChild&&sp.lastChild.nodeType===3)sp.lastChild.textContent=" Robot sẽ tự cập nhật khi bật nguồn lại."}}
  if(dt)dt.style.display=dkNew?"":"none";
+ renderSd(s,ok);
  var hp=$("hpv"),hb=$("hpb"),hw=$("hwv"),stt=$("state");
  if(hp){var mv2=ok?(+s.bat_mv||0):0,pp=mv2>2000?Math.max(0,Math.min(100,Math.round((mv2-6000)/24))):null;hp.textContent=pp==null?"—":pp+"%";if(hb)hb.style.width=(pp||0)+"%";if(hw)hw.textContent=ok&&s.rssi!=null?s.rssi+" dBm":"—";if(stt)stt.textContent=!s?"Chưa kết nối với Rubi":"Sẵn sàng chơi cùng bé"}}
 function conn(){var c=$("conn"),n=$("demonote");
  if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
- if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Các mục còn lại (đèn, trò chơi, bài hát, truyện, thẻ nhớ, camera) vẫn là mẫu."}
+ if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Thẻ nhớ hiện số thật. Các mục còn lại (đèn, trò chơi, camera) vẫn là mẫu."}
 function refresh(){return api("/api/status").then(function(j){ST=j}).catch(function(){ST=null}).then(loadLat).then(function(){render();conn()})}
-function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"}
+function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"||h==="the-nho"}
 addEventListener("hashchange",function(){if(watching())refresh()});
 setInterval(function(){if(!document.hidden&&watching())refresh()},5000);
 /* ---- Truyện tranh thật: danh sách từ thẻ nhớ của Rubi (qua DevKit), bấm để mở trên màn hình Rubi ---- */
