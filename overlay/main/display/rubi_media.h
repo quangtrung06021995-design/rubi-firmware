@@ -1120,7 +1120,7 @@ private:
             screen_ = Screen::kMathDone;
             const char* praise = math_score_ >= 9 ? "Giỏi quá, tuyệt vời!" : (math_score_ >= 7 ? "Giỏi lắm!" : (math_score_ >= 5 ? "Khá lắm, luyện thêm nhé!" : "Cố lên, mình chơi lại nhé!"));
             std::string t = "Xong rồi!\nĐúng ngay " + std::to_string(math_score_) + "/" + std::to_string(kMathRound) + " câu\n" + praise + "\n\nChạm để chơi tiếp";
-            if (display_) display_->MenuShowMessage(t.c_str(), -1, -1);
+            if (display_) display_->MenuShowMessage(t.c_str(), -1, -1, true);
             return;
         }
         math_q_ = RubiMath::Make(math_mode_, math_idx_);
@@ -1128,7 +1128,7 @@ private:
         math_tries_ = 0;
         if (!math_q_.story.empty()) {
             screen_ = Screen::kMathStory;
-            if (display_) display_->MenuShowMessage((std::string("Câu ") + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound) + "\n" + math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1);
+            if (display_) display_->MenuShowMessage((std::string("Câu ") + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound) + "\n" + math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1, true);
         } else {
             RenderMath("");
         }
@@ -1138,21 +1138,19 @@ private:
     void RenderMath(const std::string& note) {
         screen_ = Screen::kMathKeys;
         keys_.clear();
-        const uint32_t kNum = 0xE6F0FF, kSpecial = 0xBBD0F0, kOk = 0xA5D6A7, kCancel = 0xFFC9C9, kStory = 0xFFE082;
-        const int KH = 38, KW = 56, G = 4, X0 = 76;
-        keys_.push_back({4, 2, 64, 22, "< Thoát", 6, "", kCancel});
-        static const char* rows[3] = {"123", "456", "789"};
-        for (int r = 0; r < 3; r++)
-            for (int c = 0; c < 3; c++)
-                keys_.push_back({X0 + c * (KW + G), 56 + r * 41, KW, KH, std::string(1, rows[r][c]), 0, std::string(1, rows[r][c]), kNum});
-        keys_.push_back({X0, 179, KW, KH, "Xóa", 2, "", kSpecial});
-        keys_.push_back({X0 + KW + G, 179, KW, KH, "0", 0, "0", kNum});
-        keys_.push_back({X0 + 2 * (KW + G), 179, KW, KH, "OK", 5, "", kOk});
-        keys_.push_back({4, math_q_.story.empty() ? 56 : 98, 66, KH, "Nghe", 8, "", kStory});
-        if (!math_q_.story.empty()) keys_.push_back({4, 56, 66, KH, "Đề", 7, "", kStory});
-        std::string head = note.empty() ? ("(" + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound) + ") " + math_q_.ask) : note;
-        std::string shown = math_buf_ + "_";
-        if (display_) display_->MenuShowKeyboard(head, shown, keys_, true);
+        // Hit areas match the picture buttons drawn by RubiDisplay::MenuShowMath.
+        keys_.push_back({4, 2, 40, 38, "", 6, "", 0});
+        for (int d = 1; d <= 9; d++)
+            keys_.push_back({97 + ((d - 1) % 3) * 64, 80 + ((d - 1) / 3) * 34, 62, 32, std::string(1, (char)('0' + d)), 0, std::string(1, (char)('0' + d)), 0});
+        keys_.push_back({97, 182, 62, 34, "Xóa", 2, "", 0});
+        keys_.push_back({161, 182, 60, 34, "0", 0, "0", 0});
+        keys_.push_back({221, 182, 68, 34, "OK", 5, "", 0});
+        keys_.push_back({10, 80, 82, 36, "Nghe", 8, "", 0});
+        keys_.push_back({266, 40, 44, 38, "Nghe", 8, "", 0});
+        bool story = !math_q_.story.empty();
+        if (story) keys_.push_back({10, 118, 82, 36, "Đề", 7, "", 0});
+        std::string title = note.empty() ? ("Toán lớp 1   " + std::to_string(math_idx_ + 1) + "/" + std::to_string(kMathRound)) : note;
+        if (display_) display_->MenuShowMath(title, math_q_.ask, story, math_buf_, story);
     }
 
     void HandleMathTouch(int sx, int sy) {
@@ -1165,7 +1163,7 @@ private:
             case 8: SayMath(math_q_.say); break;
             case 7:
                 screen_ = Screen::kMathStory;
-                if (display_) display_->MenuShowMessage((math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1);
+                if (display_) display_->MenuShowMessage((math_q_.story + "\n\nChạm để trả lời").c_str(), -1, -1, true);
                 break;
             case 5: if (!math_buf_.empty()) AnswerMath(); break;
             }
@@ -1182,7 +1180,7 @@ private:
         if (right) { if (math_tries_ == 0) math_score_++; }
         else { math_tries_++; reveal = math_tries_ >= 2; }
         std::string msg = right ? "Đúng rồi!\nGiỏi quá!" : (reveal ? "Đáp án là " + std::to_string(math_q_.answer) + "\nMình làm câu tiếp nhé" : "Chưa đúng,\nthử lại nhé!");
-        if (display_) display_->MenuShowMessage(msg.c_str(), -1, -1);
+        if (display_) display_->MenuShowMessage(msg.c_str(), -1, -1, true);
         bool next = right || reveal;
         RunTask([this, next, ms = (right ? 900 : (reveal ? 2200 : 1100))]() {
             vTaskDelay(pdMS_TO_TICKS(ms));

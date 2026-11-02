@@ -18,6 +18,7 @@
 #include "rubi_vi_font.h"
 #include "rubi_bg.h"
 #include "rubi_icons.h"
+#include "rubi_math_icons.h"
 #include "rubi_mat_data.h"
 #include "rubi_talk_data.h"
 #include "rubi_battery.h"
@@ -371,10 +372,20 @@ public:
     }
 
     // A message in the middle; cross_x >= 0 also draws a red + target at (cross_x, cross_y).
-    void MenuShowMessage(const char* msg, int cross_x, int cross_y) {
+    void MenuShowMessage(const char* msg, int cross_x, int cross_y, bool sky = false) {
         DisplayLockGuard lock(this);
         EnsureMenu();
         MenuClearAll();
+        if (sky) {   // maths feedback: text on a white card over the sky picture
+            lv_obj_set_style_bg_color(menu_, lv_color_hex(0x1E88E5), 0);
+            lv_obj_set_style_bg_grad_color(menu_, lv_color_hex(0x7CCBF8), 0);
+            lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_VER, 0);
+            lv_obj_clear_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_style_bg_color(menu_msg_, lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_bg_opa(menu_msg_, LV_OPA_90, 0);
+            lv_obj_set_style_radius(menu_msg_, 16, 0);
+            lv_obj_set_style_pad_all(menu_msg_, 10, 0);
+        }
         lv_label_set_text(menu_msg_, msg);
         lv_obj_clear_flag(menu_msg_, LV_OBJ_FLAG_HIDDEN);
         if (cross_x >= 0) {
@@ -487,6 +498,16 @@ private:
     lv_obj_t* lock_body_[kMenuRows] = {};   // padlock drawn at the right end of a row (secured Wi-Fi)
     lv_obj_t* lock_arc_[kMenuRows] = {};
     lv_obj_t* bg_img_ = nullptr;
+    // Maths screen (picture buttons on the sky background)
+    lv_obj_t* math_box_ = nullptr;
+    lv_obj_t* math_title_ = nullptr;
+    lv_obj_t* math_bar_ = nullptr;
+    lv_obj_t* math_ask_ = nullptr;
+    lv_obj_t* math_ans_ = nullptr;
+    lv_obj_t* math_ans_img_[3] = {};
+    lv_obj_t* math_eq_img_[12] = {};
+    lv_obj_t* math_key_[10] = {};
+    lv_obj_t* math_btn_story_ = nullptr;
     lv_obj_t* tile_box_[kMaxTiles] = {};
     lv_obj_t* tile_img_[kMaxTiles] = {};
     lv_obj_t* tile_lbl_[kMaxTiles] = {};
@@ -541,6 +562,8 @@ private:
         for (int i = 0; i < kMaxKeys; i++) if (kb_key_[i]) lv_obj_add_flag(kb_key_[i], LV_OBJ_FLAG_HIDDEN);
         if (kb_ssid_) lv_obj_add_flag(kb_ssid_, LV_OBJ_FLAG_HIDDEN);
         if (kb_field_) lv_obj_add_flag(kb_field_, LV_OBJ_FLAG_HIDDEN);
+        if (math_box_) lv_obj_add_flag(math_box_, LV_OBJ_FLAG_HIDDEN);
+        if (menu_msg_) lv_obj_set_style_bg_opa(menu_msg_, LV_OPA_TRANSP, 0);
     }
 
     lv_obj_t* MakeLabel(lv_obj_t* parent, const lv_font_t* font, uint32_t color) {
@@ -682,9 +705,152 @@ private:
             kb_lbl_[i] = MakeLabel(kb_key_[i], font, 0x1E2A3A);
             lv_obj_center(kb_lbl_[i]);
         }
+        BuildMathScreen(font);
         MenuClearAll();
     }
 
+    static const lv_image_dsc_t* const* MathBig() {
+        static const lv_image_dsc_t* const g[10] = {&rubi_m_g0, &rubi_m_g1, &rubi_m_g2, &rubi_m_g3, &rubi_m_g4, &rubi_m_g5, &rubi_m_g6, &rubi_m_g7, &rubi_m_g8, &rubi_m_g9};
+        return g;
+    }
+    static const lv_image_dsc_t* const* MathKeyDigits() {
+        static const lv_image_dsc_t* const d[10] = {&rubi_m_d0, &rubi_m_d1, &rubi_m_d2, &rubi_m_d3, &rubi_m_d4, &rubi_m_d5, &rubi_m_d6, &rubi_m_d7, &rubi_m_d8, &rubi_m_d9};
+        return d;
+    }
+
+    lv_obj_t* MathImage(const lv_image_dsc_t* d, int x, int y) {
+        lv_obj_t* im = lv_image_create(math_box_);
+        lv_image_set_src(im, d);
+        lv_obj_set_pos(im, x, y);
+        lv_obj_remove_flag(im, LV_OBJ_FLAG_CLICKABLE);
+        return im;
+    }
+
+    void BuildMathScreen(const lv_font_t* font) {
+        math_box_ = lv_obj_create(menu_);
+        lv_obj_remove_style_all(math_box_);
+        lv_obj_set_size(math_box_, LV_HOR_RES, LV_VER_RES);
+        lv_obj_set_pos(math_box_, 0, 0);
+        lv_obj_remove_flag(math_box_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_clear_flag(math_box_, LV_OBJ_FLAG_SCROLLABLE);
+        math_title_ = MakeLabel(math_box_, font, 0x0B2E94);
+        lv_obj_set_width(math_title_, 200);
+        lv_obj_set_style_text_align(math_title_, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_long_mode(math_title_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_pos(math_title_, 60, 10);
+        MathImage(&rubi_m_back, 8, 4);
+        math_bar_ = MakeRect(math_box_, 304, 36, 0xFFF8EC, 18);
+        lv_obj_set_pos(math_bar_, 8, 40);
+        lv_obj_set_style_border_width(math_bar_, 2, 0);
+        lv_obj_set_style_border_color(math_bar_, lv_color_hex(0xBFE3FF), 0);
+        math_ask_ = MakeLabel(math_box_, font, 0x0B2E94);
+        lv_obj_set_width(math_ask_, 186);
+        lv_label_set_long_mode(math_ask_, LV_LABEL_LONG_SCROLL_CIRCULAR);
+        lv_obj_set_pos(math_ask_, 22, 50);
+        math_ans_ = MakeRect(math_box_, 50, 28, 0xFFFFFF, 10);
+        lv_obj_set_style_border_width(math_ans_, 2, 0);
+        lv_obj_set_style_border_color(math_ans_, lv_color_hex(0x1E78E6), 0);
+        for (int i = 0; i < 12; i++) { math_eq_img_[i] = MathImage(&rubi_m_geq, 0, 45); }
+        for (int i = 0; i < 3; i++) { math_ans_img_[i] = MathImage(&rubi_m_gq, 0, 45); }
+        MathImage(&rubi_m_speaker, 270, 43);
+        MathImage(&rubi_m_listen, 12, 80);
+        math_btn_story_ = MakeRect(math_box_, 78, 34, 0xFFC21A, 17);
+        lv_obj_set_pos(math_btn_story_, 12, 118);
+        lv_obj_t* sl = MakeLabel(math_btn_story_, font, 0x0B2E94);
+        lv_label_set_text(sl, "Đề bài");
+        lv_obj_center(sl);
+        for (int i = 0; i < 10; i++) {
+            int col = i == 0 ? 1 : (i - 1) % 3, row = i == 0 ? 3 : (i - 1) / 3;
+            math_key_[i] = MakeRect(math_box_, 60, 30, 0xE8F2FF, 12);
+            lv_obj_set_pos(math_key_[i], 97 + col * 64, 80 + row * 34 + (row == 3 ? 2 : 0));
+            lv_obj_set_style_border_width(math_key_[i], 2, 0);
+            lv_obj_set_style_border_color(math_key_[i], lv_color_hex(0xFFFFFF), 0);
+            lv_obj_set_style_shadow_width(math_key_[i], 4, 0);
+            lv_obj_set_style_shadow_offset_y(math_key_[i], 2, 0);
+            lv_obj_set_style_shadow_color(math_key_[i], lv_color_hex(0x5A9BE0), 0);
+            lv_obj_set_style_shadow_opa(math_key_[i], LV_OPA_50, 0);
+            lv_obj_t* im = lv_image_create(math_key_[i]);
+            lv_image_set_src(im, MathKeyDigits()[i]);
+            lv_obj_center(im);
+        }
+        MathImage(&rubi_m_kdel, 97, 182);
+        MathImage(&rubi_m_kok, 221, 182);
+        lv_obj_add_flag(math_box_, LV_OBJ_FLAG_HIDDEN);
+    }
+
+public:
+    // The maths question screen: title, the question bar (sum drawn with big digits, or the story question as text),
+    // the answer box, and the keypad. `ask` is e.g. "3 + 4 = ?" (a "?" becomes the answer box) or a story question.
+    void MenuShowMath(const std::string& title, const std::string& ask, bool story_text, const std::string& typed, bool story_btn) {
+        DisplayLockGuard lock(this);
+        EnsureMenu();
+        MenuClearAll();
+        lv_obj_set_style_bg_color(menu_, lv_color_hex(0x1E88E5), 0);
+        lv_obj_set_style_bg_grad_color(menu_, lv_color_hex(0x7CCBF8), 0);
+        lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_VER, 0);
+        lv_obj_clear_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(math_box_, LV_OBJ_FLAG_HIDDEN);
+        lv_label_set_text(math_title_, title.c_str());
+        for (int i = 0; i < 12; i++) lv_obj_add_flag(math_eq_img_[i], LV_OBJ_FLAG_HIDDEN);
+        for (int i = 0; i < 3; i++) lv_obj_add_flag(math_ans_img_[i], LV_OBJ_FLAG_HIDDEN);
+        if (story_btn) lv_obj_clear_flag(math_btn_story_, LV_OBJ_FLAG_HIDDEN); else lv_obj_add_flag(math_btn_story_, LV_OBJ_FLAG_HIDDEN);
+        // What goes in the answer box
+        const lv_image_dsc_t* ans[3] = {};
+        int an = 0;
+        if (typed.empty()) ans[an++] = &rubi_m_gq;
+        else for (char c : typed) if (c >= '0' && c <= '9' && an < 3) ans[an++] = MathBig()[c - '0'];
+        auto place_answer = [&](int bx) {
+            lv_obj_set_pos(math_ans_, bx, 44);
+            lv_obj_clear_flag(math_ans_, LV_OBJ_FLAG_HIDDEN);
+            int tw = 0;
+            for (int i = 0; i < an; i++) tw += (int)ans[i]->header.w + (i ? 3 : 0);
+            int x = bx + (50 - tw) / 2;
+            for (int i = 0; i < an; i++) {
+                lv_image_set_src(math_ans_img_[i], ans[i]);
+                lv_obj_set_pos(math_ans_img_[i], x, 45);
+                lv_obj_clear_flag(math_ans_img_[i], LV_OBJ_FLAG_HIDDEN);
+                x += (int)ans[i]->header.w + 3;
+            }
+        };
+        if (story_text) {
+            lv_label_set_text(math_ask_, ask.c_str());
+            lv_obj_clear_flag(math_ask_, LV_OBJ_FLAG_HIDDEN);
+            place_answer(214);
+        } else {
+            lv_obj_add_flag(math_ask_, LV_OBJ_FLAG_HIDDEN);
+            struct Tok { const lv_image_dsc_t* img; bool box; int w; };
+            std::vector<Tok> toks;
+            for (char c : ask) {
+                if (c >= '0' && c <= '9') toks.push_back({MathBig()[c - '0'], false, (int)MathBig()[c - '0']->header.w});
+                else if (c == '+') toks.push_back({&rubi_m_gplus, false, 24});
+                else if (c == '-') toks.push_back({&rubi_m_gminus, false, 24});
+                else if (c == '=') toks.push_back({&rubi_m_geq, false, 24});
+                else if (c == '?') toks.push_back({nullptr, true, 50});
+            }
+            const int gap = 9;
+            int total = 0;
+            for (size_t i = 0; i < toks.size(); i++) total += toks[i].w + (i ? gap : 0);
+            int x = 14 + (250 - total) / 2;
+            if (x < 12) x = 12;
+            int ei = 0;
+            bool placed = false;
+            for (size_t i = 0; i < toks.size(); i++) {
+                if (toks[i].box) { place_answer(x); placed = true; }
+                else if (ei < 12) {
+                    lv_image_set_src(math_eq_img_[ei], toks[i].img);
+                    int h = (int)toks[i].img->header.h;
+                    lv_obj_set_pos(math_eq_img_[ei], x, 58 - h / 2);
+                    lv_obj_clear_flag(math_eq_img_[ei], LV_OBJ_FLAG_HIDDEN);
+                    ei++;
+                }
+                x += toks[i].w + gap;
+            }
+            if (!placed) lv_obj_add_flag(math_ans_, LV_OBJ_FLAG_HIDDEN);
+        }
+        ShowMenuLayer();
+    }
+
+private:
     enum class Expr {
         kNeutral, kHappy, kLaughing, kWinking, kLoving, kSurprised, kCrying,
         kAngry, kRelaxed, kCool, kEmbarrassed, kSleepy, kThinking, kSilly
