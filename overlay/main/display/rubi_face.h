@@ -16,6 +16,7 @@
 #include "assets/lang_config.h"
 
 #include "rubi_vi_font.h"
+#include "rubi_bg.h"
 #include "rubi_mat_data.h"
 #include "rubi_talk_data.h"
 #include "rubi_battery.h"
@@ -295,6 +296,8 @@ public:
             lv_obj_set_style_bg_color(menu_, lv_color_hex(0x1E88E5), 0);
             lv_obj_set_style_bg_grad_color(menu_, lv_color_hex(0x7CCBF8), 0);
             lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_VER, 0);
+            lv_obj_set_style_bg_image_src(menu_, &rubi_bg_menu, 0);   // sky + hills picture (320x240) over the gradient
+            lv_obj_set_style_bg_image_opa(menu_, LV_OPA_COVER, 0);
         }
         for (int i = 0; i < kMaxTiles; i++) {
             if (sky) {
@@ -508,6 +511,7 @@ private:
         if (menu_ != nullptr) {   // back to the plain white background (the first menu page switches to a sky gradient)
             lv_obj_set_style_bg_color(menu_, lv_color_hex(0xFFFFFF), 0);
             lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_NONE, 0);
+            lv_obj_set_style_bg_image_opa(menu_, LV_OPA_TRANSP, 0);
         }
         for (int i = 0; i < kMaxTiles; i++) lv_obj_add_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < kMenuRows; i++) lv_obj_add_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
