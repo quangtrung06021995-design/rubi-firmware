@@ -961,8 +961,113 @@ private:
     // Asks the cloud assistant (xiaozhi.me) to read the question aloud. Needs Wi-Fi; silent if the cloud is unreachable.
     std::atomic<int> say_gen_{0};
 
+    // The story texts end "... còn lại mấy ..." on one screen; the clips only have "bao nhiêu".
+    static std::string MathStorySpeech(std::string t) {
+        for (size_t p = 0; (p = t.find("mấy", p)) != std::string::npos; p += 9) t.replace(p, strlen("mấy"), "bao nhiêu");
+        return t;
+    }
+
+    // Reads a maths question from the pre-recorded clips in /sdcard/rubi/hoc/toan (made with tools/tao_giong_toan.py):
+    // numbers are digits in the text, everything else is matched against the clip table, longest phrase first.
+    // Returns false (nothing played) if a word or a file is missing, so the caller can fall back to the cloud voice.
+    bool TrySayMathClips(const std::string& text) {
+        struct Clip { const char* text; const char* file; };
+        static const Clip kClips[] = {
+        {"cộng", "tu_cong"},
+        {"trừ", "tu_tru"},
+        {"bằng", "tu_bang"},
+        {"mấy", "tu_may"},
+        {"bằng mấy", "tu_bangmay"},
+        {"Lan", "ten_lan"},
+        {"Nam", "ten_nam"},
+        {"Mai", "ten_mai"},
+        {"Hùng", "ten_hung"},
+        {"Na", "ten_na"},
+        {"Tí", "ten_ti"},
+        {"Hoa", "ten_hoa"},
+        {"Minh", "ten_minh"},
+        {"An", "ten_an"},
+        {"Bình", "ten_binh"},
+        {"Mẹ", "nguoi_me"},
+        {"Bố", "nguoi_bo"},
+        {"Bà", "nguoi_ba"},
+        {"Ông", "nguoi_ong"},
+        {"Chị", "nguoi_chi"},
+        {"quả cam", "vat_quacam"},
+        {"viên bi", "vat_vienbi"},
+        {"cái kẹo", "vat_caikeo"},
+        {"bông hoa", "vat_bonghoa"},
+        {"quyển truyện", "vat_quyentruyen"},
+        {"cái bánh", "vat_caibanh"},
+        {"quả táo", "vat_quatao"},
+        {"chiếc bút", "vat_chiecbut"},
+        {"con tem", "vat_contem"},
+        {"có", "cau_co"},
+        {"cho thêm", "cau_chothem"},
+        {"cho bạn", "cau_chocban"},
+        {"Hỏi", "cau_hoi"},
+        {"có tất cả bao nhiêu", "cau_cotatcabaonhieu"},
+        {"còn lại bao nhiêu", "cau_conlaibaonhieu"},
+        {"hai bạn có tất cả bao nhiêu", "cau_haibancotatcabaonhieu"},
+        {"có nhiều hơn", "cau_conhieuhon"},
+        {"có ít hơn", "cau_coithon"},
+        {"có bao nhiêu", "cau_cobaonhieu"},
+        {"Trong rổ có", "cau_trongroco"},
+        {"ăn", "cau_an"},
+        {"Hỏi trong rổ còn lại bao nhiêu", "cau_trongroconlaibaonhieu"},
+        {"nhiều hơn", "cau_nhieuhon"},
+        {"bao nhiêu", "cau_baonhieu"}
+        };
+        std::string t = text;
+        for (char& c : t) if (c == '.' || c == ',' || c == '?' || c == '\n' || c == '!') c = ' ';
+        std::vector<std::string> w;
+        for (size_t i = 0; i < t.size();) {
+            while (i < t.size() && t[i] == ' ') i++;
+            size_t j = i;
+            while (j < t.size() && t[j] != ' ') j++;
+            if (j > i) w.push_back(t.substr(i, j - i));
+            i = j;
+        }
+        if (w.empty() || !MountSd()) return false;
+        std::vector<std::string> paths;
+        const std::string dir = "/sdcard/rubi/hoc/toan/";
+        for (size_t i = 0; i < w.size();) {
+            const char* file = nullptr;
+            size_t used = 0;
+            bool num = !w[i].empty() && w[i].size() <= 3 && isdigit((unsigned char)w[i][0]);
+            if (num) { paths.push_back(dir + "so_" + std::to_string(atoi(w[i].c_str())) + ".wav"); i++; continue; }
+            for (const auto& c : kClips) {
+                std::string p = c.text;
+                size_t n = 1;
+                for (char ch : p) if (ch == ' ') n++;
+                if (n <= used || i + n > w.size()) continue;
+                std::string cand = w[i];
+                for (size_t k = 1; k < n; k++) cand += " " + w[i + k];
+                if (cand == p) { file = c.file; used = n; }
+            }
+            if (file == nullptr) return false;
+            paths.push_back(dir + file + ".wav");
+            i += used;
+        }
+        for (const auto& p : paths) {
+            FILE* f = fopen(p.c_str(), "rb");
+            if (f == nullptr) return false;
+            fclose(f);
+        }
+        stop_ = true;
+        for (int i = 0; i < 100 && playing_; i++) vTaskDelay(pdMS_TO_TICKS(20));
+        if (playing_) return false;
+        speak_paths_ = paths;
+        speak_gap_ms_ = 70;
+        stop_ = false;
+        playing_ = true;
+        xTaskCreatePinnedToCore(&RubiMedia::SpeakTask, "rubi_say", 8192, this, 4, nullptr, 1);
+        return true;
+    }
+
     void SayMath(const std::string& text) {
         int gen = ++say_gen_;
+        if (TrySayMathClips(math_q_.story.empty() ? text : MathStorySpeech(text))) return;
         std::string prompt = "Hãy đọc to, đúng từng chữ, không giải bài, không thêm lời nào khác: " + text;
         RunTask([this, prompt, gen]() {
             auto& app = Application::GetInstance();
@@ -1005,6 +1110,7 @@ private:
 
     void StopSayMath() {
         ++say_gen_;
+        if (playing_ && screen_ != Screen::kPlaying) stop_ = true;   // clip reading
         auto st = Application::GetInstance().GetDeviceState();
         if (st == kDeviceStateSpeaking || st == kDeviceStateListening) Application::GetInstance().WakeWordInvoke("");
     }
@@ -1933,6 +2039,7 @@ private:
         const Word& w = words_[word_];
         std::string base = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file;
         speak_paths_.clear();
+        speak_gap_ms_ = 300;
         for (const char* suffix : {"_en.wav", "_vi.wav"}) {
             std::string p = base + suffix;
             FILE* f = fopen(p.c_str(), "rb");
@@ -1950,6 +2057,7 @@ private:
     }
 
     std::vector<std::string> speak_paths_;
+    int speak_gap_ms_ = 300;
 
     static void SpeakTask(void* arg) {
         static_cast<RubiMedia*>(arg)->SpeakLoop();
@@ -1962,7 +2070,7 @@ private:
         std::vector<std::string> paths = speak_paths_;
         for (size_t i = 0; i < paths.size() && !stop_; i++) {
             PlayFile(paths[i], out_rate, as);
-            if (i + 1 < paths.size() && !stop_) vTaskDelay(pdMS_TO_TICKS(300));
+            if (i + 1 < paths.size() && !stop_) vTaskDelay(pdMS_TO_TICKS(speak_gap_ms_));
         }
         playing_ = false;
     }
