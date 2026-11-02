@@ -1745,7 +1745,8 @@ private:
         int v = Board::GetInstance().GetAudioCodec()->output_volume();
         char line[48];
         snprintf(line, sizeof(line), "Âm lượng hiện tại: %d%%", v);
-        display_->MenuShowList("ÂM LƯỢNG", {line, "+  Tăng", "-  Giảm", "<< Quay lại"}, "");
+        static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, nullptr, nullptr, &rubi_icon_quay_lai};
+        display_->MenuShowList("ÂM LƯỢNG", {line, "+  Tăng", "-  Giảm", "<< Quay lại"}, "", nullptr, &ico);
     }
 
     void ShowMusic() {
