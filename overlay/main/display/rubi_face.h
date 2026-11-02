@@ -713,8 +713,8 @@ private:
         static const lv_image_dsc_t* const g[10] = {&rubi_m_g0, &rubi_m_g1, &rubi_m_g2, &rubi_m_g3, &rubi_m_g4, &rubi_m_g5, &rubi_m_g6, &rubi_m_g7, &rubi_m_g8, &rubi_m_g9};
         return g;
     }
-    static const lv_image_dsc_t* const* MathKeyDigits() {
-        static const lv_image_dsc_t* const d[10] = {&rubi_m_d0, &rubi_m_d1, &rubi_m_d2, &rubi_m_d3, &rubi_m_d4, &rubi_m_d5, &rubi_m_d6, &rubi_m_d7, &rubi_m_d8, &rubi_m_d9};
+    static const lv_image_dsc_t* const* MathKeys() {
+        static const lv_image_dsc_t* const d[10] = {&rubi_m_k0, &rubi_m_k1, &rubi_m_k2, &rubi_m_k3, &rubi_m_k4, &rubi_m_k5, &rubi_m_k6, &rubi_m_k7, &rubi_m_k8, &rubi_m_k9};
         return d;
     }
 
@@ -752,8 +752,8 @@ private:
         lv_obj_set_style_border_color(math_ans_, lv_color_hex(0x1E78E6), 0);
         for (int i = 0; i < 12; i++) { math_eq_img_[i] = MathImage(&rubi_m_geq, 0, 45); }
         for (int i = 0; i < 3; i++) { math_ans_img_[i] = MathImage(&rubi_m_gq, 0, 45); }
-        MathImage(&rubi_m_speaker, 270, 43);
-        MathImage(&rubi_m_listen, 12, 80);
+        MathImage(&rubi_m_speaker, 272, 41);
+        MathImage(&rubi_m_listen, 12, 82);
         math_btn_story_ = MakeRect(math_box_, 78, 34, 0xFFC21A, 17);
         lv_obj_set_pos(math_btn_story_, 12, 118);
         lv_obj_t* sl = MakeLabel(math_btn_story_, font, 0x0B2E94);
@@ -761,17 +761,7 @@ private:
         lv_obj_center(sl);
         for (int i = 0; i < 10; i++) {
             int col = i == 0 ? 1 : (i - 1) % 3, row = i == 0 ? 3 : (i - 1) / 3;
-            math_key_[i] = MakeRect(math_box_, 60, 30, 0xE8F2FF, 12);
-            lv_obj_set_pos(math_key_[i], 97 + col * 64, 80 + row * 34 + (row == 3 ? 2 : 0));
-            lv_obj_set_style_border_width(math_key_[i], 2, 0);
-            lv_obj_set_style_border_color(math_key_[i], lv_color_hex(0xFFFFFF), 0);
-            lv_obj_set_style_shadow_width(math_key_[i], 4, 0);
-            lv_obj_set_style_shadow_offset_y(math_key_[i], 2, 0);
-            lv_obj_set_style_shadow_color(math_key_[i], lv_color_hex(0x5A9BE0), 0);
-            lv_obj_set_style_shadow_opa(math_key_[i], LV_OPA_50, 0);
-            lv_obj_t* im = lv_image_create(math_key_[i]);
-            lv_image_set_src(im, MathKeyDigits()[i]);
-            lv_obj_center(im);
+            math_key_[i] = MathImage(MathKeys()[i], 97 + col * 64, 80 + row * 34 + (row == 3 ? 2 : 0));
         }
         MathImage(&rubi_m_kdel, 97, 182);
         MathImage(&rubi_m_kok, 221, 182);
@@ -822,9 +812,9 @@ public:
             std::vector<Tok> toks;
             for (char c : ask) {
                 if (c >= '0' && c <= '9') toks.push_back({MathBig()[c - '0'], false, (int)MathBig()[c - '0']->header.w});
-                else if (c == '+') toks.push_back({&rubi_m_gplus, false, 24});
-                else if (c == '-') toks.push_back({&rubi_m_gminus, false, 24});
-                else if (c == '=') toks.push_back({&rubi_m_geq, false, 24});
+                else if (c == '+') toks.push_back({&rubi_m_gplus, false, (int)rubi_m_gplus.header.w});
+                else if (c == '-') toks.push_back({&rubi_m_gminus, false, (int)rubi_m_gminus.header.w});
+                else if (c == '=') toks.push_back({&rubi_m_geq, false, (int)rubi_m_geq.header.w});
                 else if (c == '?') toks.push_back({nullptr, true, 50});
             }
             const int gap = 9;
