@@ -29,9 +29,10 @@ for n in names:
         blend = a * alpha + np.array(CARD, float) * (1 - alpha)
         im = Image.fromarray(blend.astype('uint8'))
         fill = CARD
-    im.thumbnail((SIZE, SIZE), Image.LANCZOS)
-    canvas = Image.new('RGB', (SIZE, SIZE), fill)
-    canvas.paste(im, ((SIZE - im.size[0]) // 2, (SIZE - im.size[1]) // 2))
+    S = 72 if n in ON_CARD else SIZE   # first-page icons are stored at the 72 px they are shown at (saves flash)
+    im.thumbnail((S, S), Image.LANCZOS)
+    canvas = Image.new('RGB', (S, S), fill)
+    canvas.paste(im, ((S - im.size[0]) // 2, (S - im.size[1]) // 2))
     data = bytearray()
     for r, g, b in canvas.getdata():
         v = ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
@@ -42,7 +43,7 @@ for n in names:
     out.append('};')
     out.append('static const lv_image_dsc_t rubi_icon_%s = {' % n)
     out.append('  .header = { .magic = LV_IMAGE_HEADER_MAGIC, .cf = LV_COLOR_FORMAT_RGB565, .flags = 0, '
-               '.w = %d, .h = %d, .stride = %d, .reserved_2 = 0 },' % (SIZE, SIZE, SIZE * 2))
+               '.w = %d, .h = %d, .stride = %d, .reserved_2 = 0 },' % (S, S, S * 2))
     out.append('  .data_size = %d,' % len(data))
     out.append('  .data = rubi_icon_%s_map,' % n)
     out.append('};')

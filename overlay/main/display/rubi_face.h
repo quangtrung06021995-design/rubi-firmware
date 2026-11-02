@@ -296,14 +296,13 @@ public:
             lv_obj_set_style_bg_color(menu_, lv_color_hex(0x1E88E5), 0);
             lv_obj_set_style_bg_grad_color(menu_, lv_color_hex(0x7CCBF8), 0);
             lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_VER, 0);
-            lv_obj_set_style_bg_image_src(menu_, &rubi_bg_menu, 0);   // sky + hills picture (320x240) over the gradient
-            lv_obj_set_style_bg_image_opa(menu_, LV_OPA_COVER, 0);
+            lv_obj_clear_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);   // sky + hills picture (stored 144x108, drawn 2.22x) over the gradient
         }
         for (int i = 0; i < kMaxTiles; i++) {
             if (sky) {
                 lv_obj_set_size(tile_box_[i], 76, 92);
                 lv_obj_set_pos(tile_box_[i], 2 + (i % 4) * 80, 10 + (i / 4) * 102);
-                lv_image_set_scale(tile_img_[i], 209);
+                lv_image_set_scale(tile_img_[i], 256);   // the first-page icons are stored at 72 px
             } else if (wide) {   // 4 columns, icons drawn at 82 %
                 lv_obj_set_size(tile_box_[i], 76, 112);
                 lv_obj_set_pos(tile_box_[i], 4 + (i % 4) * 78, 6 + (i / 4) * 118);
@@ -478,6 +477,7 @@ private:
     lv_obj_t* menu_text_[kMenuRows] = {};
     lv_obj_t* lock_body_[kMenuRows] = {};   // padlock drawn at the right end of a row (secured Wi-Fi)
     lv_obj_t* lock_arc_[kMenuRows] = {};
+    lv_obj_t* bg_img_ = nullptr;
     lv_obj_t* tile_box_[kMaxTiles] = {};
     lv_obj_t* tile_img_[kMaxTiles] = {};
     lv_obj_t* tile_lbl_[kMaxTiles] = {};
@@ -511,7 +511,7 @@ private:
         if (menu_ != nullptr) {   // back to the plain white background (the first menu page switches to a sky gradient)
             lv_obj_set_style_bg_color(menu_, lv_color_hex(0xFFFFFF), 0);
             lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_NONE, 0);
-            lv_obj_set_style_bg_image_opa(menu_, LV_OPA_TRANSP, 0);
+            if (bg_img_ != nullptr) lv_obj_add_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);
         }
         for (int i = 0; i < kMaxTiles; i++) lv_obj_add_flag(tile_box_[i], LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < kMenuRows; i++) lv_obj_add_flag(menu_row_[i], LV_OBJ_FLAG_HIDDEN);
@@ -559,6 +559,13 @@ private:
         const lv_font_t* font = &rubi_vi_font;
         menu_ = MakeRect(lv_layer_top(), LV_HOR_RES, LV_VER_RES, 0xFFFFFF, 0);
         lv_obj_align(menu_, LV_ALIGN_TOP_LEFT, 0, 0);
+        bg_img_ = lv_image_create(menu_);   // first-page background, behind the tiles
+        lv_image_set_src(bg_img_, &rubi_bg_menu);
+        lv_image_set_pivot(bg_img_, 0, 0);
+        lv_image_set_scale(bg_img_, 569);    // 144 px -> 320 px
+        lv_obj_set_pos(bg_img_, 0, 0);
+        lv_obj_remove_flag(bg_img_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);
         for (int i = 0; i < kMaxTiles; i++) {
             tile_box_[i] = lv_obj_create(menu_);
             lv_obj_remove_style_all(tile_box_[i]);
