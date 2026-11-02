@@ -508,8 +508,8 @@ private:
     }
 
     void MenuClearAll() {
-        if (menu_ != nullptr) {   // back to the plain white background (the first menu page switches to a sky gradient)
-            lv_obj_set_style_bg_color(menu_, lv_color_hex(0xFFFFFF), 0);
+        if (menu_ != nullptr) {   // back to the pale-purple background of the inner pages (the first menu page switches to a sky gradient)
+            lv_obj_set_style_bg_color(menu_, lv_color_hex(0xF0E9FF), 0);
             lv_obj_set_style_bg_grad_dir(menu_, LV_GRAD_DIR_NONE, 0);
             if (bg_img_ != nullptr) lv_obj_add_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);
         }
@@ -557,7 +557,7 @@ private:
             return;
         }
         const lv_font_t* font = &rubi_vi_font;
-        menu_ = MakeRect(lv_layer_top(), LV_HOR_RES, LV_VER_RES, 0xFFFFFF, 0);
+        menu_ = MakeRect(lv_layer_top(), LV_HOR_RES, LV_VER_RES, 0xF0E9FF, 0);
         lv_obj_align(menu_, LV_ALIGN_TOP_LEFT, 0, 0);
         bg_img_ = lv_image_create(menu_);   // first-page background, behind the tiles
         lv_image_set_src(bg_img_, &rubi_bg_menu);
