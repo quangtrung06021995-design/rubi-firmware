@@ -670,7 +670,7 @@ private:
         screen_ = Screen::kSettings;
         if (display_) {
             static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, &rubi_icon_wifi_s, &rubi_icon_dieu_khien, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
-            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "<< Quay lại"}, "", nullptr,
+            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "Quay lại"}, "", nullptr,
             &ico);
         }
     }
@@ -950,7 +950,7 @@ private:
 
     void ShowMathMenu() {
         screen_ = Screen::kMathMenu;
-        if (display_) display_->MenuShowList("HỌC TOÁN", {"Cộng trừ trong 10", "Cộng trừ trong 20", "Cộng trừ trong 100", "Toán lời văn", "<< Quay lại"}, "Mỗi lượt 10 câu");
+        if (display_) display_->MenuShowList("HỌC TOÁN", {"Cộng trừ trong 10", "Cộng trừ trong 20", "Cộng trừ trong 100", "Toán lời văn", "Quay lại"}, "Mỗi lượt 10 câu");
     }
 
     void StartMath(RubiMath::Mode m) {
@@ -1164,7 +1164,7 @@ private:
         screen_ = Screen::kTimerMenu;
         if (display_) {
             static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_hen_gio, &rubi_icon_hen_gio, &rubi_icon_hen_gio, &rubi_icon_hen_gio};
-            display_->MenuShowList("HẸN GIỜ", {"2 phút", "5 phút", "10 phút", "20 phút", "<< Quay lại"}, "Chạm để bắt đầu đếm ngược", nullptr, &ico);
+            display_->MenuShowList("HẸN GIỜ", {"2 phút", "5 phút", "10 phút", "20 phút", "Quay lại"}, "Chạm để bắt đầu đếm ngược", nullptr, &ico);
         }
     }
 
@@ -1222,7 +1222,7 @@ private:
         screen_ = Screen::kPlay;
         if (display_) {
             static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_nhay_mua, &rubi_icon_hat_ru, &rubi_icon_hen_gio, &rubi_icon_quay_lai};
-            display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "<< Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ", nullptr,
+            display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ", nullptr,
             &ico);
         }
     }
@@ -1242,7 +1242,7 @@ private:
         screen_ = Screen::kCtl;
         int has = RubiBattery::PinSet();
         std::string hint = has == 1 ? "Robot đang có mã PIN" : (has == 0 ? "CHƯA có PIN: ai cũng điều khiển được!" : "Chưa biết PIN (robot chưa trả lời)");
-        if (display_) { static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_dieu_khien}; display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "Đồng bộ kho ngay", "<< Quay lại"}, hint.c_str(), nullptr, &ico); }
+        if (display_) { static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_dieu_khien}; display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "Đồng bộ kho ngay", "Quay lại"}, hint.c_str(), nullptr, &ico); }
     }
 
     std::string pin_old_, pin_new_, pin_buf_;
@@ -1389,7 +1389,7 @@ private:
             rows.push_back("Trang sau >");
             story_row_action_.push_back(-1);
         }
-        rows.push_back("<< Quay lại");
+        rows.push_back("Quay lại");
         story_row_action_.push_back(-2);
         if (display_) display_->MenuShowList("TRUYỆN TRANH - chạm để xem", rows, total == 0 ? "Chép thư mục rubi/truyen vào thẻ nhớ" : "");
     }
@@ -1585,7 +1585,7 @@ private:
             wifi_row_action_.push_back(-2);
             rows.push_back("Cấu hình bằng điện thoại");
             wifi_row_action_.push_back(-4);
-            rows.push_back("<< Quay lại");
+            rows.push_back("Quay lại");
             wifi_row_action_.push_back(-3);
         } else {
             const int per = 3;
@@ -1604,7 +1604,7 @@ private:
             }
             if (pages > 1) { rows.push_back("Trang sau >"); wifi_row_action_.push_back(-1); }
             else { rows.push_back("Quét lại"); wifi_row_action_.push_back(-2); }
-            rows.push_back("<< Quay lại");
+            rows.push_back("Quay lại");
             wifi_row_action_.push_back(-3);
         }
         locks.resize(rows.size(), false);
@@ -1749,7 +1749,7 @@ private:
         char line[48];
         snprintf(line, sizeof(line), "Âm lượng hiện tại: %d%%", v);
         static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, nullptr, nullptr, &rubi_icon_quay_lai};
-        display_->MenuShowList("ÂM LƯỢNG", {line, "+  Tăng", "-  Giảm", "<< Quay lại"}, "", nullptr, &ico);
+        display_->MenuShowList("ÂM LƯỢNG", {line, "+  Tăng", "-  Giảm", "Quay lại"}, "", nullptr, &ico);
     }
 
     void ShowMusic() {
@@ -1773,7 +1773,7 @@ private:
             rows.push_back("Trang sau >");
             row_action_.push_back(-1);
         }
-        rows.push_back("<< Quay lại");
+        rows.push_back("Quay lại");
         row_action_.push_back(-2);
         if (display_) display_->MenuShowList("NGHE NHẠC - chạm bài để phát", rows, "");
     }

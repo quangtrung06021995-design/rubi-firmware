@@ -357,7 +357,7 @@ public:
         for (int i = 0; i < kMenuRows && i < (int)rows.size(); i++) {
             lv_label_set_text(menu_text_[i], rows[i].c_str());
             const lv_image_dsc_t* ic = (icons != nullptr && i < (int)icons->size()) ? (*icons)[i] : nullptr;
-            if (ic == nullptr && rows[i].rfind("<< Quay lại", 0) == 0) ic = &rubi_icon_quay_lai;   // every back row gets the arrow
+            if (ic == nullptr && rows[i].rfind("Quay lại", 0) == 0) ic = &rubi_icon_quay_lai;   // every back row gets the arrow
             if (ic != nullptr) { lv_image_set_src(menu_ico_[i], ic); lv_obj_clear_flag(menu_ico_[i], LV_OBJ_FLAG_HIDDEN); }
             else lv_obj_add_flag(menu_ico_[i], LV_OBJ_FLAG_HIDDEN);
             lv_obj_set_width(menu_text_[i], ic != nullptr ? 224 : 262);
