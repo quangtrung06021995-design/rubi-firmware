@@ -10,6 +10,9 @@ Cach dung (Python 3.9+):
     py tao_giong_toan.py --thu          # chi tao 6 file nghe thu (tot nhat chay truoc)
     py tao_giong_toan.py                # tao TAT CA (khoang 145 file), chay lai se bo qua file da co
     py tao_giong_toan.py --giong Aoede  # doi giong (Kore, Aoede, Puck, Leda, Zephyr, Charon...)
+    py tao_giong_toan.py --giong Aoede --lai tu_tru ten_mai tu_may
+                                        # tao LAI cac file doc sai: moi file ra 4 ban nghe thu trong giong_rubi/lai/,
+                                        # chon ban doc dung nhat roi chep de len file cu (doi ten bo duoi _v1, _v2...)
 
 Ket qua nam trong thu muc  giong_rubi/  (WAV 22,05 kHz, mono, 16 bit, da cat khoang lang).
 Khoa API (API key): KHONG gui cho ai, KHONG dan vao chat.
@@ -159,6 +162,7 @@ def main():
     ap.add_argument("--giong", default="Kore", help="ten giong Gemini (mac dinh Kore)")
     ap.add_argument("--model", default="gemini-3.8-flash-tts")
     ap.add_argument("--ra", default="giong_rubi", help="thu muc dau ra")
+    ap.add_argument("--lai", nargs="+", metavar="TEN", help="tao lai cac file doc sai (vi du tu_tru ten_mai tu_may)")
     args = ap.parse_args()
 
     key = os.environ.get("GEMINI_API_KEY")
@@ -175,6 +179,38 @@ def main():
     ds = danh_sach()
     if args.thu:
         ds = [d for d in ds if d[0] in THU]
+
+    if args.lai:
+        tat_ca = dict(ds if not args.thu else danh_sach())
+        thu_muc = os.path.join(args.ra, "lai")
+        os.makedirs(thu_muc, exist_ok=True)
+        for ten in args.lai:
+            if ten.endswith(".wav"):
+                ten = ten[:-4]
+            if ten not in tat_ca:
+                print("Khong co ten '%s' (xem danh sach o dau file)." % ten)
+                continue
+            nd = tat_ca[ten]
+            hoa = nd[:1].upper() + nd[1:]
+            cach = [nd, hoa + ".", hoa + "?", hoa + "!"]   # 4 cach viet, moi cach co the doc khac nhau
+            for k, van in enumerate(cach, 1):
+                pcm = None
+                rate = 24000
+                for lan in range(4):
+                    try:
+                        pcm, rate = lay_pcm(client, types, args.model, args.giong, van)
+                        break
+                    except Exception as e:
+                        print("  loi (%s), thu lai..." % str(e)[:120])
+                        time.sleep(8)
+                if pcm is None:
+                    continue
+                pcm = doi_toc_do(cat_lang(pcm, rate), rate, OUT_RATE)
+                ghi_wav(os.path.join(thu_muc, "%s_v%d.wav" % (ten, k)), pcm)
+                print("%s_v%d.wav  (viet: %s)" % (ten, k, van))
+                time.sleep(1.0)
+        print("Xong. Nghe cac file trong %s, chon ban doc dung, doi ten bo _v1/_v2... roi chep de len %s" % (thu_muc, args.ra))
+        return
 
     loi = 0
     for i, (ten, noidung) in enumerate(ds, 1):
