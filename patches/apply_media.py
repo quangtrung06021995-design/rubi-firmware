@@ -79,6 +79,19 @@ bool AudioService::PushPcmToPlayback(std::vector<int16_t>&& pcm) {
 }
 ''')
 
+# Rubi: cloud-voice stutter. The Opus decode task ran at priority 2 (below touch/LVGL/Wi-Fi) and only 2 decoded
+# frames were queued, so any short stall let the speaker run dry. Raise its priority, queue 4 frames, and turn off
+# Wi-Fi modem power-save (it delays packets by up to ~100 ms) while sound is playing.
+patch('main/audio/audio_service.h', [
+    ('#define MAX_PLAYBACK_TASKS_IN_QUEUE 2', '#define MAX_PLAYBACK_TASKS_IN_QUEUE 4'),
+])
+patch('main/audio/audio_service.cc', [
+    ('"opus_codec", 2048 * 12, this, 2, &opus_codec_task_handle_);', '"opus_codec", 2048 * 12, this, 5, &opus_codec_task_handle_);'),
+    ('            codec_->EnableOutput(true);\n        }\n\n        if (task.playback_id != 0',
+     '            codec_->EnableOutput(true);\n            esp_wifi_set_ps(WIFI_PS_NONE);  // Rubi: no Wi-Fi power-save while speaking\n        }\n\n        if (task.playback_id != 0'),
+    ('#include "audio_service.h"\n', '#include "audio_service.h"\n#include <esp_wifi.h>\n'),
+])
+
 patch('main/audio/audio_codec.cc', [
     ('void AudioCodec::OutputData(std::vector<int16_t>& data) {\n    Write(data.data(), data.size());\n}',
      '// Rubi: software loudness boost for the small speaker (all sound: voice, music, lesson clips).\n'
