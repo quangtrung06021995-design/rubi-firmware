@@ -40,9 +40,33 @@ patch(B, [
 ])
 
 patch('main/audio/audio_service.h', [
-    ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n'),
+    ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n'
+     '    int64_t rubi_last_out_ms_ = 0;   // Rubi jitter buffer: when the speaker last got a frame\n'
+     '    int64_t rubi_jb_t0_ = 0;         // Rubi jitter buffer: when the current wait started (0 = not waiting)\n'),
 ])
+# Rubi: jitter buffer for the cloud voice (the Xiaozhi server is far away, packets arrive unevenly and the speech
+# stuttered). Only when the speaker has been silent for 250 ms (a new reply / new sentence, or a real drop-out)
+# Rubi first collects 5 packets (300 ms of speech, at most 400 ms wait) before playing. While speech is flowing it
+# never waits, so it cannot add gaps in the middle of a sentence (the earlier pre-buffer re-armed on every short
+# empty moment and made gaps). Local clips (PushPcmToPlayback) do not use the decode queue and are not affected.
 patch('main/audio/audio_service.cc', [
+    ('        /* Decode the audio from decode queue */\n        if (!audio_decode_queue_.empty() &&\n            audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {\n',
+     '        if (!audio_decode_queue_.empty() && audio_encode_queue_.empty() && audio_playback_queue_.empty() &&\n'
+     '            !output_in_flight_) {\n'
+     '            int64_t now_ms = esp_timer_get_time() / 1000;\n'
+     '            if (now_ms - rubi_last_out_ms_ > 250 && audio_decode_queue_.size() < 5) {\n'
+     '                if (rubi_jb_t0_ == 0) rubi_jb_t0_ = now_ms;\n'
+     '                if (now_ms - rubi_jb_t0_ < 400) {\n'
+     '                    audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(20));\n'
+     '                    continue;\n'
+     '                }\n'
+     '            }\n'
+     '        }\n'
+     '        rubi_jb_t0_ = 0;\n'
+     '\n'
+     '        /* Decode the audio from decode queue */\n        if (!audio_decode_queue_.empty() &&\n            audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {\n'),
+    ('        output_in_flight_ = false;\n        notify_drained = MarkPlaybackDrainedLocked();\n',
+     '        output_in_flight_ = false;\n        rubi_last_out_ms_ = esp_timer_get_time() / 1000;\n        notify_drained = MarkPlaybackDrainedLocked();\n'),
 ], append='''
 bool AudioService::PushPcmToPlayback(std::vector<int16_t>&& pcm) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
