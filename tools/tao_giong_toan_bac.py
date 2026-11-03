@@ -111,9 +111,24 @@ def ghi_wav(path, pcm):
 
 async def tao_mot(text, voice, rate, ff):
     mp3 = os.path.join(tempfile.gettempdir(), "rubi_toan_tmp.mp3")
-    await edge_tts.Communicate(text, voice, rate=rate).save(mp3)
-    r = subprocess.run([ff, "-y", "-loglevel", "error", "-i", mp3, "-ac", "1", "-ar", str(OUT_RATE),
-                        "-f", "s16le", "-"], capture_output=True)
+    tempo = None
+    try:
+        await edge_tts.Communicate(text, voice, rate=rate).save(mp3)
+    except Exception as e:
+        # Mot so may bao "No audio was received" khi chinh toc do: doc binh thuong roi lam cham bang ffmpeg
+        try:
+            pct = int(rate.replace("%", "").replace("+", ""))
+        except ValueError:
+            raise e
+        if pct == 0:
+            raise
+        await edge_tts.Communicate(text, voice).save(mp3)
+        tempo = max(0.5, min(2.0, 1 + pct / 100.0))
+    cmd = [ff, "-y", "-loglevel", "error", "-i", mp3]
+    if tempo is not None:
+        cmd += ["-filter:a", "atempo=%.3f" % tempo]
+    cmd += ["-ac", "1", "-ar", str(OUT_RATE), "-f", "s16le", "-"]
+    r = subprocess.run(cmd, capture_output=True)
     try:
         os.remove(mp3)
     except OSError:
