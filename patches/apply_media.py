@@ -13,9 +13,9 @@ B = 'main/boards/freenove-esp32s3-display-2.8-lcd/freenove-esp32s3-display-2.8-l
 patch(B, [
     ('#include "display/rubi_face.h"\n', '#include "display/rubi_face.h"\n#include "display/rubi_media.h"\n\n// Called by application.cc for every speech-to-text result (spoken music commands)\nvoid rubi_handle_speech(const char* text) { RubiMedia::Get().HandleSpeech(text); }\n\n// Tells the DevKit (and so the web page) that a firmware update is running (U1, repeated) or has ended (U0)\nvoid rubi_updating(bool on) { RubiBattery::Send(on ? \"U1\\n\" : \"U0\\n\", 3); }\n'),
     ('        bool down = false;\n',
-     '        bool down = false;\n        uint16_t lx = 0, ly = 0;\n        uint16_t sxs[16], sys_[16];\n        int sn = 0;\n'),
+     '        bool down = false;\n        uint16_t lx = 0, ly = 0, fx = 0, fy = 0, tx = 0, ty = 0;\n        uint16_t sxs[16], sys_[16];\n        int sn = 0;\n'),
     ('                if (!down) {\n                    down = true;\n                    down_start = now;\n                }\n',
-     '                if (!down) {\n                    down = true;\n                    down_start = now;\n                    sn = 0;\n                }\n                if (sn < 16) { sxs[sn] = x; sys_[sn] = y; sn++; }\n'),
+     '                if (!down) {\n                    down = true;\n                    down_start = now;\n                    sn = 0;\n                }\n                if (sn == 0) { fx = x; fy = y; }\n                tx = x; ty = y;\n                if (sn < 16) { sxs[sn] = x; sys_[sn] = y; sn++; }\n'),
     ('                // long tap\n                if (press > 3000) {\n                    self->EnterWifiConfigMode();\n                } else {',
      '                // Rubi: the last sample before the finger lifts drifts, so use the middle sample of the press\n'
      '                if (sn > 0) {\n'
@@ -27,7 +27,7 @@ patch(B, [
      '                    }\n'
      '                }\n'
      '                // Rubi: icon menu first; tap the bottom-right button opens the menu; a hold of 1 s only before calibration\n'
-     '                if (RubiMedia::Get().HandleTouch(press, lx, ly)) {\n'
+     '                if (RubiMedia::Get().HandleSwipe(press, fx, fy, tx, ty) || RubiMedia::Get().HandleTouch(press, lx, ly)) {\n'
      '                    last_tap = 0;\n'
      '                } else if (press >= 1000 && !RubiMedia::Get().CalibrationValid()) {\n'
      '                    RubiMedia::Get().OpenMenu();\n'

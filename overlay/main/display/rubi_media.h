@@ -129,7 +129,7 @@ public:
             else if (t == 4) { ShowClock(); }
             else if (t == 5) { ShowPlay(); }
             else if (t == 6) { ShowSettings(); }
-            else if (t == 7) { Close(); }
+            else if (t == 7) { ShowEnglishSoon(); }
             break;
         }
         case Screen::kSettings: {
@@ -285,6 +285,9 @@ public:
         case Screen::kStoryEmpty:
             ShowStoryList();
             break;
+        case Screen::kSoon:
+            ShowMain();
+            break;
         case Screen::kLearnCard: {
             int b = RubiDisplay::CardAt(sx, sy);
             if (b == 0 || b == 1 || b == 2) StopPlayback();   // stop a word that is still being read
@@ -426,7 +429,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -662,8 +665,30 @@ private:
             {&rubi_icon_dong_ho, ""},
             {&rubi_icon_choi_cung, ""},
             {&rubi_icon_cai_dat, ""},
-            {&rubi_icon_dong_c, ""},
+            {&rubi_icon_tieng_anh, ""},
         });
+    }
+
+    void ShowEnglishSoon() {
+        screen_ = Screen::kSoon;
+        if (display_) display_->MenuShowMessage("Tiếng Anh giao tiếp\n\nSắp có bài học!\n\nChạm để quay lại", -1, -1);
+    }
+
+    // Swipe up from the bottom edge (the home bar) leaves the menu, like the iPhone. Returns true if it was a swipe.
+    // fx,fy = first raw touch point, tx,ty = last raw touch point.
+    bool HandleSwipe(uint32_t press_ms, uint16_t fx, uint16_t fy, uint16_t tx, uint16_t ty) {
+        if (!IsOpen() || !cal_.valid || press_ms > 2500) return false;
+        if (screen_ >= Screen::kCalib1 && screen_ <= Screen::kCalib4) return false;
+        int x0, y0, x1, y1;
+        Map(fx, fy, x0, y0);
+        Map(tx, ty, x1, y1);
+        int dy = y0 - y1, dx = x1 - x0;
+        if (dx < 0) dx = -dx;
+        if (y0 < 205 || dy < 40 || dx > dy) return false;
+        ESP_LOGI("RubiTouch", "swipe up %d,%d -> %d,%d (screen %d)", x0, y0, x1, y1, (int)screen_);
+        std::lock_guard<std::recursive_mutex> lk(mutex_);
+        Close();
+        return true;
     }
 
     void ShowSettings() {

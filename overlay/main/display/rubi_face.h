@@ -489,6 +489,7 @@ private:
     lv_obj_t* menu_ = nullptr;
     lv_obj_t* menu_title_ = nullptr;
     lv_obj_t* menu_hint_ = nullptr;
+    lv_obj_t* home_bar_ = nullptr;
     lv_obj_t* menu_msg_ = nullptr;
     lv_obj_t* cross_h_ = nullptr;
     lv_obj_t* cross_v_ = nullptr;
@@ -633,7 +634,14 @@ private:
             lv_obj_add_flag(lock_body_[i], LV_OBJ_FLAG_HIDDEN);
         }
         menu_hint_ = MakeLabel(menu_, font, 0x5A6B80);
-        lv_obj_align(menu_hint_, LV_ALIGN_BOTTOM_MID, 0, -2);
+        lv_obj_align(menu_hint_, LV_ALIGN_BOTTOM_MID, 0, -10);
+        home_bar_ = MakeRect(menu_, 96, 5, 0x1B3A8A, 3);   // iPhone-style home bar: swipe up from here leaves the menu
+        lv_obj_set_style_bg_opa(home_bar_, LV_OPA_70, 0);
+        lv_obj_set_style_border_width(home_bar_, 1, 0);
+        lv_obj_set_style_border_color(home_bar_, lv_color_white(), 0);
+        lv_obj_set_style_border_opa(home_bar_, LV_OPA_60, 0);
+        lv_obj_set_pos(home_bar_, 112, 231);
+        lv_obj_remove_flag(home_bar_, LV_OBJ_FLAG_CLICKABLE);
         menu_msg_ = MakeLabel(menu_, font, 0x1E2A3A);
         lv_obj_set_width(menu_msg_, 280);
         lv_obj_set_style_text_align(menu_msg_, LV_TEXT_ALIGN_CENTER, 0);
