@@ -1,0 +1,10 @@
+hello|Hello!|Xin chào!
+hi|Hi!|Chào bạn!
+goodmorning|Good morning!|Chào buổi sáng!
+goodafternoon|Good afternoon!|Chào buổi chiều!
+goodbye|Goodbye!|Tạm biệt!
+howareyou|How are you?|Bạn khỏe không?
+fine|I'm fine, thank you.|Mình khỏe, cảm ơn bạn.
+yourname|What's your name?|Bạn tên là gì?
+myname|My name is Nam.|Tên mình là Nam.
+nicetomeet|Nice to meet you.|Rất vui được gặp bạn.

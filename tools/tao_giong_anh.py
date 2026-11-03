@@ -1,0 +1,124 @@
+#!/usr/bin/env python3
+"""Tao file giong TIENG ANH cho cac bai "Tieng Anh giao tiep" cua Rubi (edge-tts, mien phi, khong can khoa API).
+
+Cach dung (Python 3.9+, can Internet), chay trong thu muc rubi-firmware:
+    py tools/tao_giong_anh.py --thu       # chi tao 2 file nghe thu
+    py tools/tao_giong_anh.py             # tao tat ca bai trong bai_tieng_anh/
+    py tools/tao_giong_anh.py --giong en-US-JennyNeural --toc-do -20%
+
+Moi bai la 1 thu muc trong bai_tieng_anh/ gom:
+    ten.txt   dong dau = ten bai hien tren man hinh
+    bai.txt   moi dong:  ten_file|Cau tieng Anh|Nghia tieng Viet
+Ket qua nam trong thu muc rubi_anh/<bai>/ (bai.txt, ten.txt va <ten_file>.wav).
+Chep CA thu muc rubi_anh vao the nho thanh  rubi/anh  (tren the se la rubi/anh/<bai>/...).
+Chay lai se bo qua file da co.
+"""
+import argparse, array, asyncio, os, shutil, subprocess, sys, tempfile, wave
+
+for mod, pkg in (("edge_tts", "edge-tts"), ("imageio_ffmpeg", "imageio-ffmpeg")):
+    try:
+        __import__(mod)
+    except ImportError:
+        print("Dang cai", pkg, "(chi lan dau, can Internet)...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", pkg])
+import edge_tts, imageio_ffmpeg
+
+OUT_RATE = 22050
+
+
+def cat_lang(pcm, rate):
+    if not pcm:
+        return pcm
+    peak = max(abs(x) for x in pcm) or 1
+    thr = max(300, peak // 25)
+    a, b = 0, len(pcm) - 1
+    while a < len(pcm) and abs(pcm[a]) < thr:
+        a += 1
+    while b > a and abs(pcm[b]) < thr:
+        b -= 1
+    pad = int(rate * 0.08)
+    return pcm[max(0, a - pad):min(len(pcm), b + pad)]
+
+
+def ghi_wav(path, pcm):
+    with wave.open(path, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(OUT_RATE)
+        w.writeframes(pcm.tobytes())
+
+
+async def tao_mot(text, voice, rate, ff):
+    mp3 = os.path.join(tempfile.gettempdir(), "rubi_anh_tmp.mp3")
+    await edge_tts.Communicate(text, voice, rate=rate).save(mp3)
+    r = subprocess.run([ff, "-y", "-loglevel", "error", "-i", mp3, "-ac", "1", "-ar", str(OUT_RATE),
+                        "-f", "s16le", "-"], capture_output=True)
+    try:
+        os.remove(mp3)
+    except OSError:
+        pass
+    if r.returncode != 0 or not r.stdout:
+        raise RuntimeError("khong doi duoc am thanh")
+    pcm = array.array("h")
+    pcm.frombytes(r.stdout[: len(r.stdout) // 2 * 2])
+    return pcm
+
+
+async def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--thu", action="store_true", help="chi tao 2 file nghe thu")
+    ap.add_argument("--giong", default="en-US-AnaNeural", help="giong tieng Anh (mac dinh en-US-AnaNeural, giong tre em)")
+    ap.add_argument("--toc-do", default="-10%", help="toc do doc, vi du -20%% (cham hon)")
+    ap.add_argument("--vao", default="bai_tieng_anh", help="thu muc chua cac bai")
+    ap.add_argument("--ra", default="rubi_anh", help="thu muc dau ra")
+    args = ap.parse_args()
+
+    ff = imageio_ffmpeg.get_ffmpeg_exe()
+    if not os.path.isdir(args.vao):
+        sys.exit("Khong thay thu muc %s - hay chay lenh trong thu muc rubi-firmware." % args.vao)
+    loi = 0
+    for bai in sorted(os.listdir(args.vao)):
+        src = os.path.join(args.vao, bai)
+        txt = os.path.join(src, "bai.txt")
+        if not os.path.isfile(txt):
+            continue
+        dst = os.path.join(args.ra, bai)
+        os.makedirs(dst, exist_ok=True)
+        for f in ("bai.txt", "ten.txt"):
+            if os.path.isfile(os.path.join(src, f)):
+                shutil.copyfile(os.path.join(src, f), os.path.join(dst, f))
+        dong = []
+        for l in open(txt, encoding="utf-8"):
+            p = l.strip().split("|")
+            if len(p) >= 3:
+                dong.append((p[0].strip(), p[1].strip()))
+        if args.thu:
+            dong = dong[:2]
+        for i, (ten, cau) in enumerate(dong, 1):
+            path = os.path.join(dst, ten + ".wav")
+            if os.path.exists(path):
+                continue
+            pcm = None
+            for lan in range(5):
+                try:
+                    pcm = await tao_mot(cau, args.giong, args.toc_do, ff)
+                    break
+                except Exception as e:
+                    print("  loi (%s), thu lai..." % str(e)[:150])
+                    await asyncio.sleep(4)
+            if pcm is None or len(pcm) == 0:
+                print("[%s %d/%d] %s: BO QUA (that bai)" % (bai, i, len(dong), ten))
+                loi += 1
+                continue
+            pcm = cat_lang(pcm, OUT_RATE)
+            ghi_wav(path, pcm)
+            print("[%s %d/%d] %s = %s  (%.1f giay)" % (bai, i, len(dong), ten, cau, len(pcm) / OUT_RATE))
+            await asyncio.sleep(0.3)
+    print("Xong. Loi: %d. Ket qua nam trong thu muc %s" % (loi, args.ra))
+    print("Chep thu muc %s vao the nho thanh rubi/anh" % args.ra)
+    if loi:
+        print("Chay lai lenh nay de tao not cac file con thieu.")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

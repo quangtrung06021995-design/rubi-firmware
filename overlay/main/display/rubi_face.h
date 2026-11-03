@@ -267,10 +267,15 @@ public:
     }
 
     void MenuShowCard(const lv_image_dsc_t* img, const std::string& title, const std::string& en,
-                      const std::string& vi, const std::string& counter) {
+                      const std::string& vi, const std::string& counter, bool wide = false) {
         DisplayLockGuard lock(this);
         EnsureMenu();
         MenuClearAll();
+        // wide = sentence card without a picture: the text uses the full width
+        lv_obj_set_width(card_en_, wide ? 296 : 150);
+        lv_obj_set_pos(card_en_, wide ? 12 : 160, wide ? 52 : 70);
+        lv_obj_set_width(card_vi_, wide ? 296 : 150);
+        lv_obj_set_pos(card_vi_, wide ? 12 : 160, wide ? 124 : 120);
         lv_label_set_text(menu_title_, title.c_str());
         lv_obj_clear_flag(menu_title_, LV_OBJ_FLAG_HIDDEN);
         lv_label_set_text(card_count_, counter.c_str());

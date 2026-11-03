@@ -22,6 +22,7 @@
 #include <driver/sdmmc_host.h>
 #include <esp_heap_caps.h>
 #include <esp_log.h>
+#include <esp_random.h>
 #include <esp_timer.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
@@ -146,7 +147,7 @@ public:
             else if (t == 4) { ShowClock(); }
             else if (t == 5) { ShowPlay(); }
             else if (t == 6) { ShowSettings(); }
-            else if (t == 7) { ShowEnglishSoon(); }
+            else if (t == 7) { ShowEnglish(); }
             break;
         }
         case Screen::kSettings: {
@@ -305,12 +306,36 @@ public:
         case Screen::kSoon:
             ShowMain();
             break;
+        case Screen::kEngList: {
+            int n = (int)eng_ids_.size();
+            int r = RubiDisplay::RowAt(sx, sy, n + 1);
+            if (r >= 0 && r < n) { eng_sel_ = r; ShowEngMenu(); }
+            else if (r == n) ShowMain();
+            break;
+        }
+        case Screen::kEngMenu: {
+            int r = RubiDisplay::RowAt(sx, sy, 3);
+            if (r == 0) OpenEngLesson();
+            else if (r == 1) StartQuiz();
+            else if (r == 2) ShowEnglish();
+            break;
+        }
+        case Screen::kEngQuiz: {
+            int r = RubiDisplay::RowAt(sx, sy, 5);
+            if (r >= 0 && r < 3) AnswerQuiz(r);
+            else if (r == 3) SpeakQuiz();
+            else if (r == 4) { StopPlayback(); ShowEngMenu(); }
+            break;
+        }
+        case Screen::kEngDone:
+            ShowEngMenu();
+            break;
         case Screen::kLearnCard: {
             int b = RubiDisplay::CardAt(sx, sy);
             if (b == 0 || b == 1 || b == 2) StopPlayback();   // stop a word that is still being read
             if (b == 0 && !words_.empty()) { word_ = (word_ + (int)words_.size() - 1) % (int)words_.size(); ShowCard(); }
             else if (b == 2 && !words_.empty()) { word_ = (word_ + 1) % (int)words_.size(); ShowCard(); }
-            else if (b == 1) { ShowLearnTopics(); }
+            else if (b == 1) { if (eng_mode_) ShowEngMenu(); else ShowLearnTopics(); }
             else if (b == 3) { SpeakWord(); }
             break;
         }
@@ -446,7 +471,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kEngList, kEngMenu, kEngQuiz, kEngDone, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -686,9 +711,179 @@ private:
         });
     }
 
-    void ShowEnglishSoon() {
-        screen_ = Screen::kSoon;
-        if (display_) display_->MenuShowMessage("Tiếng Anh giao tiếp\n\nSắp có bài học!\n\nChạm để quay lại", -1, -1);
+    // ---------------- English lessons (SD: /sdcard/rubi/anh/<id>/ten.txt, bai.txt "file|English|Tiếng Việt", <file>.wav) ----------------
+    static constexpr int kEngMaxLessons = 4;
+    bool eng_mode_ = false;
+    int eng_sel_ = 0;
+    std::vector<std::string> eng_ids_, eng_titles_;
+    std::vector<int> quiz_order_;
+    int quiz_i_ = 0, quiz_score_ = 0;
+    int quiz_opt_[3] = {0, 0, 0};
+    int quiz_ok_ = 0;
+    bool quiz_first_ = true;
+    std::string quiz_msg_;
+
+    static std::string FirstLine(const std::string& path) {
+        FILE* f = fopen(path.c_str(), "rb");
+        if (f == nullptr) return "";
+        char line[128] = {0};
+        if (fgets(line, sizeof(line), f) == nullptr) line[0] = 0;
+        fclose(f);
+        return Trim(line);
+    }
+
+    void ShowEnglish() {
+        eng_mode_ = false;
+        eng_ids_.clear();
+        eng_titles_.clear();
+        if (MountSd()) {
+            DIR* d = opendir("/sdcard/rubi/anh");
+            if (d != nullptr) {
+                std::vector<std::string> ids;
+                while (struct dirent* e = readdir(d)) {
+                    if (e->d_name[0] == '.') continue;
+                    ids.push_back(e->d_name);
+                }
+                closedir(d);
+                std::sort(ids.begin(), ids.end());
+                for (const auto& id : ids) {
+                    if ((int)eng_ids_.size() >= kEngMaxLessons) break;
+                    std::string dir = "/sdcard/rubi/anh/" + id;
+                    FILE* f = fopen((dir + "/bai.txt").c_str(), "rb");
+                    if (f == nullptr) continue;
+                    fclose(f);
+                    std::string t = FirstLine(dir + "/ten.txt");
+                    eng_ids_.push_back(id);
+                    eng_titles_.push_back(t.empty() ? id : t);
+                }
+            }
+        }
+        if (eng_ids_.empty()) {
+            screen_ = Screen::kSoon;
+            if (display_) display_->MenuShowMessage("Chưa có bài Tiếng Anh\n(chép thư mục rubi/anh vào thẻ nhớ)\n\nChạm để quay lại", -1, -1);
+            return;
+        }
+        screen_ = Screen::kEngList;
+        std::vector<std::string> rows = eng_titles_;
+        rows.push_back("Quay lại");
+        if (display_) display_->MenuShowList("TIẾNG ANH", rows, "");
+    }
+
+    void ShowEngMenu() {
+        eng_mode_ = false;
+        if (eng_sel_ < 0 || eng_sel_ >= (int)eng_ids_.size()) { ShowEnglish(); return; }
+        screen_ = Screen::kEngMenu;
+        if (display_) display_->MenuShowList(eng_titles_[eng_sel_].c_str(), {"Học câu mẫu", "Nghe và chọn", "Quay lại"}, "");
+    }
+
+    std::string EngDir() { return "/sdcard/rubi/anh/" + eng_ids_[eng_sel_]; }
+
+    bool LoadEngWords() {
+        words_.clear();
+        FILE* f = fopen((EngDir() + "/bai.txt").c_str(), "rb");
+        if (f == nullptr) return false;
+        char line[256];
+        while (fgets(line, sizeof(line), f)) {
+            std::string l = Trim(line);
+            size_t a = l.find('|');
+            size_t b = a == std::string::npos ? a : l.find('|', a + 1);
+            if (b == std::string::npos) continue;
+            words_.push_back({Trim(l.substr(0, a)), Trim(l.substr(a + 1, b - a - 1)), Trim(l.substr(b + 1))});
+        }
+        fclose(f);
+        return !words_.empty();
+    }
+
+    void OpenEngLesson() {
+        if (!LoadEngWords()) { ShowEnglish(); return; }
+        eng_mode_ = true;
+        word_ = 0;
+        ShowCard();
+    }
+
+    void StartSpeakPaths(const std::vector<std::string>& paths) {
+        if (paths.empty() || playing_) return;
+        speak_paths_ = paths;
+        speak_gap_ms_ = 300;
+        stop_ = false;
+        playing_ = true;
+        xTaskCreatePinnedToCore(&RubiMedia::SpeakTask, "rubi_say", 8192, this, 4, nullptr, 1);
+    }
+
+    void StartQuiz() {
+        if (!LoadEngWords() || words_.size() < 3) {
+            screen_ = Screen::kSoon;
+            if (display_) display_->MenuShowMessage("Bài này chưa đủ câu để chơi\n\nChạm để quay lại", -1, -1);
+            return;
+        }
+        quiz_order_.clear();
+        for (int i = 0; i < (int)words_.size(); i++) quiz_order_.push_back(i);
+        for (int i = (int)quiz_order_.size() - 1; i > 0; i--) std::swap(quiz_order_[i], quiz_order_[esp_random() % (i + 1)]);
+        if (quiz_order_.size() > 8) quiz_order_.resize(8);
+        quiz_i_ = 0;
+        quiz_score_ = 0;
+        quiz_msg_ = "Nghe rồi chọn nghĩa đúng nhé";
+        AskQuiz();
+    }
+
+    void AskQuiz() {
+        StopPlayback();
+        int correct = quiz_order_[quiz_i_];
+        std::vector<int> pool;
+        for (int i = 0; i < (int)words_.size(); i++)
+            if (i != correct && words_[i].vi != words_[correct].vi) pool.push_back(i);
+        for (int i = (int)pool.size() - 1; i > 0; i--) std::swap(pool[i], pool[esp_random() % (i + 1)]);
+        quiz_opt_[0] = correct;
+        quiz_opt_[1] = pool.size() > 0 ? pool[0] : correct;
+        quiz_opt_[2] = pool.size() > 1 ? pool[1] : quiz_opt_[1];
+        for (int i = 2; i > 0; i--) std::swap(quiz_opt_[i], quiz_opt_[esp_random() % (i + 1)]);
+        quiz_ok_ = 0;
+        for (int i = 0; i < 3; i++) if (quiz_opt_[i] == correct) quiz_ok_ = i;
+        quiz_first_ = true;
+        ShowQuizScreen();
+        SpeakQuiz();
+    }
+
+    void ShowQuizScreen() {
+        screen_ = Screen::kEngQuiz;
+        if (!display_) return;
+        char title[48];
+        snprintf(title, sizeof(title), "NGHE VÀ CHỌN %d/%d", quiz_i_ + 1, (int)quiz_order_.size());
+        std::vector<std::string> rows;
+        for (int i = 0; i < 3; i++) rows.push_back(words_[quiz_opt_[i]].vi);
+        rows.push_back("Nghe lại");
+        rows.push_back("Quay lại");
+        display_->MenuShowList(title, rows, quiz_msg_.c_str());
+    }
+
+    void SpeakQuiz() {
+        StopPlayback();
+        StartSpeakPaths({EngDir() + "/" + words_[quiz_order_[quiz_i_]].file + ".wav"});
+    }
+
+    void AnswerQuiz(int r) {
+        StopPlayback();
+        if (r == quiz_ok_) {
+            if (quiz_first_) quiz_score_++;
+            quiz_i_++;
+            if (quiz_i_ >= (int)quiz_order_.size()) { ShowQuizDone(); return; }
+            quiz_msg_ = "Đúng rồi! Giỏi quá!";
+            AskQuiz();
+        } else {
+            quiz_first_ = false;
+            quiz_msg_ = "Chưa đúng, con nghe lại nhé!";
+            ShowQuizScreen();
+            SpeakQuiz();
+        }
+    }
+
+    void ShowQuizDone() {
+        screen_ = Screen::kEngDone;
+        int n = (int)quiz_order_.size();
+        const char* khen = quiz_score_ * 10 >= n * 9 ? "Giỏi quá, tuyệt vời!" : (quiz_score_ * 10 >= n * 7 ? "Giỏi lắm!" : (quiz_score_ * 10 >= n * 5 ? "Khá lắm, luyện thêm nhé!" : "Cố lên, mình chơi lại nhé!"));
+        char msg[160];
+        snprintf(msg, sizeof(msg), "Xong rồi!\nĐúng ngay %d/%d câu\n\n%s\n\nChạm để quay lại", quiz_score_, n, khen);
+        if (display_) display_->MenuShowMessage(msg, -1, -1);
     }
 
     void ShowSettings() {
@@ -1977,6 +2172,7 @@ private:
     }
 
     void OpenTopic(int t) {
+        eng_mode_ = false;
         topic_ = t;
         word_ = 0;
         words_.clear();
@@ -2068,6 +2264,12 @@ private:
         screen_ = Screen::kLearnCard;
         if (words_.empty() || !display_) return;
         const Word& w = words_[word_];
+        if (eng_mode_) {   // English sentence card: text only, full width
+            char c2[24];
+            snprintf(c2, sizeof(c2), "%d/%d", word_ + 1, (int)words_.size());
+            display_->MenuShowCard(nullptr, eng_titles_[eng_sel_], w.en, w.vi, c2, true);
+            return;
+        }
         bool ok = LoadCardImage(w);
         char cnt[24];
         snprintf(cnt, sizeof(cnt), ok ? "%d/%d" : "%d/%d  (hình lỗi)", word_ + 1, (int)words_.size());
@@ -2080,10 +2282,11 @@ private:
     void SpeakWord() {
         if (words_.empty() || playing_) return;
         const Word& w = words_[word_];
-        std::string base = std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file;
+        std::string base = eng_mode_ ? EngDir() + "/" + w.file : std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file;
         speak_paths_.clear();
         speak_gap_ms_ = 300;
-        for (const char* suffix : {"_en.wav", "_vi.wav"}) {
+        const std::vector<const char*> suffixes = eng_mode_ ? std::vector<const char*>{".wav"} : std::vector<const char*>{"_en.wav", "_vi.wav"};
+        for (const char* suffix : suffixes) {
             std::string p = base + suffix;
             FILE* f = fopen(p.c_str(), "rb");
             if (f != nullptr) { fclose(f); speak_paths_.push_back(p); }
@@ -2122,6 +2325,7 @@ private:
     }
 
     void Close() {
+        eng_mode_ = false;
         sleep_mode_ = false;
         tick_gen_++;
         StopPlayback();

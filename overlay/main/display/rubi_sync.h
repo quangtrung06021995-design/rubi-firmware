@@ -9,7 +9,7 @@
 //    "items":[{"p":"music/Ba oi.wav","u":"https://.../file","s":8123456},
 //             {"p":"truyen/tho-va-rua/01.bin","u":"https://...","s":153600}, ...],
 //    "del":["music/old.wav","truyen/old-story"]}
-// "p" is the path under /sdcard/rubi (only music/, truyen/, hoc/ are allowed), "u" the download address, "s" the exact size in bytes.
+// "p" is the path under /sdcard/rubi (only music/, truyen/, hoc/, anh/ are allowed), "u" the download address, "s" the exact size in bytes.
 // A file is downloaded only when it is missing or its size differs.
 #include <cstdio>
 #include <cstring>
@@ -95,7 +95,7 @@ private:
     static bool SafePath(const char* path) {
         std::string p = path;
         if (p.size() < 3 || p.size() > 180) return false;
-        if (p.rfind("music/", 0) != 0 && p.rfind("truyen/", 0) != 0 && p.rfind("hoc/", 0) != 0) return false;
+        if (p.rfind("music/", 0) != 0 && p.rfind("truyen/", 0) != 0 && p.rfind("hoc/", 0) != 0 && p.rfind("anh/", 0) != 0) return false;
         size_t i = 0;
         while (true) {
             size_t j = p.find('/', i);
