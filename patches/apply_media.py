@@ -40,9 +40,28 @@ patch(B, [
 ])
 
 patch('main/audio/audio_service.h', [
-    ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n'),
+    ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n    bool rubi_prebuf_ = true;           // Rubi: gather a few packets before a new reply starts playing (network jitter)\n    int64_t rubi_prebuf_t0_ = 0;\n'),
 ])
-patch('main/audio/audio_service.cc', [], append='''
+patch('main/audio/audio_service.cc', [
+    ('        /* Decode the audio from decode queue */\n        if (!audio_decode_queue_.empty() &&\n            audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {\n',
+     '        /* Rubi: jitter buffer. When a new reply starts (nothing playing), wait until a few packets have arrived\n'
+     '           (or 450 ms passed) so a late packet does not make the speech stutter. */\n'
+     '        if (audio_decode_queue_.empty() && audio_playback_queue_.empty() && !output_in_flight_ && !decode_in_flight_) {\n'
+     '            rubi_prebuf_ = true;\n'
+     '            rubi_prebuf_t0_ = 0;\n'
+     '        }\n'
+     '        if (rubi_prebuf_ && !audio_decode_queue_.empty() && audio_encode_queue_.empty()) {\n'
+     '            int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();\n'
+     '            if (rubi_prebuf_t0_ == 0) rubi_prebuf_t0_ = now_ms;\n'
+     '            if (audio_decode_queue_.size() < 6 && now_ms - rubi_prebuf_t0_ < 450) {\n'
+     '                audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(30));\n'
+     '                continue;\n'
+     '            }\n'
+     '            rubi_prebuf_ = false;\n'
+     '        }\n'
+     '\n'
+     '        /* Decode the audio from decode queue */\n        if (!audio_decode_queue_.empty() &&\n            audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {\n'),
+], append='''
 bool AudioService::PushPcmToPlayback(std::vector<int16_t>&& pcm) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
     audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(500), [this]() {
