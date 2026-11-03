@@ -78,6 +78,23 @@ public:
         if (cal_.valid) ShowMain(); else StartCalibration();
     }
 
+    // Swipe up from the bottom edge (the home bar) leaves the menu, like the iPhone. Returns true if it was a swipe.
+    // fx,fy = first raw touch point, tx,ty = last raw touch point.
+    bool HandleSwipe(uint32_t press_ms, uint16_t fx, uint16_t fy, uint16_t tx, uint16_t ty) {
+        if (!IsOpen() || !cal_.valid || press_ms > 2500) return false;
+        if (screen_ >= Screen::kCalib1 && screen_ <= Screen::kCalib4) return false;
+        int x0, y0, x1, y1;
+        Map(fx, fy, x0, y0);
+        Map(tx, ty, x1, y1);
+        int dy = y0 - y1, dx = x1 - x0;
+        if (dx < 0) dx = -dx;
+        if (y0 < 205 || dy < 40 || dx > dy) return false;
+        ESP_LOGI("RubiTouch", "swipe up %d,%d -> %d,%d (screen %d)", x0, y0, x1, y1, (int)screen_);
+        std::lock_guard<std::recursive_mutex> lk(mutex_);
+        Close();
+        return true;
+    }
+
     // Called when a finger is lifted. raw_x/raw_y = last raw touch point. Returns true if consumed.
     bool HandleTouch(uint32_t press_ms, uint16_t raw_x, uint16_t raw_y) {
         if (voice_mode_ && playing_) {   // music started by voice: any touch stops it
@@ -672,23 +689,6 @@ private:
     void ShowEnglishSoon() {
         screen_ = Screen::kSoon;
         if (display_) display_->MenuShowMessage("Tiếng Anh giao tiếp\n\nSắp có bài học!\n\nChạm để quay lại", -1, -1);
-    }
-
-    // Swipe up from the bottom edge (the home bar) leaves the menu, like the iPhone. Returns true if it was a swipe.
-    // fx,fy = first raw touch point, tx,ty = last raw touch point.
-    bool HandleSwipe(uint32_t press_ms, uint16_t fx, uint16_t fy, uint16_t tx, uint16_t ty) {
-        if (!IsOpen() || !cal_.valid || press_ms > 2500) return false;
-        if (screen_ >= Screen::kCalib1 && screen_ <= Screen::kCalib4) return false;
-        int x0, y0, x1, y1;
-        Map(fx, fy, x0, y0);
-        Map(tx, ty, x1, y1);
-        int dy = y0 - y1, dx = x1 - x0;
-        if (dx < 0) dx = -dx;
-        if (y0 < 205 || dy < 40 || dx > dy) return false;
-        ESP_LOGI("RubiTouch", "swipe up %d,%d -> %d,%d (screen %d)", x0, y0, x1, y1, (int)screen_);
-        std::lock_guard<std::recursive_mutex> lk(mutex_);
-        Close();
-        return true;
     }
 
     void ShowSettings() {
