@@ -112,4 +112,53 @@ patch('main/CMakeLists.txt', [
     ('                        ${MAIN_PRIV_REQUIRES_EXTRA}\n',
      '                        esp_driver_sdmmc\n                        sdmmc\n                        ${MAIN_PRIV_REQUIRES_EXTRA}\n'),
 ])
+
+# Rubi: voice-stutter diagnosis. Counts, for each reply, the packets received (Goi), packets lost or out of order on
+# the network (Mat), packets thrown away because they came before the speaking state (Bo), and how many times the
+# speaker ran dry for 70 ms - 1.5 s in the middle of speech (Hut). Shown for 8 s at the top of the screen when
+# Rubi stops speaking. Mat/Bo high = network; Hut high with Mat = 0 = the board itself is too slow.
+patch('main/audio/audio_service.h', [
+    ('#include <esp_timer.h>\n',
+     '#include <esp_timer.h>\n#include <atomic>\n'
+     'extern std::atomic<int> g_rubi_pkts, g_rubi_lost, g_rubi_drop, g_rubi_hut, g_rubi_udp;\n'),
+])
+patch('main/audio/audio_service.cc', [
+    ('        output_in_flight_ = true;\n        audio_queue_cv_.notify_all();\n        lock.unlock();\n',
+     '        output_in_flight_ = true;\n'
+     '        if (!task.rubi_boost && rubi_last_out_ms_ > 0) {\n'
+     '            int64_t gap_ms = esp_timer_get_time() / 1000 - rubi_last_out_ms_;\n'
+     '            if (gap_ms > 70 && gap_ms < 1500) g_rubi_hut++;\n'
+     '        }\n'
+     '        audio_queue_cv_.notify_all();\n        lock.unlock();\n'),
+], append='''
+std::atomic<int> g_rubi_pkts{0}, g_rubi_lost{0}, g_rubi_drop{0}, g_rubi_hut{0}, g_rubi_udp{0};
+''')
+patch('main/protocols/mqtt_protocol.cc', [
+    ('            if (sequence <= remote_sequence_) {\n                ESP_LOGW(TAG, "Received duplicate/old',
+     '            g_rubi_udp = 1;\n'
+     '            if (sequence <= remote_sequence_) {\n                g_rubi_lost++;\n                ESP_LOGW(TAG, "Received duplicate/old'),
+    ('            if (sequence != remote_sequence_ + 1) {\n',
+     '            if (sequence != remote_sequence_ + 1) {\n'
+     '                if (remote_sequence_ > 0 && sequence > remote_sequence_ + 1 && sequence - remote_sequence_ < 1000) g_rubi_lost += (int)(sequence - remote_sequence_ - 1);\n'),
+])
+patch('main/application.cc', [
+    ('        if (GetDeviceState() == kDeviceStateSpeaking) {\n            audio_service_.PushPacketToDecodeQueue(std::move(packet));\n        }\n',
+     '        if (GetDeviceState() == kDeviceStateSpeaking) {\n            g_rubi_pkts++;\n            audio_service_.PushPacketToDecodeQueue(std::move(packet));\n        } else {\n            g_rubi_drop++;\n        }\n'),
+    ('    DeviceState new_state = state_machine_.GetState();\n    clock_ticks_ = 0;\n',
+     '    DeviceState new_state = state_machine_.GetState();\n    clock_ticks_ = 0;\n'
+     '    {\n'
+     '        static DeviceState rubi_prev = kDeviceStateUnknown;\n'
+     '        if (new_state == kDeviceStateSpeaking && rubi_prev != kDeviceStateSpeaking) {\n'
+     '            g_rubi_pkts = 0; g_rubi_lost = 0; g_rubi_hut = 0;\n'
+     '        }\n'
+     '        if (rubi_prev == kDeviceStateSpeaking && new_state != kDeviceStateSpeaking && g_rubi_pkts > 0) {\n'
+     '            char b[96];\n'
+     '            snprintf(b, sizeof(b), "Goi %d  Mat %d  Bo %d  Hut %d  %s", g_rubi_pkts.load(), g_rubi_lost.load(),\n'
+     '                     g_rubi_drop.load(), g_rubi_hut.load(), g_rubi_udp ? "UDP" : "WS");\n'
+     '            Board::GetInstance().GetDisplay()->ShowNotification(b, 8000);\n'
+     '            g_rubi_drop = 0;\n'
+     '        }\n'
+     '        rubi_prev = new_state;\n'
+     '    }\n'),
+])
 print('media patches applied')
