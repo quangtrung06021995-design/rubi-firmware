@@ -2285,7 +2285,7 @@ private:
         std::string base = eng_mode_ ? EngDir() + "/" + w.file : std::string("/sdcard/rubi/hoc/") + Topics()[topic_].dir + "/" + w.file;
         speak_paths_.clear();
         speak_gap_ms_ = 300;
-        const std::vector<const char*> suffixes = eng_mode_ ? std::vector<const char*>{".wav"} : std::vector<const char*>{"_en.wav", "_vi.wav"};
+        const std::vector<const char*> suffixes = eng_mode_ ? std::vector<const char*>{".wav", "_vi.wav"} : std::vector<const char*>{"_en.wav", "_vi.wav"};
         for (const char* suffix : suffixes) {
             std::string p = base + suffix;
             FILE* f = fopen(p.c_str(), "rb");

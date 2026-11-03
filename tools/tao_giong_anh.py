@@ -11,7 +11,7 @@ Muon them bai moi: them thu muc moi trong bai_tieng_anh roi chay lai.
 Moi bai la 1 thu muc trong bai_tieng_anh/ gom:
     ten.txt   dong dau = ten bai hien tren man hinh
     bai.txt   moi dong:  ten_file|Cau tieng Anh|Nghia tieng Viet
-Ket qua nam trong thu muc rubi_anh/<bai>/ (bai.txt, ten.txt va <ten_file>.wav).
+Ket qua nam trong thu muc rubi_anh/<bai>/ (bai.txt, ten.txt, <ten_file>.wav = tieng Anh, <ten_file>_vi.wav = tieng Viet).
 Chep CA thu muc rubi_anh vao the nho thanh  rubi/anh  (tren the se la rubi/anh/<bai>/...).
 Chay lai se bo qua file da co.
 """
@@ -109,7 +109,9 @@ async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--thu", action="store_true", help="chi tao 2 file nghe thu")
     ap.add_argument("--giong", default="en-US-AriaNeural", help="giong tieng Anh (mac dinh en-US-AriaNeural, giong nu nguoi lon ro rang)")
-    ap.add_argument("--toc-do", default="-10%", help="toc do doc, vi du -20%% (cham hon)")
+    ap.add_argument("--toc-do", default="-10%", help="toc do doc tieng Anh, vi du -20%% (cham hon)")
+    ap.add_argument("--giong-viet", default="vi-VN-HoaiMyNeural", help="giong doc nghia tieng Viet (nu Bac)")
+    ap.add_argument("--toc-do-viet", default="-15%", help="toc do doc tieng Viet")
     ap.add_argument("--vao", default=os.path.join(HERE, "bai_tieng_anh"), help="thu muc chua cac bai")
     ap.add_argument("--ra", default=os.path.join(HERE, "rubi_anh"), help="thu muc dau ra")
     args = ap.parse_args()
@@ -133,29 +135,32 @@ async def main():
         for l in open(txt, encoding="utf-8"):
             p = l.strip().split("|")
             if len(p) >= 3:
-                dong.append((p[0].strip(), p[1].strip()))
+                dong.append((p[0].strip(), p[1].strip(), p[2].strip()))
         if args.thu:
             dong = dong[:2]
-        for i, (ten, cau) in enumerate(dong, 1):
-            path = os.path.join(dst, ten + ".wav")
-            if os.path.exists(path):
-                continue
-            pcm = None
-            for lan in range(5):
-                try:
-                    pcm = await tao_mot(cau, args.giong, args.toc_do, ff)
-                    break
-                except Exception as e:
-                    print("  loi (%s), thu lai..." % str(e)[:150])
-                    await asyncio.sleep(4)
-            if pcm is None or len(pcm) == 0:
-                print("[%s %d/%d] %s: BO QUA (that bai)" % (bai, i, len(dong), ten))
-                loi += 1
-                continue
-            pcm = cat_lang(pcm, OUT_RATE)
-            ghi_wav(path, pcm)
-            print("[%s %d/%d] %s = %s  (%.1f giay)" % (bai, i, len(dong), ten, cau, len(pcm) / OUT_RATE))
-            await asyncio.sleep(0.3)
+        for i, (ten, cau, viet) in enumerate(dong, 1):
+            # <ten>.wav = cau tieng Anh, <ten>_vi.wav = nghia tieng Viet (Rubi doc tieng Anh roi tieng Viet)
+            for hau, noidung, giong, tocdo in ((".wav", cau, args.giong, args.toc_do),
+                                               ("_vi.wav", viet, args.giong_viet, args.toc_do_viet)):
+                path = os.path.join(dst, ten + hau)
+                if os.path.exists(path) or not noidung:
+                    continue
+                pcm = None
+                for lan in range(5):
+                    try:
+                        pcm = await tao_mot(noidung, giong, tocdo, ff)
+                        break
+                    except Exception as e:
+                        print("  loi (%s), thu lai..." % str(e)[:150])
+                        await asyncio.sleep(4)
+                if pcm is None or len(pcm) == 0:
+                    print("[%s %d/%d] %s%s: BO QUA (that bai)" % (bai, i, len(dong), ten, hau))
+                    loi += 1
+                    continue
+                pcm = cat_lang(pcm, OUT_RATE)
+                ghi_wav(path, pcm)
+                print("[%s %d/%d] %s%s = %s  (%.1f giay)" % (bai, i, len(dong), ten, hau, noidung, len(pcm) / OUT_RATE))
+                await asyncio.sleep(0.3)
     print("Xong. Loi: %d. Ket qua nam trong thu muc %s" % (loi, args.ra))
     print("Chep thu muc %s vao the nho thanh rubi/anh" % args.ra)
     if loi:
