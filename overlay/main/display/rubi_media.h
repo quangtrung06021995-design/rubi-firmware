@@ -1366,7 +1366,7 @@ private:
         screen_ = Screen::kCtl;
         int has = RubiBattery::PinSet();
         std::string hint = has == 1 ? "Robot đang có mã PIN" : (has == 0 ? "CHƯA có PIN: ai cũng điều khiển được!" : "Chưa biết PIN (robot chưa trả lời)");
-        if (display_) { static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_dieu_khien}; display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc từ điện thoại", "Đồng bộ kho ngay", "Quay lại"}, hint.c_str(), nullptr, &ico); }
+        if (display_) { static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_dieu_khien}; display_->MenuShowList("ĐIỀU KHIỂN", {"Mã QR / địa chỉ", has == 1 ? "Đổi mã PIN" : "Đặt mã PIN", "Tải nhạc, truyện từ điện thoại", "Đồng bộ kho ngay", "Quay lại"}, hint.c_str(), nullptr, &ico); }
     }
 
     std::string pin_old_, pin_new_, pin_buf_;
