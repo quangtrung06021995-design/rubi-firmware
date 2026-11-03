@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Tao file giong TIENG ANH cho cac bai "Tieng Anh giao tiep" cua Rubi (edge-tts, mien phi, khong can khoa API).
 
-Cach dung (Python 3.9+, can Internet), chay trong thu muc rubi-firmware:
-    py tools/tao_giong_anh.py --thu       # chi tao 2 file nghe thu
-    py tools/tao_giong_anh.py             # tao tat ca bai trong bai_tieng_anh/
-    py tools/tao_giong_anh.py --giong en-US-JennyNeural --toc-do -20%
+Chi can MOT file nay: de no trong thu muc nao cung duoc (vi du D:\\hoc) roi chay bang VS Code hoac:
+    py tao_giong_anh.py --thu       # chi tao 2 file nghe thu
+    py tao_giong_anh.py             # tao tat ca cac bai
+    py tao_giong_anh.py --giong en-US-JennyNeural --toc-do -20%
+Lan dau chay, neu chua co thu muc bai_tieng_anh thi file tu tao bai mau "Lop 2 - Chao hoi" ngay canh file nay.
+Muon them bai moi: them thu muc moi trong bai_tieng_anh roi chay lai.
 
 Moi bai la 1 thu muc trong bai_tieng_anh/ gom:
     ten.txt   dong dau = ten bai hien tren man hinh
@@ -24,6 +26,30 @@ for mod, pkg in (("edge_tts", "edge-tts"), ("imageio_ffmpeg", "imageio-ffmpeg"))
 import edge_tts, imageio_ffmpeg
 
 OUT_RATE = 22050
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+BAI_MAU = {
+    "lop2_chao_hoi": ("Lớp 2 - Chào hỏi", """hello|Hello!|Xin chào!
+hi|Hi!|Chào bạn!
+goodmorning|Good morning!|Chào buổi sáng!
+goodafternoon|Good afternoon!|Chào buổi chiều!
+goodbye|Goodbye!|Tạm biệt!
+howareyou|How are you?|Bạn khỏe không?
+fine|I'm fine, thank you.|Mình khỏe, cảm ơn bạn.
+yourname|What's your name?|Bạn tên là gì?
+myname|My name is Nam.|Tên mình là Nam.
+nicetomeet|Nice to meet you.|Rất vui được gặp bạn.
+"""),
+}
+
+
+def tao_bai_mau(vao):
+    for ten, (tieu_de, noi_dung) in BAI_MAU.items():
+        d = os.path.join(vao, ten)
+        os.makedirs(d, exist_ok=True)
+        if not os.path.exists(os.path.join(d, "bai.txt")):
+            open(os.path.join(d, "ten.txt"), "w", encoding="utf-8").write(tieu_de + "\n")
+            open(os.path.join(d, "bai.txt"), "w", encoding="utf-8").write(noi_dung)
 
 
 def cat_lang(pcm, rate):
@@ -69,13 +95,14 @@ async def main():
     ap.add_argument("--thu", action="store_true", help="chi tao 2 file nghe thu")
     ap.add_argument("--giong", default="en-US-AnaNeural", help="giong tieng Anh (mac dinh en-US-AnaNeural, giong tre em)")
     ap.add_argument("--toc-do", default="-10%", help="toc do doc, vi du -20%% (cham hon)")
-    ap.add_argument("--vao", default="bai_tieng_anh", help="thu muc chua cac bai")
-    ap.add_argument("--ra", default="rubi_anh", help="thu muc dau ra")
+    ap.add_argument("--vao", default=os.path.join(HERE, "bai_tieng_anh"), help="thu muc chua cac bai")
+    ap.add_argument("--ra", default=os.path.join(HERE, "rubi_anh"), help="thu muc dau ra")
     args = ap.parse_args()
 
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     if not os.path.isdir(args.vao):
-        sys.exit("Khong thay thu muc %s - hay chay lenh trong thu muc rubi-firmware." % args.vao)
+        print("Chua co thu muc", args.vao, "- tao bai mau.")
+        tao_bai_mau(args.vao)
     loi = 0
     for bai in sorted(os.listdir(args.vao)):
         src = os.path.join(args.vao, bai)
