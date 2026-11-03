@@ -40,27 +40,9 @@ patch(B, [
 ])
 
 patch('main/audio/audio_service.h', [
-    ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n    bool rubi_prebuf_ = true;           // Rubi: gather a few packets before a new reply starts playing (network jitter)\n    int64_t rubi_prebuf_t0_ = 0;\n'),
+    ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n'),
 ])
 patch('main/audio/audio_service.cc', [
-    ('        /* Decode the audio from decode queue */\n        if (!audio_decode_queue_.empty() &&\n            audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {\n',
-     '        /* Rubi: jitter buffer. When a new reply starts (nothing playing), wait until a few packets have arrived\n'
-     '           (or 450 ms passed) so a late packet does not make the speech stutter. */\n'
-     '        if (audio_decode_queue_.empty() && audio_playback_queue_.empty() && !output_in_flight_ && !decode_in_flight_) {\n'
-     '            rubi_prebuf_ = true;\n'
-     '            rubi_prebuf_t0_ = 0;\n'
-     '        }\n'
-     '        if (rubi_prebuf_ && !audio_decode_queue_.empty() && audio_encode_queue_.empty()) {\n'
-     '            int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();\n'
-     '            if (rubi_prebuf_t0_ == 0) rubi_prebuf_t0_ = now_ms;\n'
-     '            if (audio_decode_queue_.size() < 6 && now_ms - rubi_prebuf_t0_ < 450) {\n'
-     '                audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(30));\n'
-     '                continue;\n'
-     '            }\n'
-     '            rubi_prebuf_ = false;\n'
-     '        }\n'
-     '\n'
-     '        /* Decode the audio from decode queue */\n        if (!audio_decode_queue_.empty() &&\n            audio_playback_queue_.size() < MAX_PLAYBACK_TASKS_IN_QUEUE) {\n'),
 ], append='''
 bool AudioService::PushPcmToPlayback(std::vector<int16_t>&& pcm) {
     std::unique_lock<std::mutex> lock(audio_queue_mutex_);
@@ -73,42 +55,33 @@ bool AudioService::PushPcmToPlayback(std::vector<int16_t>&& pcm) {
     AudioTask task;
     task.type = kAudioTaskTypeDecodeToPlaybackQueue;
     task.pcm = std::move(pcm);
+    task.rubi_boost = true;
     audio_playback_queue_.push_back(std::move(task));
     audio_queue_cv_.notify_all();
     return true;
 }
 ''')
 
-# Rubi: cloud-voice stutter. The Opus decode task ran at priority 2 (below touch/LVGL/Wi-Fi) and only 2 decoded
-# frames were queued, so any short stall let the speaker run dry. Raise its priority, queue 4 frames, and turn off
-# Wi-Fi modem power-save (it delays packets by up to ~100 ms) while sound is playing.
+# Rubi: loudness boost only for local clips/music (PushPcmToPlayback). Cloud-assistant voice is already loud and
+# sounded rough/choppy with the boost, so it is left untouched.
 patch('main/audio/audio_service.h', [
-    ('#define MAX_PLAYBACK_TASKS_IN_QUEUE 2', '#define MAX_PLAYBACK_TASKS_IN_QUEUE 4'),
+    ('    uint32_t media_position_ms = 0;\n};', '    uint32_t media_position_ms = 0;\n    bool rubi_boost = false;  // Rubi: apply loudness boost (local clips only)\n};'),
 ])
 patch('main/audio/audio_service.cc', [
-    ('"opus_codec", 2048 * 12, this, 2, &opus_codec_task_handle_);', '"opus_codec", 2048 * 12, this, 5, &opus_codec_task_handle_);'),
-    ('            codec_->EnableOutput(true);\n        }\n\n        if (task.playback_id != 0',
-     '            codec_->EnableOutput(true);\n            esp_wifi_set_ps(WIFI_PS_NONE);  // Rubi: no Wi-Fi power-save while speaking\n        }\n\n        if (task.playback_id != 0'),
-    ('#include "audio_service.h"\n', '#include "audio_service.h"\n#include <esp_wifi.h>\n'),
-])
-
-patch('main/audio/audio_codec.cc', [
-    ('void AudioCodec::OutputData(std::vector<int16_t>& data) {\n    Write(data.data(), data.size());\n}',
-     '// Rubi: software loudness boost for the small speaker (all sound: voice, music, lesson clips).\n'
-     '// Samples are multiplied by kBoost; above kKnee a smooth limiter keeps them below kMax instead of hard clipping.\n'
-     'void AudioCodec::OutputData(std::vector<int16_t>& data) {\n'
-     '    const float kBoost = 2.0f, kKnee = 20000.0f, kMax = 32700.0f;\n'
-     '    for (auto& s : data) {\n'
-     '        float v = (float)s * kBoost;\n'
-     '        float a = v < 0 ? -v : v;\n'
-     '        if (a > kKnee) {\n'
-     '            float over = (a - kKnee) / (kMax - kKnee);\n'
-     '            a = kKnee + (kMax - kKnee) * (over / (1.0f + over));\n'
+    ('        codec_->OutputData(task.pcm);\n',
+     '        if (task.rubi_boost) {\n'
+     '            const float kBoost = 2.0f, kKnee = 20000.0f, kMax = 32700.0f;\n'
+     '            for (auto& smp : task.pcm) {\n'
+     '                float v = (float)smp * kBoost;\n'
+     '                float a = v < 0 ? -v : v;\n'
+     '                if (a > kKnee) {\n'
+     '                    float over = (a - kKnee) / (kMax - kKnee);\n'
+     '                    a = kKnee + (kMax - kKnee) * (over / (1.0f + over));\n'
+     '                }\n'
+     '                smp = (int16_t)(v < 0 ? -a : a);\n'
+     '            }\n'
      '        }\n'
-     '        s = (int16_t)(v < 0 ? -a : a);\n'
-     '    }\n'
-     '    Write(data.data(), data.size());\n'
-     '}'),
+     '        codec_->OutputData(task.pcm);\n'),
 ])
 
 patch('main/CMakeLists.txt', [
