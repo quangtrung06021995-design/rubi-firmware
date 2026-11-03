@@ -4,7 +4,7 @@
 Chi can MOT file nay: de no trong thu muc nao cung duoc (vi du D:\\hoc) roi chay bang VS Code hoac:
     py tao_giong_anh.py --thu       # chi tao 2 file nghe thu
     py tao_giong_anh.py             # tao tat ca cac bai
-    py tao_giong_anh.py --giong en-US-JennyNeural --toc-do -20%
+    py tao_giong_anh.py --giong en-US-AnaNeural --toc-do -20%
 Lan dau chay, neu chua co thu muc bai_tieng_anh thi file tu tao bai mau "Lop 2 - Chao hoi" ngay canh file nay.
 Muon them bai moi: them thu muc moi trong bai_tieng_anh roi chay lai.
 
@@ -108,7 +108,7 @@ async def tao_mot(text, voice, rate, ff):
 async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--thu", action="store_true", help="chi tao 2 file nghe thu")
-    ap.add_argument("--giong", default="en-US-AnaNeural", help="giong tieng Anh (mac dinh en-US-AnaNeural, giong tre em)")
+    ap.add_argument("--giong", default="en-US-AriaNeural", help="giong tieng Anh (mac dinh en-US-AriaNeural, giong nu nguoi lon ro rang)")
     ap.add_argument("--toc-do", default="-10%", help="toc do doc, vi du -20%% (cham hon)")
     ap.add_argument("--vao", default=os.path.join(HERE, "bai_tieng_anh"), help="thu muc chua cac bai")
     ap.add_argument("--ra", default=os.path.join(HERE, "rubi_anh"), help="thu muc dau ra")
