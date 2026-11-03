@@ -818,7 +818,7 @@ void webLenh() {   // /api/lenh?c=<lenh> : chuyen lenh cho bo man hinh (sleep, c
     for (unsigned i = 0; ok && i < c.length(); i++) ok = isalnum((unsigned char)c[i]);
     if (ok) {
         char k = c[0];
-        ok = c == "sleep" || c == "clock" || c == "huy" || c == "vup" || c == "vdown" || k == 't' || k == 'm' || k == 'h' || k == 'p';
+        ok = c == "sleep" || c == "clock" || c == "en" || c == "huy" || c == "vup" || c == "vdown" || k == 't' || k == 'm' || k == 'h' || k == 'p';
     }
     if (!ok) { webJson("{\"ok\":false,\"err\":\"lenh\"}"); return; }
     dungHet();

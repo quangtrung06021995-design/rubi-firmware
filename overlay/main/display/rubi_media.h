@@ -1123,6 +1123,7 @@ private:
             RestoreBacklight();
             if (c == "sleep") StartSleep();
             else if (c == "clock") ShowClock();
+            else if (c == "en") ShowEnglish();
             else if (c.size() >= 2 && c[0] == 't') { int m = atoi(c.c_str() + 1); if (m == 2 || m == 5 || m == 10 || m == 20) StartTimer(m); }
             else if (c.size() == 2 && c[0] == 'm' && c[1] >= '0' && c[1] <= '3') StartMath((RubiMath::Mode)(c[1] - '0'));
             else if (c.size() == 2 && c[0] == 'h' && c[1] >= '0' && c[1] <= '3') { ShowLearnTopics(); OpenTopic(c[1] - '0'); }

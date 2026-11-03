@@ -1,8 +1,8 @@
 
 (function(){
 var lt=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lt<350)e.preventDefault();lt=n},{passive:false});document.addEventListener("gesturestart",function(e){e.preventDefault()});
-var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","song-ngu","toan","the-nho","cai-dat"];
-var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","song-ngu":"Học song ngữ","toan":"Toán lớp 1","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
+var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","song-ngu","toan","tieng-anh","the-nho","cai-dat"];
+var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","song-ngu":"Học song ngữ","toan":"Toán lớp 1","tieng-anh":"Tiếng Anh","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
 var $=function(i){return document.getElementById(i)},tt;
 function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){t.classList.remove("on")},1600)}
 var LIVE=location.protocol==="http:"&&!/vercel\.app$/.test(location.hostname),M=LIVE?"":" (mẫu)";
@@ -162,6 +162,7 @@ function btns(arr){return '<div class="acts">'+arr.map(function(b){return '<butt
 var HOLD='<p class="hint">Rubi sẽ mở mục này trên màn hình. Muốn dừng, bấm "Dừng" hoặc chạm màn hình Rubi.</p>';
 (function(){
  var c=$("c-toan");if(c)c.innerHTML='<h2>Toán lớp 1</h2>'+btns([["m0","Cộng trừ trong 10"],["m1","Cộng trừ trong 20"],["m2","Cộng trừ trong 100"],["m3","Toán lời văn"]])+HOLD;
+ c=$("c-anh");if(c)c.innerHTML='<h2>Tiếng Anh giao tiếp</h2>'+btns([["en","Mở các bài Tiếng Anh trên Rubi"]])+'<p class="hint">Rubi mở danh sách bài trên màn hình, bé chạm để chọn bài. Bài mới chép vào thẻ nhớ (thư mục rubi/anh) sẽ tự hiện trong danh sách.</p>';
  c=$("c-hoc");if(c)c.innerHTML='<h2>Học song ngữ</h2>'+btns([["h0","Trái cây"],["h1","Động vật"],["h2","Đồ vật"],["h3","Hình khối"]])+HOLD;
  var cc=document.querySelector("#v-choi-cung");
  if(cc){var d=document.createElement("div");d.className="card";d.innerHTML='<h2>Đi ngủ, đồng hồ, hẹn giờ</h2>'+btns([["sleep","Đi ngủ (hát ru 30 phút)"],["clock","Đồng hồ"],["t2","Hẹn 2 phút"],["t5","Hẹn 5 phút"],["t10","Hẹn 10 phút"],["t20","Hẹn 20 phút"],["huy","■ Dừng và đóng menu"]])+HOLD;cc.appendChild(d)}
