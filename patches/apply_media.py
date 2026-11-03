@@ -60,6 +60,25 @@ bool AudioService::PushPcmToPlayback(std::vector<int16_t>&& pcm) {
 }
 ''')
 
+patch('main/audio/audio_codec.cc', [
+    ('void AudioCodec::OutputData(std::vector<int16_t>& data) {\n    Write(data.data(), data.size());\n}',
+     '// Rubi: software loudness boost for the small speaker (all sound: voice, music, lesson clips).\n'
+     '// Samples are multiplied by kBoost; above kKnee a smooth limiter keeps them below kMax instead of hard clipping.\n'
+     'void AudioCodec::OutputData(std::vector<int16_t>& data) {\n'
+     '    const float kBoost = 2.0f, kKnee = 20000.0f, kMax = 32700.0f;\n'
+     '    for (auto& s : data) {\n'
+     '        float v = (float)s * kBoost;\n'
+     '        float a = v < 0 ? -v : v;\n'
+     '        if (a > kKnee) {\n'
+     '            float over = (a - kKnee) / (kMax - kKnee);\n'
+     '            a = kKnee + (kMax - kKnee) * (over / (1.0f + over));\n'
+     '        }\n'
+     '        s = (int16_t)(v < 0 ? -a : a);\n'
+     '    }\n'
+     '    Write(data.data(), data.size());\n'
+     '}'),
+])
+
 patch('main/CMakeLists.txt', [
     ('                        ${MAIN_PRIV_REQUIRES_EXTRA}\n',
      '                        esp_driver_sdmmc\n                        sdmmc\n                        ${MAIN_PRIV_REQUIRES_EXTRA}\n'),
