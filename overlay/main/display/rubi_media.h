@@ -944,14 +944,17 @@ private:
             auto& as = Application::GetInstance().GetAudioService();
             int16_t* b = (int16_t*)heap_caps_malloc(len * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
             int got = 0;
+            float real_s = 0;
             if (b != nullptr) {
                 as.EnableWakeWordDetection(true);   // keeps the microphone running while the menu is open
                 vTaskDelay(pdMS_TO_TICKS(300));
                 g_rubi_cap_pos = 0;
                 g_rubi_cap_clip = 0;
                 g_rubi_cap_len = len;
+                int64_t t0 = esp_timer_get_time();
                 g_rubi_cap_buf = b;
-                for (int i = 0; i < 60 && g_rubi_cap_pos < len; i++) vTaskDelay(pdMS_TO_TICKS(100));
+                for (int i = 0; i < 120 && g_rubi_cap_pos < len; i++) vTaskDelay(pdMS_TO_TICKS(50));
+                real_s = (esp_timer_get_time() - t0) / 1000000.0f;   // wall time to collect 4 s of samples (should be ~4.0)
                 g_rubi_cap_buf = nullptr;
                 vTaskDelay(pdMS_TO_TICKS(50));
                 as.EnableWakeWordDetection(false);
@@ -979,8 +982,8 @@ private:
             if (got <= rate / 2) {
                 snprintf(msg, sizeof(msg), "Mic không gửi tiếng\n(chỉ %d mẫu)\n\nChạm để quay lại", got);
             } else {
-                snprintf(msg, sizeof(msg), "Mic %s: %.1f giây\nĐỉnh %d  TB %d\nMéo (chạm trần): %d\n\nNghe có rõ không?\nChạm để quay lại",
-                         g_rubi_mic_state == 1 ? "NGOÀI" : "TRONG", got / (float)rate, pk, rms, clip);
+                snprintf(msg, sizeof(msg), "Mic %s: %.1f giây\n(đo thật: %.1f giây)\nĐỉnh %d  TB %d\nMéo (chạm trần): %d\n\nNghe có rõ không?\nChạm để quay lại",
+                         g_rubi_mic_state == 1 ? "NGOÀI" : "TRONG", got / (float)rate, real_s, pk, rms, clip);
             }
             std::lock_guard<std::recursive_mutex> lk(mutex_);
             screen_ = Screen::kMicDone;

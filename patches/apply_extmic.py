@@ -36,6 +36,7 @@ volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0, g_rub
 static int64_t g_rubi_peak_t0 = 0;
 // Mic choice from the menu (0 = automatic, 1 = external, 2 = on-board), saved in NVS "rubi"/"mic".
 volatile int g_rubi_mic_force = 0;
+static int g_rubi_ext_slot = 0;   // 0 = left, 1 = right I2S slot carries the external mic
 // Mic test: when g_rubi_cap_buf is set, the samples Rubi hears (24 kHz mono, before the voice filters) are copied here.
 int16_t* volatile g_rubi_cap_buf = nullptr;
 volatile int g_rubi_cap_len = 0, g_rubi_cap_pos = 0, g_rubi_cap_clip = 0;
@@ -70,7 +71,7 @@ void Es8311AudioCodec::ExtMicInit() {
     }
     i2s_std_config_t sc = {
         .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG((uint32_t)input_sample_rate_),
-        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_MONO),
+        .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG(I2S_DATA_BIT_WIDTH_32BIT, I2S_SLOT_MODE_STEREO),
         .gpio_cfg = {
             .mclk = I2S_GPIO_UNUSED,
             .bclk = GPIO_NUM_2,
@@ -102,21 +103,29 @@ void Es8311AudioCodec::ExtMicProbe() {
     int32_t* buf = (int32_t*)heap_caps_malloc(n * sizeof(int32_t), MALLOC_CAP_8BIT);
     if (buf == nullptr) { ext_state_ = 2; return; }
     size_t got = 0;
-    double sum = 0, sum2 = 0;
+    // Stereo frames (left, right). The INMP441 talks in ONE slot (L/R pin low = left, high = right); the other slot
+    // is empty. Measure both and keep the one with the signal.
+    double sum[2] = {0, 0}, sum2[2] = {0, 0};
     int cnt = 0;
     for (int round = 0; round < 3; round++) {
         got = 0;
         if (i2s_channel_read(ext_rx_, buf, n * sizeof(int32_t), &got, 300) != ESP_OK) { got = 0; }
         if (round == 0) continue;  // first block may hold start-up garbage
-        for (size_t i = 0; i < got / 4; i++) {
-            double v = (double)(buf[i] >> 8);
-            sum += v; sum2 += v * v; cnt++;
+        for (size_t i = 0; i + 1 < got / 4; i += 2) {
+            for (int c = 0; c < 2; c++) {
+                double v = (double)(buf[i + c] >> 8);
+                sum[c] += v; sum2[c] += v * v;
+            }
+            cnt++;
         }
     }
     free(buf);
-    if (cnt < 1000) { ext_state_ = 2; g_rubi_mic_state = 2; g_rubi_mic_sd = -1; ESP_LOGW(TAG, "external mic: no data, using on-board mic"); return; }
-    double mean = sum / cnt;
-    double sd = sqrt(sum2 / cnt - mean * mean);
+    if (cnt < 500) { ext_state_ = 2; g_rubi_mic_state = 2; g_rubi_mic_sd = -1; ESP_LOGW(TAG, "external mic: no data, using on-board mic"); return; }
+    double sdc[2];
+    for (int c = 0; c < 2; c++) { double m = sum[c] / cnt; double q = sum2[c] / cnt - m * m; sdc[c] = q > 0 ? sqrt(q) : 0; }
+    g_rubi_ext_slot = sdc[1] > sdc[0] ? 1 : 0;
+    double sd = sdc[g_rubi_ext_slot];
+    ESP_LOGI(TAG, "external mic slots: left sd %.0f, right sd %.0f -> using %s", sdc[0], sdc[1], g_rubi_ext_slot ? "right" : "left");
     ext_state_ = (sd > 3.0 && sd < 2000000.0) ? 1 : 2;
     g_rubi_mic_sd = (int)sd;
     g_rubi_mic_state = ext_state_;
@@ -134,11 +143,14 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
         RubiCapture(dest, samples);
         return samples;
     }
+    static std::vector<int32_t> fr;
     static std::vector<int32_t> buf;
+    fr.resize(samples * 2);
     buf.resize(samples);
     size_t got = 0;
-    if (i2s_channel_read(ext_rx_, buf.data(), samples * sizeof(int32_t), &got, 500) != ESP_OK) got = 0;
-    int n = (int)(got / sizeof(int32_t));
+    if (i2s_channel_read(ext_rx_, fr.data(), samples * 2 * sizeof(int32_t), &got, 500) != ESP_OK) got = 0;
+    int n = (int)(got / (2 * sizeof(int32_t)));   // one sample per stereo frame, from the mic's slot only
+    for (int i = 0; i < n; i++) buf[i] = fr[2 * i + g_rubi_ext_slot];
     // INMP441 has a DC offset; remove it (slow tracking) BEFORE the gain, otherwise offset x gain hits full scale.
     static float dc = 0.0f;
     static float env = 0.0f;
