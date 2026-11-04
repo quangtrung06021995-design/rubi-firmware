@@ -22,6 +22,18 @@ function tzOffsetMinutes(zone) {
 }
 
 module.exports = async (req, res) => {
+  // Diagnosis: GET /api/ota?check=1 shows which connection types the Xiaozhi server offers (no tokens shown).
+  if (req.method === 'GET' && req.query && req.query.check) {
+    try {
+      const r = await fetch(UPSTREAM, { method: 'POST', headers: { 'Content-Type': 'application/json',
+        'Device-Id': 'aa:bb:cc:dd:ee:01', 'Client-Id': 'b1a2c3d4-0000-4000-8000-000000000001', 'User-Agent': 'rubi/3.0.118' },
+        body: JSON.stringify({ application: { version: '3.0.118' }, board: { type: 'freenove-esp32s3-display-2.8-lcd' } }) });
+      const d = await r.json();
+      res.status(200).json({ keys: Object.keys(d), websocket: d.websocket ? { url: d.websocket.url, keys: Object.keys(d.websocket) } : null,
+        mqtt: d.mqtt ? { endpoint: d.mqtt.endpoint } : null });
+    } catch (e) { res.status(200).json({ error: String(e) }); }
+    return;
+  }
   let data = {};
   if (req.method === 'POST') {
     try {
