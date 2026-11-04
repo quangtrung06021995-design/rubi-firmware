@@ -31,6 +31,16 @@ patch('main/audio/codecs/es8311_audio_codec.cc', [
 // (-26 dBFS at 94 dB SPL), so a fixed digital gain is applied before the voice filters.
 static const float kRubiExtGain = 48.0f;
 
+// Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 5 s)
+volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0;
+static int64_t g_rubi_peak_t0 = 0;
+static void RubiMicLevel(const int16_t* d, int n) {
+    int pk = 0;
+    for (int i = 0; i < n; i++) { int a = d[i] < 0 ? -d[i] : d[i]; if (a > pk) pk = a; }
+    int64_t now = esp_timer_get_time();
+    if (pk >= g_rubi_mic_peak || now - g_rubi_peak_t0 > 5000000) { g_rubi_mic_peak = pk; g_rubi_peak_t0 = now; }
+}
+
 void Es8311AudioCodec::ExtMicInit() {
     i2s_chan_config_t cc = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_1, I2S_ROLE_MASTER);
     cc.dma_desc_num = 6;
@@ -83,17 +93,21 @@ void Es8311AudioCodec::ExtMicProbe() {
         }
     }
     free(buf);
-    if (cnt < 1000) { ext_state_ = 2; ESP_LOGW(TAG, "external mic: no data, using on-board mic"); return; }
+    if (cnt < 1000) { ext_state_ = 2; g_rubi_mic_state = 2; g_rubi_mic_sd = -1; ESP_LOGW(TAG, "external mic: no data, using on-board mic"); return; }
     double mean = sum / cnt;
     double sd = sqrt(sum2 / cnt - mean * mean);
     ext_state_ = (sd > 30.0 && sd < 2000000.0) ? 1 : 2;
+    g_rubi_mic_sd = (int)sd;
+    g_rubi_mic_state = ext_state_;
     ESP_LOGI(TAG, "external mic probe: std-dev %.0f -> %s", sd, ext_state_ == 1 ? "USING external mic" : "not found, using on-board mic");
 }
 
 int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
     if (ext_state_ == 0) ExtMicProbe();
+    g_rubi_mic_state = ext_state_;
     if (ext_state_ != 1) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(esp_codec_dev_read(dev_, (void*)dest, samples * sizeof(int16_t)));
+        RubiMicLevel(dest, samples);
         return samples;
     }
     static std::vector<int32_t> buf;
@@ -108,7 +122,12 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
         if (v < -32768.0f) v = -32768.0f;
         dest[i] = (int16_t)v;
     }
+    RubiMicLevel(dest, samples);
     return samples;
 }
 ''')
+
+patch('main/audio/codecs/es8311_audio_codec.cc', [
+    ('#include <freertos/task.h>\n', '#include <freertos/task.h>\n#include <esp_timer.h>\n'),
+])
 print('external mic patch applied')

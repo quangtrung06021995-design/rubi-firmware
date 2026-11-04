@@ -23,6 +23,9 @@
 #include <esp_heap_caps.h>
 #include <esp_log.h>
 #include <esp_random.h>
+
+// Microphone diagnostics, defined in the audio codec (patches/apply_extmic.py)
+extern volatile int g_rubi_mic_state, g_rubi_mic_sd, g_rubi_mic_peak;
 #include <esp_timer.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
@@ -890,7 +893,11 @@ private:
         screen_ = Screen::kSettings;
         if (display_) {
             static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, &rubi_icon_wifi_s, &rubi_icon_dieu_khien, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
-            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "Quay lại"}, "", nullptr,
+            char mic[96];
+            snprintf(mic, sizeof(mic), "Mic: %s  đo=%d  đỉnh=%d",
+                     g_rubi_mic_state == 1 ? "NGOÀI" : (g_rubi_mic_state == 2 ? "TRONG (không thấy mic ngoài)" : "chưa kiểm tra"),
+                     g_rubi_mic_sd, g_rubi_mic_peak);
+            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "Quay lại"}, mic, nullptr,
             &ico);
         }
     }
