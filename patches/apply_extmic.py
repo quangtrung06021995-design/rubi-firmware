@@ -34,6 +34,21 @@ static const float kRubiExtGain = 32.0f;
 // Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 1 s)
 volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0, g_rubi_mic_rms = 0;
 static int64_t g_rubi_peak_t0 = 0;
+// Mic choice from the menu (0 = automatic, 1 = external, 2 = on-board), saved in NVS "rubi"/"mic".
+volatile int g_rubi_mic_force = 0;
+// Mic test: when g_rubi_cap_buf is set, the samples Rubi hears (24 kHz mono, before the voice filters) are copied here.
+int16_t* volatile g_rubi_cap_buf = nullptr;
+volatile int g_rubi_cap_len = 0, g_rubi_cap_pos = 0, g_rubi_cap_clip = 0;
+static void RubiCapture(const int16_t* d, int n) {
+    int16_t* b = g_rubi_cap_buf;
+    if (b == nullptr) return;
+    int pos = g_rubi_cap_pos, len = g_rubi_cap_len;
+    for (int i = 0; i < n && pos < len; i++) {
+        b[pos++] = d[i];
+        if (d[i] >= 32000 || d[i] <= -32000) g_rubi_cap_clip++;
+    }
+    g_rubi_cap_pos = pos;
+}
 static void RubiMicLevel(const int16_t* d, int n) {
     int pk = 0;
     double e = 0;
@@ -78,6 +93,10 @@ void Es8311AudioCodec::ExtMicInit() {
 // Reads ~0.3 s from the external port. A real INMP441 gives a small but non-zero noise floor; a missing mic gives
 // constant values (std-dev 0) or full-scale random bits (huge std-dev).
 void Es8311AudioCodec::ExtMicProbe() {
+    {
+        Settings st("rubi", false);
+        g_rubi_mic_force = st.GetInt("mic", 0);
+    }
     if (ext_rx_ == nullptr) { ext_state_ = 2; return; }
     const int n = 2400;
     int32_t* buf = (int32_t*)heap_caps_malloc(n * sizeof(int32_t), MALLOC_CAP_8BIT);
@@ -106,10 +125,13 @@ void Es8311AudioCodec::ExtMicProbe() {
 
 int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
     if (ext_state_ == 0) ExtMicProbe();
-    g_rubi_mic_state = ext_state_;
-    if (ext_state_ != 1) {
+    int use = g_rubi_mic_force != 0 ? g_rubi_mic_force : ext_state_;
+    if (use == 1 && ext_rx_ == nullptr) use = 2;
+    g_rubi_mic_state = use;
+    if (use != 1) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(esp_codec_dev_read(dev_, (void*)dest, samples * sizeof(int16_t)));
         RubiMicLevel(dest, samples);
+        RubiCapture(dest, samples);
         return samples;
     }
     static std::vector<int32_t> buf;
@@ -131,11 +153,12 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
         dest[i] = (int16_t)v;
     }
     RubiMicLevel(dest, samples);
+    RubiCapture(dest, samples);
     return samples;
 }
 ''')
 
 patch('main/audio/codecs/es8311_audio_codec.cc', [
-    ('#include <freertos/task.h>\n', '#include <freertos/task.h>\n#include <esp_timer.h>\n'),
+    ('#include <freertos/task.h>\n', '#include <freertos/task.h>\n#include <esp_timer.h>\n#include "settings.h"\n'),
 ])
 print('external mic patch applied')

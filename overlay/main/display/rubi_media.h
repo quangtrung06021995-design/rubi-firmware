@@ -26,6 +26,8 @@
 
 // Microphone diagnostics, defined in the audio codec (patches/apply_extmic.py)
 extern volatile int g_rubi_mic_state, g_rubi_mic_sd, g_rubi_mic_peak, g_rubi_mic_rms;
+extern volatile int g_rubi_mic_force, g_rubi_cap_len, g_rubi_cap_pos, g_rubi_cap_clip;
+extern int16_t* volatile g_rubi_cap_buf;
 #include <esp_timer.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
@@ -158,10 +160,27 @@ public:
             if (r == 0) ShowVolume();
             else if (r == 1) StartWifiScan();
             else if (r == 2) ShowControl();
-            else if (r == 3) StartCalibration();
+            else if (r == 3) ShowMicMenu();
             else if (r == 4) ShowMain();
             break;
         }
+        case Screen::kMicMenu: {
+            int r = RubiDisplay::RowAt(sx, sy, 4);
+            if (r == 0) StartMicTest();
+            else if (r == 1) {
+                int f = (g_rubi_mic_force + 1) % 3;   // automatic -> external -> on-board -> automatic
+                g_rubi_mic_force = f;
+                Settings st("rubi", true);
+                st.SetInt("mic", f);
+                ShowMicMenu();
+            }
+            else if (r == 2) StartCalibration();
+            else if (r == 3) ShowSettings();
+            break;
+        }
+        case Screen::kMicDone:
+            ShowMicMenu();
+            break;
         case Screen::kIp:
             ShowControl();
             break;
@@ -474,7 +493,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kEngList, kEngMenu, kEngQuiz, kEngDone, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kEngList, kEngMenu, kEngQuiz, kEngDone, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep, kMicMenu, kMicBusy, kMicDone };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -902,10 +921,83 @@ private:
         StartTicker();   // refreshes the mic line once a second
         if (display_) {
             static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, &rubi_icon_wifi_s, &rubi_icon_dieu_khien, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
-            std::string mic = MicHint();
-            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "Quay lại"}, mic.c_str(), nullptr,
+            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Mic & cảm ứng", "Quay lại"}, "", nullptr,
             &ico);
         }
+    }
+
+    // ---------------- microphone: choose external / on-board, record 4 s and play it back ----------------
+    void ShowMicMenu() {
+        screen_ = Screen::kMicMenu;
+        StartTicker();   // refreshes the mic line once a second
+        if (!display_) return;
+        static const std::vector<const lv_image_dsc_t*> ico = {nullptr, nullptr, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
+        const char* f = g_rubi_mic_force == 1 ? "Dùng mic: NGOÀI" : (g_rubi_mic_force == 2 ? "Dùng mic: TRONG" : "Dùng mic: TỰ ĐỘNG");
+        display_->MenuShowList("MIC", {"Thử mic (nói 4 giây)", f, "Chỉnh cảm ứng", "Quay lại"}, MicHint().c_str(), nullptr, &ico);
+    }
+
+    void StartMicTest() {
+        screen_ = Screen::kMicBusy;   // touches are ignored until the test is done
+        if (display_) display_->MenuShowMessage("Nói to, rõ vào mic
+trong 4 giây
+
+(ví dụ: một, hai, ba, bốn, năm)", -1, -1);
+        RunTask([this]() {
+            const int rate = 24000, len = rate * 4;
+            auto& as = Application::GetInstance().GetAudioService();
+            int16_t* b = (int16_t*)heap_caps_malloc(len * sizeof(int16_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            int got = 0;
+            if (b != nullptr) {
+                as.EnableWakeWordDetection(true);   // keeps the microphone running while the menu is open
+                vTaskDelay(pdMS_TO_TICKS(300));
+                g_rubi_cap_pos = 0;
+                g_rubi_cap_clip = 0;
+                g_rubi_cap_len = len;
+                g_rubi_cap_buf = b;
+                for (int i = 0; i < 60 && g_rubi_cap_pos < len; i++) vTaskDelay(pdMS_TO_TICKS(100));
+                g_rubi_cap_buf = nullptr;
+                vTaskDelay(pdMS_TO_TICKS(50));
+                as.EnableWakeWordDetection(false);
+                got = g_rubi_cap_pos;
+            }
+            int pk = 0;
+            double e = 0;
+            for (int i = 0; i < got; i++) { int a = b[i] < 0 ? -b[i] : b[i]; if (a > pk) pk = a; e += (double)b[i] * b[i]; }
+            int rms = got > 0 ? (int)sqrt(e / got) : 0;
+            int clip = g_rubi_cap_clip;
+            if (got > rate / 2) {
+                {
+                    std::lock_guard<std::recursive_mutex> lk(mutex_);
+                    if (display_) display_->MenuShowMessage("Đang phát lại
+những gì Rubi nghe được...", -1, -1);
+                }
+                for (int o = 0; o < got; o += 1200) {
+                    int n = std::min(1200, got - o);
+                    std::vector<int16_t> v(b + o, b + o + n);
+                    for (int t = 0; t < 10 && !as.PushPcmToPlayback(std::move(v)); t++) {}
+                }
+                for (int i = 0; i < 150 && !as.IsPlaybackIdle(); i++) vTaskDelay(pdMS_TO_TICKS(50));
+            }
+            if (b != nullptr) heap_caps_free(b);
+            char msg[240];
+            if (got <= rate / 2) {
+                snprintf(msg, sizeof(msg), "Mic không gửi tiếng
+(chỉ %d mẫu)
+
+Chạm để quay lại", got);
+            } else {
+                snprintf(msg, sizeof(msg), "Mic %s: %.1f giây
+Đỉnh %d  TB %d
+Méo (chạm trần): %d
+
+Nghe có rõ không?
+Chạm để quay lại",
+                         g_rubi_mic_state == 1 ? "NGOÀI" : "TRONG", got / (float)rate, pk, rms, clip);
+            }
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            screen_ = Screen::kMicDone;
+            if (display_) display_->MenuShowMessage(msg, -1, -1);
+        }, "rubi_mictest");
     }
 
     // ---------------- phone -> Rubi music upload ----------------
@@ -1482,7 +1574,7 @@ private:
     void TickOnce(int gen) {
         if (display_ == nullptr) return;
         switch (screen_) {
-        case Screen::kSettings:
+        case Screen::kMicMenu:
             display_->MenuSetHint(MicHint().c_str());
             break;
         case Screen::kClock:
