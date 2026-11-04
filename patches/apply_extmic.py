@@ -29,7 +29,7 @@ patch('main/audio/codecs/es8311_audio_codec.cc', [
 // ---- Rubi: external INMP441 microphone ----
 // INMP441: 24-bit samples MSB-first in a 32-bit slot, L/R pin to GND = left slot. Its output is quiet
 // (-26 dBFS at 94 dB SPL), so a fixed digital gain is applied before the voice filters.
-static const float kRubiExtGain = 48.0f;
+static const float kRubiExtGain = 32.0f;
 
 // Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 5 s)
 volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0;
@@ -115,9 +115,15 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
     size_t got = 0;
     if (i2s_channel_read(ext_rx_, buf.data(), samples * sizeof(int32_t), &got, 500) != ESP_OK) got = 0;
     int n = (int)(got / sizeof(int32_t));
+    // INMP441 has a DC offset; remove it (slow tracking) BEFORE the gain, otherwise offset x gain hits full scale.
+    static float dc = 0.0f;
+    static bool dc_init = false;
     for (int i = 0; i < samples; i++) {
         if (i >= n) { dest[i] = 0; continue; }
-        float v = (float)(buf[i] >> 16) * kRubiExtGain;
+        float raw = (float)(buf[i] >> 8) / 256.0f;   // 24-bit sample expressed in 16-bit units
+        if (!dc_init) { dc = raw; dc_init = true; }
+        dc += (raw - dc) * 0.002f;
+        float v = (raw - dc) * kRubiExtGain;
         if (v > 32767.0f) v = 32767.0f;
         if (v < -32768.0f) v = -32768.0f;
         dest[i] = (int16_t)v;
