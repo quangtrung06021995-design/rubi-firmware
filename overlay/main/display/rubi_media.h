@@ -938,10 +938,7 @@ private:
 
     void StartMicTest() {
         screen_ = Screen::kMicBusy;   // touches are ignored until the test is done
-        if (display_) display_->MenuShowMessage("Nói to, rõ vào mic
-trong 4 giây
-
-(ví dụ: một, hai, ba, bốn, năm)", -1, -1);
+        if (display_) display_->MenuShowMessage("Nói to, rõ vào mic\ntrong 4 giây\n\n(ví dụ: một, hai, ba, bốn, năm)", -1, -1);
         RunTask([this]() {
             const int rate = 24000, len = rate * 4;
             auto& as = Application::GetInstance().GetAudioService();
@@ -968,8 +965,7 @@ trong 4 giây
             if (got > rate / 2) {
                 {
                     std::lock_guard<std::recursive_mutex> lk(mutex_);
-                    if (display_) display_->MenuShowMessage("Đang phát lại
-những gì Rubi nghe được...", -1, -1);
+                    if (display_) display_->MenuShowMessage("Đang phát lại\nnhững gì Rubi nghe được...", -1, -1);
                 }
                 for (int o = 0; o < got; o += 1200) {
                     int n = std::min(1200, got - o);
@@ -981,17 +977,9 @@ những gì Rubi nghe được...", -1, -1);
             if (b != nullptr) heap_caps_free(b);
             char msg[240];
             if (got <= rate / 2) {
-                snprintf(msg, sizeof(msg), "Mic không gửi tiếng
-(chỉ %d mẫu)
-
-Chạm để quay lại", got);
+                snprintf(msg, sizeof(msg), "Mic không gửi tiếng\n(chỉ %d mẫu)\n\nChạm để quay lại", got);
             } else {
-                snprintf(msg, sizeof(msg), "Mic %s: %.1f giây
-Đỉnh %d  TB %d
-Méo (chạm trần): %d
-
-Nghe có rõ không?
-Chạm để quay lại",
+                snprintf(msg, sizeof(msg), "Mic %s: %.1f giây\nĐỉnh %d  TB %d\nMéo (chạm trần): %d\n\nNghe có rõ không?\nChạm để quay lại",
                          g_rubi_mic_state == 1 ? "NGOÀI" : "TRONG", got / (float)rate, pk, rms, clip);
             }
             std::lock_guard<std::recursive_mutex> lk(mutex_);
