@@ -191,4 +191,39 @@ patch('main/audio/audio_service.cc', [
      '    if (output_elapsed > AUDIO_POWER_TIMEOUT_MS && codec_->output_enabled()) {\n'),
 ])
 
+# Rubi: tap-to-talk without the wait. With WebSocket every new conversation first opens a TLS connection to the
+# far Xiaozhi server (2-3 s). Now a tap starts recording at once; the encoded speech waits in the send queue
+# (up to 5 s) and is sent right after "listen start" when the channel is open, so the child can talk immediately.
+patch('main/audio/audio_service.h', [
+    ('#define MAX_SEND_PACKETS_IN_QUEUE (2400 / OPUS_FRAME_DURATION_MS)', '#define MAX_SEND_PACKETS_IN_QUEUE (5000 / OPUS_FRAME_DURATION_MS)'),
+])
+patch('main/application.h', [
+    ('    bool pending_listening_start_ = false;',
+     '    bool rubi_prerecord_ = false;  // Rubi: recording started on tap while the channel opens\n    bool pending_listening_start_ = false;'),
+])
+patch('main/application.cc', [
+    ('            SetDeviceState(kDeviceStateConnecting);\n            // Schedule to let the state change be processed first (UI update)\n            Schedule([this, mode]() { ContinueOpenAudioChannel(mode); });\n',
+     '            SetDeviceState(kDeviceStateConnecting);\n'
+     '            rubi_prerecord_ = true;\n'
+     '            audio_service_.EnableWakeWordDetection(false);\n'
+     '            audio_service_.EnableVoiceProcessing(true);\n'
+     '            // Schedule to let the state change be processed first (UI update)\n            Schedule([this, mode]() { ContinueOpenAudioChannel(mode); });\n'),
+    ('        if (bits & MAIN_EVENT_SEND_AUDIO) {\n', '        if ((bits & MAIN_EVENT_SEND_AUDIO) && !rubi_prerecord_) {\n'),
+    ('            audio_service_.EnableVoiceProcessing(false);\n            audio_service_.EnableWakeWordDetection(true);\n            break;\n        case kDeviceStateConnecting:',
+     '            audio_service_.EnableVoiceProcessing(false);\n'
+     '            rubi_prerecord_ = false;\n'
+     '            while (audio_service_.PopPacketFromSendQueue()) {\n            }\n'
+     '            audio_service_.EnableWakeWordDetection(true);\n            break;\n        case kDeviceStateConnecting:'),
+    ('        case kDeviceStateListening:\n            display->SetStatus(Lang::Strings::LISTENING);\n            display->SetEmotion("neutral");\n',
+     '        case kDeviceStateListening:\n            display->SetStatus(Lang::Strings::LISTENING);\n            display->SetEmotion("neutral");\n'
+     '            if (rubi_prerecord_) {\n'
+     '                // recording already runs since the tap: tell the server, then send what was said meanwhile\n'
+     '                rubi_prerecord_ = false;\n'
+     '                protocol_->SendStartListening(listening_mode_);\n'
+     '                ConfigureWakeWordForListening();\n'
+     '                xEventGroupSetBits(event_group_, MAIN_EVENT_SEND_AUDIO);\n'
+     '                break;\n'
+     '            }\n'),
+])
+
 print('media patches applied')
