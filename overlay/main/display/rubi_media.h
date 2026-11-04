@@ -25,7 +25,7 @@
 #include <esp_random.h>
 
 // Microphone diagnostics, defined in the audio codec (patches/apply_extmic.py)
-extern volatile int g_rubi_mic_state, g_rubi_mic_sd, g_rubi_mic_peak;
+extern volatile int g_rubi_mic_state, g_rubi_mic_sd, g_rubi_mic_peak, g_rubi_mic_rms;
 #include <esp_timer.h>
 #include <esp_vfs_fat.h>
 #include <freertos/FreeRTOS.h>
@@ -889,15 +889,21 @@ private:
         if (display_) display_->MenuShowMessage(msg, -1, -1);
     }
 
+    static std::string MicHint() {
+        char b[96];
+        snprintf(b, sizeof(b), "Mic %s r=%d đỉnh=%d đo=%d",
+                 g_rubi_mic_state == 1 ? "NGOÀI" : (g_rubi_mic_state == 2 ? "TRONG" : "?"),
+                 g_rubi_mic_rms, g_rubi_mic_peak, g_rubi_mic_sd);
+        return b;
+    }
+
     void ShowSettings() {
         screen_ = Screen::kSettings;
+        StartTicker();   // refreshes the mic line once a second
         if (display_) {
             static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_am_luong, &rubi_icon_wifi_s, &rubi_icon_dieu_khien, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
-            char mic[96];
-            snprintf(mic, sizeof(mic), "Mic: %s  đo=%d  đỉnh=%d",
-                     g_rubi_mic_state == 1 ? "NGOÀI" : (g_rubi_mic_state == 2 ? "TRONG (không thấy mic ngoài)" : "chưa kiểm tra"),
-                     g_rubi_mic_sd, g_rubi_mic_peak);
-            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "Quay lại"}, mic, nullptr,
+            std::string mic = MicHint();
+            display_->MenuShowList("CÀI ĐẶT", {"Âm lượng", "Wi-Fi", "Điều khiển (QR, PIN)", "Chỉnh cảm ứng", "Quay lại"}, mic.c_str(), nullptr,
             &ico);
         }
     }
@@ -1476,6 +1482,9 @@ private:
     void TickOnce(int gen) {
         if (display_ == nullptr) return;
         switch (screen_) {
+        case Screen::kSettings:
+            display_->MenuSetHint(MicHint().c_str());
+            break;
         case Screen::kClock:
             display_->MenuSetMessage(ClockText().c_str());
             break;

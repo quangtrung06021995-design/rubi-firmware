@@ -32,11 +32,16 @@ patch('main/audio/codecs/es8311_audio_codec.cc', [
 static const float kRubiExtGain = 32.0f;
 
 // Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 5 s)
-volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0;
+volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0, g_rubi_mic_rms = 0;
 static int64_t g_rubi_peak_t0 = 0;
 static void RubiMicLevel(const int16_t* d, int n) {
     int pk = 0;
-    for (int i = 0; i < n; i++) { int a = d[i] < 0 ? -d[i] : d[i]; if (a > pk) pk = a; }
+    double e = 0;
+    for (int i = 0; i < n; i++) { int a = d[i] < 0 ? -d[i] : d[i]; if (a > pk) pk = a; e += (double)d[i] * d[i]; }
+    int64_t now = esp_timer_get_time();
+    if (pk >= g_rubi_mic_peak || now - g_rubi_peak_t0 > 1000000) { g_rubi_mic_peak = pk; g_rubi_peak_t0 = now; }
+    g_rubi_mic_rms = (int)sqrt(e / (n > 0 ? n : 1));
+}
     int64_t now = esp_timer_get_time();
     if (pk >= g_rubi_mic_peak || now - g_rubi_peak_t0 > 5000000) { g_rubi_mic_peak = pk; g_rubi_peak_t0 = now; }
 }

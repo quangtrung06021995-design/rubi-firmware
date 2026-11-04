@@ -351,6 +351,11 @@ public:
         ShowMenuLayer();
     }
 
+    void MenuSetHint(const char* t) {
+        DisplayLockGuard lock(this);
+        if (menu_hint_ != nullptr) lv_label_set_text(menu_hint_, t);
+    }
+
     void MenuShowList(const char* title, const std::vector<std::string>& rows, const char* hint, const std::vector<bool>* locks = nullptr,
                       const std::vector<const lv_image_dsc_t*>* icons = nullptr) {
         DisplayLockGuard lock(this);
