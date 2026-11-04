@@ -115,8 +115,8 @@ patch('main/CMakeLists.txt', [
 
 # Rubi: voice-stutter diagnosis. Counts, for each reply, the packets received (Goi), packets lost or out of order on
 # the network (Mat), packets thrown away because they came before the speaking state (Bo), and how many times the
-# speaker ran dry for 70 ms - 1.5 s in the middle of speech (Hut). Shown for 10 s at the top of the screen when
-# Rubi stops speaking. Mat/Bo high = network; Hut high with Mat = 0 = the board itself is too slow.
+# speaker ran dry for 70 ms - 1.5 s in the middle of speech (Hut). Written to the serial log (W) when
+# Rubi stops speaking (the on-screen line was removed once WebSocket fixed the stutter). Mat/Bo high = network; Hut high with Mat = 0 = the board itself is too slow.
 patch('main/audio/audio_service.h', [
     ('#include <esp_timer.h>\n',
      '#include <esp_timer.h>\n#include <atomic>\n'
@@ -157,7 +157,7 @@ patch('main/application.cc', [
      '                     g_rubi_drop.load(), g_rubi_hut.load(), g_rubi_udp ? "UDP" : "WS");\n'
      '            // shown after this state change has finished: the Listening/Idle status set below would hide it at once\n'
      '            std::string rubi_msg(b);\n'
-     '            Schedule([rubi_msg]() { Board::GetInstance().GetDisplay()->ShowNotification(rubi_msg.c_str(), 10000); });\n'
+     '            ESP_LOGW(TAG, "Rubi voice: %s", rubi_msg.c_str());  // on-screen line removed (fixed: WebSocket), kept in the log\n'
      '            g_rubi_drop = 0;\n'
      '        }\n'
      '        rubi_prev = new_state;\n'
