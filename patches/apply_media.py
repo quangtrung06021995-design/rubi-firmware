@@ -163,4 +163,32 @@ patch('main/application.cc', [
      '        rubi_prev = new_state;\n'
      '    }\n'),
 ])
+# Rubi: wake word. The ES8311 runs full duplex, so upstream never turns the output off while the mic listens:
+# the speaker amplifier (PA, GPIO1) stayed on all the time and its hiss went into the mic ("Hey Rubi" was much
+# better with the speaker unplugged). Now the PA pin is switched off after 1.5 s without sound and back on with the
+# next sound. The I2S clock keeps running, so the mic is not affected.
+patch('main/audio/audio_codec.h', [
+    ('    virtual void EnableOutput(bool enable);\n',
+     '    virtual void EnableOutput(bool enable);\n    virtual void RubiSetPa(bool on) {}  // Rubi: speaker amplifier on/off only\n'),
+])
+patch('main/audio/codecs/es8311_audio_codec.h', [
+    ('public:\n', 'public:\n    void RubiSetPa(bool on) override;\n'),
+])
+patch('main/audio/codecs/es8311_audio_codec.cc', [], append='''
+void Es8311AudioCodec::RubiSetPa(bool on) {
+    if (pa_pin_ == GPIO_NUM_NC) return;
+    if (on && !output_enabled_) return;
+    int level = on ? 1 : 0;
+    gpio_set_level(pa_pin_, pa_inverted_ ? !level : level);
+}
+''')
+patch('main/audio/audio_service.cc', [
+    ('        codec_->OutputData(task.pcm);\n', '        codec_->RubiSetPa(true);\n        codec_->OutputData(task.pcm);\n'),
+    ('    if (output_elapsed > AUDIO_POWER_TIMEOUT_MS && codec_->output_enabled()) {\n',
+     '    if (output_elapsed > 1500 && codec_->output_enabled() && !output_in_flight_ && audio_playback_queue_.empty()) {\n'
+     '        codec_->RubiSetPa(false);  // Rubi: amplifier off while silent (its hiss hurt the wake word)\n'
+     '    }\n'
+     '    if (output_elapsed > AUDIO_POWER_TIMEOUT_MS && codec_->output_enabled()) {\n'),
+])
+
 print('media patches applied')
