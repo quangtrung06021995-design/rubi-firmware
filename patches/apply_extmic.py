@@ -45,7 +45,7 @@ static void RubiCapture(const int16_t* d, int n) {
     int pos = g_rubi_cap_pos, len = g_rubi_cap_len;
     for (int i = 0; i < n && pos < len; i++) {
         b[pos++] = d[i];
-        if (d[i] >= 32000 || d[i] <= -32000) g_rubi_cap_clip++;
+        if (d[i] >= 32000 || d[i] <= -32000) g_rubi_cap_clip = g_rubi_cap_clip + 1;
     }
     g_rubi_cap_pos = pos;
 }
