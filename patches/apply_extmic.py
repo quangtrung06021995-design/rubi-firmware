@@ -141,13 +141,22 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
     int n = (int)(got / sizeof(int32_t));
     // INMP441 has a DC offset; remove it (slow tracking) BEFORE the gain, otherwise offset x gain hits full scale.
     static float dc = 0.0f;
+    static float env = 0.0f;
     static bool dc_init = false;
     for (int i = 0; i < samples; i++) {
         if (i >= n) { dest[i] = 0; continue; }
         float raw = (float)(buf[i] >> 8) / 256.0f;   // 24-bit sample expressed in 16-bit units
         if (!dc_init) { dc = raw; dc_init = true; }
         dc += (raw - dc) * 0.002f;
-        float v = (raw - dc) * kRubiExtGain;
+        // Automatic gain control: loud (close) speech -> low gain, quiet (far) speech -> high gain, never hard-clipped.
+        float x = raw - dc;
+        float ax = x < 0 ? -x : x;
+        env += (ax - env) * (ax > env ? 0.01f : 0.00005f);   // fast attack (~4 ms), slow release (~0.8 s)
+        float gn = 6000.0f / (env > 150.0f ? env : 150.0f);   // aim for ~6000 peak; max gain 40
+        if (gn < 1.5f) gn = 1.5f;
+        float v = x * gn;
+        if (v > 28000.0f) v = 28000.0f + (v - 28000.0f) * 0.1f;
+        if (v < -28000.0f) v = -28000.0f + (v + 28000.0f) * 0.1f;
         if (v > 32767.0f) v = 32767.0f;
         if (v < -32768.0f) v = -32768.0f;
         dest[i] = (int16_t)v;
