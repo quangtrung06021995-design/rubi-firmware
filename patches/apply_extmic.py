@@ -29,7 +29,7 @@ patch('main/audio/codecs/es8311_audio_codec.cc', [
 // ---- Rubi: external INMP441 microphone ----
 // INMP441: 24-bit samples MSB-first in a 32-bit slot, L/R pin to GND = left slot. Its output is quiet
 // (-26 dBFS at 94 dB SPL), so a fixed digital gain is applied before the voice filters.
-static const float kRubiExtGain = 32.0f;
+static const float kRubiExtGain = 64.0f;
 
 // Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 1 s)
 volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0, g_rubi_mic_rms = 0;
@@ -117,7 +117,7 @@ void Es8311AudioCodec::ExtMicProbe() {
     if (cnt < 1000) { ext_state_ = 2; g_rubi_mic_state = 2; g_rubi_mic_sd = -1; ESP_LOGW(TAG, "external mic: no data, using on-board mic"); return; }
     double mean = sum / cnt;
     double sd = sqrt(sum2 / cnt - mean * mean);
-    ext_state_ = (sd > 30.0 && sd < 2000000.0) ? 1 : 2;
+    ext_state_ = (sd > 3.0 && sd < 2000000.0) ? 1 : 2;
     g_rubi_mic_sd = (int)sd;
     g_rubi_mic_state = ext_state_;
     ESP_LOGI(TAG, "external mic probe: std-dev %.0f -> %s", sd, ext_state_ == 1 ? "USING external mic" : "not found, using on-board mic");
