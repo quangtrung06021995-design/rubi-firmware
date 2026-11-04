@@ -171,6 +171,13 @@ jobs:
           PY
           grep -n "RubiBiquad\|g_filters_ready" main/audio/codecs/es8311_audio_codec.cc | head
 
+      - name: External microphone INMP441 (I2S1)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 ../patches/apply_extmic.py
+          grep -n "ExtMic\|ReadMic" main/audio/codecs/es8311_audio_codec.cc | head
+
       - name: Install Rubi face (13 expressions)
         shell: bash
         working-directory: upstream
