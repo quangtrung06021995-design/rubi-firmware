@@ -46,6 +46,10 @@ module.exports = async (req, res) => {
       data = {};
     }
   }
+  // Rubi: UDP voice from the far Xiaozhi server lost about 1 packet in 4 (choppy speech). When the server also
+  // offers WebSocket (TCP, nothing is lost), drop the MQTT/UDP section so the device uses WebSocket.
+  // If there is no websocket section the answer is left as it was. PREFER_UDP=1 turns this off.
+  if (data && data.websocket && data.websocket.url && data.mqtt && !process.env.PREFER_UDP) delete data.mqtt;
   try {
     const m = await (await fetch(MANIFEST, { cache: 'no-store' })).json();
     if (m && m.version && m.url) data.firmware = { version: m.version, url: m.url };
