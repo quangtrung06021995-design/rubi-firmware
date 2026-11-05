@@ -165,7 +165,9 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
         float x = raw - dc;
         float ax = x < 0 ? -x : x;
         env += (ax - env) * (ax > env ? 0.01f : 0.00005f);   // fast attack (~4 ms), slow release (~0.8 s)
-        float gn = 6000.0f / (env > 150.0f ? env : 150.0f);   // aim for ~6000 peak; max gain 40
+        // max gain 12 (was 40): in a long quiet spell x40 lifted the room noise almost to voice level and
+        // "Hey Rubi" from 1 m was only caught when spoken right at the mic
+        float gn = 6000.0f / (env > 500.0f ? env : 500.0f);   // aim for ~6000 peak; max gain 12
         if (gn < 1.5f) gn = 1.5f;
         float v = x * gn;
         if (v > 28000.0f) v = 28000.0f + (v - 28000.0f) * 0.1f;
