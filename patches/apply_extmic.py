@@ -29,7 +29,7 @@ patch('main/audio/codecs/es8311_audio_codec.cc', [
 // ---- Rubi: external INMP441 microphone ----
 // INMP441: 24-bit samples MSB-first in a 32-bit slot, L/R pin to GND = left slot. Its output is quiet
 // (-26 dBFS at 94 dB SPL), so a fixed digital gain is applied before the voice filters.
-static const float kRubiExtGain = 48.0f;
+static const float kRubiExtGain = 64.0f;
 
 // Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 1 s)
 volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0, g_rubi_mic_rms = 0;
@@ -160,16 +160,18 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
         float raw = (float)(buf[i] >> 8) / 256.0f;   // 24-bit sample expressed in 16-bit units
         if (!dc_init) { dc = raw; dc_init = true; }
         dc += (raw - dc) * 0.002f;
-        // Fixed gain (like the on-board mic's fixed 30 dB that woke 9/10) with a soft limiter for close, loud speech.
-        // The earlier automatic gain raised the room noise up to x40 between words, and "Hey Rubi" was missed (1 in 5).
-        (void)env;
-        float x = (raw - dc) * kRubiExtGain;
+        // Automatic gain control: loud (close) speech -> low gain, quiet (far) speech -> high gain, never hard-clipped.
+        // (Tried a fixed gain 48 in 3.0.133: "Hey Rubi" woke worse than with this, so this stays.)
+        float x = raw - dc;
         float ax = x < 0 ? -x : x;
-        if (ax > 16000.0f) {
-            float over = (ax - 16000.0f) / 16000.0f;
-            ax = 16000.0f + 16000.0f * (over / (1.0f + over));   // smooth knee, never above 32000
-        }
-        float v = x < 0 ? -ax : ax;
+        env += (ax - env) * (ax > env ? 0.01f : 0.00005f);   // fast attack (~4 ms), slow release (~0.8 s)
+        float gn = 6000.0f / (env > 150.0f ? env : 150.0f);   // aim for ~6000 peak; max gain 40
+        if (gn < 1.5f) gn = 1.5f;
+        float v = x * gn;
+        if (v > 28000.0f) v = 28000.0f + (v - 28000.0f) * 0.1f;
+        if (v < -28000.0f) v = -28000.0f + (v + 28000.0f) * 0.1f;
+        if (v > 32767.0f) v = 32767.0f;
+        if (v < -32768.0f) v = -32768.0f;
         dest[i] = (int16_t)v;
     }
     RubiMicLevel(dest, samples);
