@@ -45,8 +45,8 @@ patch('main/audio/audio_service.h', [
      '    int64_t rubi_jb_t0_ = 0;         // Rubi jitter buffer: when the current wait started (0 = not waiting)\n'),
 ])
 # Rubi: jitter buffer for the cloud voice (the Xiaozhi server is far away, packets arrive unevenly and the speech
-# stuttered). Only when the speaker has been silent for 250 ms (a new reply / new sentence, or a real drop-out)
-# Rubi first collects 5 packets (300 ms of speech, at most 400 ms wait) before playing. While speech is flowing it
+# stuttered). Only when the speaker has been silent for 150 ms (a new reply / new sentence, or a real drop-out)
+# Rubi first collects 8 packets (480 ms of speech, at most 600 ms wait) before playing. While speech is flowing it
 # never waits, so it cannot add gaps in the middle of a sentence (the earlier pre-buffer re-armed on every short
 # empty moment and made gaps). Local clips (PushPcmToPlayback) do not use the decode queue and are not affected.
 patch('main/audio/audio_service.cc', [
@@ -54,9 +54,9 @@ patch('main/audio/audio_service.cc', [
      '        if (!audio_decode_queue_.empty() && audio_encode_queue_.empty() && audio_playback_queue_.empty() &&\n'
      '            !output_in_flight_) {\n'
      '            int64_t now_ms = esp_timer_get_time() / 1000;\n'
-     '            if (now_ms - rubi_last_out_ms_ > 250 && audio_decode_queue_.size() < 5) {\n'
+     '            if (now_ms - rubi_last_out_ms_ > 150 && audio_decode_queue_.size() < 8) {\n'
      '                if (rubi_jb_t0_ == 0) rubi_jb_t0_ = now_ms;\n'
-     '                if (now_ms - rubi_jb_t0_ < 400) {\n'
+     '                if (now_ms - rubi_jb_t0_ < 600) {\n'
      '                    audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(20));\n'
      '                    continue;\n'
      '                }\n'
@@ -226,4 +226,9 @@ patch('main/application.cc', [
      '            }\n'),
 ])
 
+# Rubi: WebSocket delivers late audio in bursts after a network stall. The decode queue held only 1.2 s and
+# silently dropped packets when full (missing words). Hold 6 s instead.
+patch('main/audio/audio_service.h', [
+    ('#define MAX_DECODE_PACKETS_IN_QUEUE (1200 / OPUS_FRAME_DURATION_MS)', '#define MAX_DECODE_PACKETS_IN_QUEUE (6000 / OPUS_FRAME_DURATION_MS)'),
+])
 print('media patches applied')
