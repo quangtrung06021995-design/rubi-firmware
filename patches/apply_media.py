@@ -94,7 +94,7 @@ patch('main/audio/audio_service.h', [
 patch('main/audio/audio_service.cc', [
     ('        codec_->OutputData(task.pcm);\n',
      '        if (task.rubi_boost) {\n'
-     '            const float kBoost = 2.0f, kKnee = 20000.0f, kMax = 32700.0f;\n'
+     '            const float kBoost = 1.4f, kKnee = 22000.0f, kMax = 32700.0f;   // was x2: sounded harsh (re re) at the same volume\n'
      '            for (auto& smp : task.pcm) {\n'
      '                float v = (float)smp * kBoost;\n'
      '                float a = v < 0 ? -v : v;\n'
