@@ -46,6 +46,7 @@ const bool TOUCH_SWAP_XY  = false;
 const uint8_t IR_ID       = 0x3C;        // ma cua dong ho (de sac la 0xA5)
 const int  DRIVE_LIMIT    = 60;          // % toc do toi da khi be lai xe tu dong ho
 const uint32_t DIM_MS     = 20000;       // vang tay sau bay nhieu ms thi giam do sang
+const uint32_t MENU_IDLE_MS = 15000;     // khong cham o menu bay nhieu ms thi tu ve mat dong ho
 const uint32_t OFF_MS     = 60000;       // vang tay sau bay nhieu ms thi tat man hinh (cham la sang lai)
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
 const char* FW_VERSION    = "dev";       // GitHub Actions doi thanh 1.0.<so lan build>
@@ -782,6 +783,11 @@ void loop() {
         int st = g_bleAuthed ? 2 : g_bleConn ? 1 : 0;
         static int lastPct = -2;
         if (st != lastState || g_robotPct != lastPct) { lastState = st; lastPct = g_robotPct; drawHomeStatus(); }
+    }
+    // 15 giay khong cham o menu/trang con thi tu quay ve mat dong ho (khong ap dung luc dang keo lai xe, luc cap nhat)
+    if (g_page != P_HOME && g_page != P_OTA && !g_drvActive && now - g_lastTouchAt > MENU_IDLE_MS) {
+        if (g_page == P_DRIVE) sendCmd("X");
+        gotoPage(P_HOME);
     }
     // giam sang / tat man hinh khi khong cham (khong dung o trang lai xe dang keo)
     if (!g_drvActive && g_page != P_OTA) {
