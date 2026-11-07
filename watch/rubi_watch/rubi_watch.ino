@@ -24,6 +24,7 @@
 #include <Preferences.h>
 #include <JPEGDEC.h>
 #include "faces.h"
+#include "icons.h"
 
 // ---------------- Chan (theo ban ve cua bo ESP32-2424S012) ----------------
 #define TFT_DC   2
@@ -262,9 +263,9 @@ static bool g_homeSwitched = false;
 struct TileDef { const char* label; uint16_t color; };
 
 static void tileRect(int i, int& x, int& y, int& w, int& h) {
-    x = (i % 2) ? 130 : 30;
-    y = 38 + (i / 2) * 58;
-    w = 80; h = 48;
+    x = (i % 2) ? 132 : 52;
+    y = 34 + (i / 2) * 60;
+    w = 56; h = 56;
 }
 
 static void textCenter(const char* s, int cx, int cy, int size, uint16_t col) {
@@ -275,29 +276,48 @@ static void textCenter(const char* s, int cx, int cy, int size, uint16_t col) {
     gfx->print(s);
 }
 
-static void drawTile(int i, const char* label, uint16_t color) {
+// Icon-only tile: icon != nullptr -> draw the web icon, else a colored tile
+// with a simple code-drawn symbol (sym: '+', '-', 'S' stop, 'T' touch).
+static void drawTile(int i, const uint16_t* icon, uint16_t color, char sym = 0, char badge = 0, bool on = false) {
     int x, y, w, h;
     tileRect(i, x, y, w, h);
-    gfx->fillRoundRect(x, y, w, h, 10, color);
-    int size = ((int)strlen(label) * 12 <= w - 6) ? 2 : 1;
-    textCenter(label, x + w / 2, y + h / 2, size, C_TXT);
+    int cx = x + w / 2, cy = y + h / 2;
+    if (icon) gfx->draw16bitRGBBitmap(x, y, icon, ICON_SIZE, ICON_SIZE);
+    else {
+        gfx->fillRoundRect(x, y, w, h, 11, color);
+        if (sym == '+' || sym == '-') {
+            gfx->fillRect(cx - 14, cy - 3, 28, 6, C_TXT);
+            if (sym == '+') gfx->fillRect(cx - 3, cy - 14, 6, 28, C_TXT);
+        } else if (sym == 'S') {
+            gfx->fillRect(cx - 12, cy - 12, 24, 24, C_TXT);
+        } else if (sym == 'T') {
+            gfx->fillCircle(cx, cy, 14, C_TXT);
+            gfx->fillCircle(cx, cy, 6, color);
+        }
+    }
+    if (badge) {
+        gfx->fillCircle(x + w - 10, y + h - 10, 11, C_BLUE);
+        char b[2] = {badge, 0};
+        textCenter(b, x + w - 10, y + h - 10, 2, C_TXT);
+    }
+    if (on) gfx->drawRoundRect(x - 2, y - 2, w + 4, h + 4, 12, C_OK);
 }
 
 static int tileHit(int n, int px, int py) {
     for (int i = 0; i < n; i++) {
         int x, y, w, h;
         tileRect(i, x, y, w, h);
-        if (px >= x && px < x + w && py >= y && py < y + h) return i;
+        if (px >= x - 10 && px < x + w + 10 && py >= y - 2 && py < y + h + 2) return i;
     }
     return -1;
 }
 
 static void drawBack() {
-    gfx->fillCircle(120, 222, 15, C_GREY);
-    textCenter("<", 120, 222, 2, C_TXT);
+    gfx->fillCircle(120, 224, 13, C_GREY);
+    textCenter("<", 120, 224, 2, C_TXT);
 }
 static bool backHit(int px, int py) {
-    int dx = px - 120, dy = py - 222;
+    int dx = px - 120, dy = py - 224;
     return dx * dx + dy * dy <= 22 * 22;
 }
 
@@ -387,36 +407,36 @@ static void nextFace() {
 static void drawMenu() {
     gfx->fillScreen(C_BG);
     drawTitle("MENU");
-    drawTile(0, "LAI XE", C_BLUE);
-    drawTile(1, "NHAY", C_PURPLE);
-    drawTile(2, "NHAC", C_ORANGE);
-    drawTile(3, "TRUYEN", C_TEAL);
-    drawTile(4, "HOC", C_GREEN);
-    drawTile(5, "CAI DAT", C_GREY);
+    drawTile(0, ICON_DRIVE, 0);
+    drawTile(1, ICON_DANCE, 0);
+    drawTile(2, ICON_MUSIC, 0);
+    drawTile(3, ICON_STORY, 0);
+    drawTile(4, ICON_LEARN, 0);
+    drawTile(5, ICON_SET, 0);
     drawBack();
 }
 
 static void drawLearn() {
     gfx->fillScreen(C_BG);
     drawTitle("HOC");
-    drawTile(0, "TOAN 1", C_GREEN);
-    drawTile(1, "TOAN 2", C_GREEN);
-    drawTile(2, "TOAN 3", C_GREEN);
-    drawTile(3, "TOAN 4", C_GREEN);
-    drawTile(4, "ANH VAN", C_BLUE);
-    drawTile(5, "DUNG", C_BAD);
+    drawTile(0, ICON_LEARN, 0, 0, '1');
+    drawTile(1, ICON_LEARN, 0, 0, '2');
+    drawTile(2, ICON_LEARN, 0, 0, '3');
+    drawTile(3, ICON_LEARN, 0, 0, '4');
+    drawTile(4, ICON_ENGLISH, 0);
+    drawTile(5, nullptr, C_BAD, 'S');
     drawBack();
 }
 
 static void drawSet() {
     gfx->fillScreen(C_BG);
     drawTitle("CAI DAT");
-    drawTile(0, "AM +", C_BLUE);
-    drawTile(1, "AM -", C_BLUE);
-    drawTile(2, "NGU", C_PURPLE);
-    drawTile(3, g_follow ? "THEO: BAT" : "DI THEO", g_follow ? C_OK : C_ORANGE);
-    drawTile(4, "CAP NHAT", C_TEAL);
-    drawTile(5, "TEST CU", C_GREY);
+    drawTile(0, nullptr, C_BLUE, '+');
+    drawTile(1, nullptr, C_BLUE, '-');
+    drawTile(2, ICON_SLEEP, 0);
+    drawTile(3, ICON_FOLLOW, 0, 0, 0, g_follow);
+    drawTile(4, ICON_UPDATE, 0);
+    drawTile(5, nullptr, C_GREY, 'T');
     drawBack();
 }
 
