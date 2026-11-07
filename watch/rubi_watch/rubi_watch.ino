@@ -9,7 +9,7 @@
 // Nap lan dau bang cap USB-C (Arduino IDE): Board "ESP32C3 Dev Module", USB CDC On Boot: Enabled,
 //   Flash Size 4MB, Partition Scheme "Minimal SPIFFS (1.9MB APP with OTA/190KB SPIFFS)".
 //   Hoac nap file merged .bin tu GitHub Actions o dia chi 0x0.
-// Thu vien: "GFX Library for Arduino" (moi nhat), "NimBLE-Arduino" 1.4.3.
+// Thu vien: "GFX Library for Arduino" (moi nhat), "NimBLE-Arduino" 1.4.3, "JPEGDEC".
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -21,6 +21,9 @@
 #include <Update.h>
 #include <time.h>
 #include <sys/time.h>
+#include <Preferences.h>
+#include <JPEGDEC.h>
+#include "faces.h"
 
 // ---------------- Chan (theo ban ve cua bo ESP32-2424S012) ----------------
 #define TFT_DC   2
@@ -252,6 +255,8 @@ static int g_mIdx = 0, g_sIdx = 0;
 static bool g_drvActive = false;
 static int g_drvL = 0, g_drvR = 0, g_knobX = 120, g_knobY = 100;
 static uint32_t g_drvSent = 0;
+static uint32_t g_homeDownAt = 0;
+static bool g_homeSwitched = false;
 
 struct TileDef { const char* label; uint16_t color; };
 
@@ -307,6 +312,48 @@ static bool getTime(struct tm& tmv) {
     return true;
 }
 
+// ---- Mat dong ho (6 anh JPEG trong faces.h) ----
+static int g_face = 0;
+static JPEGDEC g_jpeg;
+static int jpegDraw(JPEGDRAW* p) {
+    gfx->draw16bitBeRGBBitmap(p->x, p->y, p->pPixels, p->iWidth, p->iHeight);
+    return 1;
+}
+static void drawFaceImage(int idx) {
+    if (idx < 0 || idx > 5) idx = 0;
+    if (g_jpeg.openFLASH((uint8_t*)FACE_JPG[idx], (int)FACE_JPG_LEN[idx], jpegDraw)) {
+        g_jpeg.setPixelType(RGB565_BIG_ENDIAN);
+        g_jpeg.decode(0, 0, 0);
+        g_jpeg.close();
+    } else {
+        gfx->fillScreen(C_BG);
+    }
+}
+static uint16_t pillColor() {
+    return gfx->color565(FACE_PILL[g_face][0], FACE_PILL[g_face][1], FACE_PILL[g_face][2]);
+}
+static uint16_t navyColor() { return gfx->color565(20, 30, 90); }
+
+static void drawHomeStatus() {
+    uint16_t pc = pillColor();
+    gfx->fillRect(50, 141, 140, 13, pc);
+    uint16_t dot = g_bleAuthed ? C_OK : (g_bleConn ? C_WARN : C_BAD);
+    char b[16];
+    b[0] = 0;
+    if (g_robotPct >= 0) snprintf(b, sizeof(b), "Pin %d%%", g_robotPct);
+    else if (g_follow) strcpy(b, "Di theo");
+    int w = (int)strlen(b) * 6;
+    int total = 10 + (w ? 6 + w : 0);
+    int x0 = 120 - total / 2;
+    gfx->fillCircle(x0 + 4, 148, 4, dot);
+    if (w) {
+        gfx->setTextSize(1);
+        gfx->setTextColor(navyColor());
+        gfx->setCursor(x0 + 16, 144);
+        gfx->print(b);
+    }
+}
+
 static void drawHomeTime(bool full) {
     static int lastMin = -2;
     struct tm tmv;
@@ -314,29 +361,26 @@ static void drawHomeTime(bool full) {
     int cur = ok ? tmv.tm_hour * 60 + tmv.tm_min : -1;
     if (!full && cur == lastMin) return;
     lastMin = cur;
-    gfx->fillRect(20, 80, 200, 60, C_BG);
+    gfx->fillRoundRect(36, 100, 168, 56, 12, pillColor());
     char b[8];
     if (ok) snprintf(b, sizeof(b), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
     else strcpy(b, "--:--");
-    textCenter(b, 120, 110, 6, C_TXT);
-}
-
-static void drawHomeStatus() {
-    gfx->fillRect(30, 150, 180, 50, C_BG);
-    if (g_bleAuthed) textCenter("Rubi: da noi", 120, 158, 2, C_OK);
-    else if (g_bleConn) textCenter("Rubi: dang noi", 120, 158, 2, C_WARN);
-    else textCenter("Dang tim Rubi", 120, 158, 2, C_WARN);
-    char b[24];
-    if (g_robotPct >= 0) snprintf(b, sizeof(b), "Pin robot %d%%", g_robotPct);
-    else strcpy(b, g_follow ? "Dang di theo be" : "Cham de mo menu");
-    textCenter(b, 120, 182, 1, C_DIM);
+    textCenter(b, 120, 121, 5, navyColor());
+    drawHomeStatus();
 }
 
 static void drawHome() {
-    gfx->fillScreen(C_BG);
-    textCenter("RUBI", 120, 50, 3, C_BLUE);
+    drawFaceImage(g_face);
     drawHomeTime(true);
-    drawHomeStatus();
+}
+
+static void nextFace() {
+    g_face = (g_face + 1) % 6;
+    Preferences pr;
+    pr.begin("watch", false);
+    pr.putInt("face", g_face);
+    pr.end();
+    drawHome();
 }
 
 static void drawMenu() {
@@ -550,7 +594,12 @@ static void otaRun() {
 static void onTouch(int ev, int x, int y) {
     switch (g_page) {
         case P_HOME:
-            if (ev == 1) gotoPage(P_MENU);
+            if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; }
+            else if (ev == 3 && g_homeDownAt != 0) {
+                if (!g_homeSwitched) gotoPage(P_MENU);   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
+                g_homeDownAt = 0;
+                g_homeSwitched = false;
+            }
             break;
         case P_MENU:
             if (ev != 1) break;
@@ -687,6 +736,13 @@ void setup() {
     xTaskCreate(bleTask, "ble", 8192, nullptr, 1, nullptr);
     xTaskCreate(irTask, "ir", 2048, nullptr, 2, nullptr);
 
+    {
+        Preferences pr;
+        pr.begin("watch", true);
+        g_face = pr.getInt("face", 0);
+        pr.end();
+        if (g_face < 0 || g_face > 5) g_face = 0;
+    }
     g_lastTouchAt = millis();
     gotoPage(P_HOME);
 }
@@ -694,13 +750,21 @@ void setup() {
 void loop() {
     uint32_t now = millis();
     touchPoll();
+    static bool ignoreUntilUp = false;
     if (g_tEvent) {
         int ev = g_tEvent;
         g_tEvent = 0;
         bool sleeping = (g_bright < 255);
         g_lastTouchAt = now;
         if (sleeping) { g_bright = 255; setBacklight(255); }
-        if (!(sleeping && ev == 1)) onTouch(ev, g_tx0, g_ty0);   // cham dau tien luc dang ngu chi de danh thuc
+        if (sleeping && ev == 1) ignoreUntilUp = true;   // cham dau tien luc dang ngu chi de danh thuc
+        if (ignoreUntilUp) { if (ev == 3) ignoreUntilUp = false; }
+        else onTouch(ev, g_tx0, g_ty0);
+    }
+    // giu lau tren man hinh chinh: doi mat dong ho
+    if (g_page == P_HOME && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= 700) {
+        g_homeSwitched = true;
+        nextFace();
     }
     // gui lenh lai xe lien tuc khi dang keo
     if (g_page == P_DRIVE && g_drvActive && now - g_drvSent > 120) {
