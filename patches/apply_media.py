@@ -231,4 +231,19 @@ patch('main/application.cc', [
 patch('main/audio/audio_service.h', [
     ('#define MAX_DECODE_PACKETS_IN_QUEUE (1200 / OPUS_FRAME_DURATION_MS)', '#define MAX_DECODE_PACKETS_IN_QUEUE (6000 / OPUS_FRAME_DURATION_MS)'),
 ])
+# Rubi: after "bye bye" the server sends {"type":"goodbye"}. The MQTT protocol closes the channel on it, the
+# WebSocket protocol ignored it: Rubi stayed in "listening" on a finished session with the wake word switched off,
+# so "Hey Rubi" did nothing until the connection timed out (about 2 minutes). Now WebSocket closes on goodbye too
+# (same as a tap to end), Rubi goes back to idle and the wake word works at once.
+patch('main/protocols/websocket_protocol.cc', [
+    ('                if (strcmp(type->valuestring, "hello") == 0) {\n                    ParseServerHello(root);\n                } else {\n',
+     '                if (strcmp(type->valuestring, "hello") == 0) {\n                    ParseServerHello(root);\n'
+     '                } else if (strcmp(type->valuestring, "goodbye") == 0) {\n'
+     '                    ESP_LOGI(TAG, "Received goodbye, closing the audio channel");\n'
+     '                    Application::GetInstance().Schedule([this]() {\n'
+     '                        if (IsAudioChannelOpened()) CloseAudioChannel(false);\n'
+     '                    });\n'
+     '                } else {\n'),
+])
+
 print('media patches applied')
