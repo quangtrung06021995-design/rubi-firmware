@@ -41,6 +41,8 @@
 #include <WebServer.h>
 #include <ESPmDNS.h>
 #include <esp_random.h>
+#include <NimBLEDevice.h>   // Bluetooth cho dong ho cua be (thu vien NimBLE-Arduino 1.4.3)
+#include <time.h>
 
 // ---------------- Chan ----------------
 const int PIN_PWMA = 25, PIN_AIN1 = 26, PIN_AIN2 = 27;
@@ -878,6 +880,172 @@ void webStatus() {
     webJson(j);
 }
 
+
+// ---------------- Bluetooth cho DONG HO CUA BE ----------------
+// Dong ho noi vao DevKit (BLE), gui lenh dang chu, cac lenh tuong duong web dieu khien:
+//   K<khoa>    dang nhap (khoa = WATCH_KEY, phai trung firmware dong ho); chua dang nhap thi bo qua moi lenh khac
+//   L<l>,<r>   lai xe (-100..100), het 0.5 giay khong co lenh moi thi tu dung (nhu web)
+//   X          dung               A   nhay mua
+//   C<lenh>    lenh cho bo man hinh (sleep, clock, en, huy, vup, vdown, t5, m0-m3, h0-h3, p<n>)
+//   T<n>       mo truyen thu n (tinh tu 0)
+//   W          xin Wi-Fi dang dung de dong ho tu cap nhat (tra "w<ten>\t<mat khau>")
+//   Q          xin tinh trang ngay
+// DevKit bao ve dong ho (moi 2 giay): "S<pin%>,<so bai>,<so truyen>,<wifi 0/1>"; "T<epoch>,<phut lech mui gio>" moi 20 giay.
+// Mat ket noi thi robot tu dung.
+const char* WATCH_KEY = "RB4821WT";
+#define BLE_SVC "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_RX  "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_TX  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+NimBLEServer* g_bleSrv = nullptr;
+NimBLECharacteristic* g_bleTx = nullptr;
+QueueHandle_t g_bleQ = nullptr;
+bool g_bleAuth = false;
+int g_bleConnPrev = 0;
+uint32_t g_bleStatAt = 0, g_bleTimeAt = 0, g_bleAdvAt = 0;
+int g_tzMin = 420;            // phut lech so voi UTC (lay tu Vercel theo vi tri mang; mac dinh Viet Nam)
+bool g_timeCfg = false;
+uint32_t g_tzNext = 0;
+
+class BleRxCb : public NimBLECharacteristicCallbacks {
+    void onWrite(NimBLECharacteristic* c) override {
+        std::string v = c->getValue();
+        char buf[48];
+        size_t n = v.size() < 47 ? v.size() : 47;
+        memcpy(buf, v.data(), n);
+        buf[n] = 0;
+        if (g_bleQ) xQueueSend(g_bleQ, buf, 0);
+    }
+};
+
+void bleGui(const String& msg) {   // gui 1 dong, cat thanh khuc 20 byte, ket thuc bang \n
+    if (!g_bleTx || !g_bleSrv || g_bleSrv->getConnectedCount() == 0) return;
+    String m = msg + "\n";
+    for (unsigned i = 0; i < m.length(); i += 20) {
+        String part = m.substring(i, i + 20);
+        g_bleTx->setValue((uint8_t*)part.c_str(), part.length());
+        g_bleTx->notify();
+        delay(4);
+    }
+}
+
+void bleTrangThai() {
+    int pc = -1;
+    if (CO_MODULE_DO_PIN && g_bat_mv > 4000) pc = pinPhanTram(g_bat_mv);
+    bleGui(String("S") + pc + "," + g_nh_n + "," + g_ty_n + "," + (WiFi.status() == WL_CONNECTED ? 1 : 0));
+}
+
+void bleGioGui() {
+    time_t t = time(nullptr);
+    if (t > 1700000000) bleGui(String("T") + (long)t + "," + g_tzMin);
+}
+
+void bleLenh(const char* m) {
+    String s(m);
+    s.trim();
+    if (s.length() == 0) return;
+    char k = s[0];
+    if (k == 'K') {
+        g_bleAuth = (s.substring(1) == WATCH_KEY);
+        bleGui(g_bleAuth ? "A1" : "A0");
+        if (g_bleAuth) { bleTrangThai(); bleGioGui(); }
+        return;
+    }
+    if (!g_bleAuth) return;
+    if (k == 'L') {
+        int c = s.indexOf(',');
+        if (c > 1) {
+            int l = constrain(s.substring(1, c).toInt(), -100, 100);
+            int r = constrain(s.substring(c + 1).toInt(), -100, 100);
+            g_nhay = false;
+            datToc(0, A_LA_BANH_TRAI ? l : r);
+            datToc(1, A_LA_BANH_TRAI ? r : l);
+            g_cmd_deadline = millis() + WEB_DEADMAN_MS;
+        }
+    } else if (k == 'X') {
+        dungHet();
+    } else if (k == 'A') {
+        if (!g_pin_thap) nhayBat();
+    } else if (k == 'C') {
+        String c = s.substring(1);
+        bool ok = c.length() >= 1 && c.length() <= 10;
+        for (unsigned i = 0; ok && i < c.length(); i++) ok = isalnum((unsigned char)c[i]);
+        if (ok) {
+            char k2 = c[0];
+            ok = c == "sleep" || c == "clock" || c == "en" || c == "huy" || c == "vup" || c == "vdown" || k2 == 't' || k2 == 'm' || k2 == 'h' || k2 == 'p';
+        }
+        if (ok) { dungHet(); Serial2.printf("C%s\n", c.c_str()); }
+    } else if (k == 'T') {
+        int i = s.substring(1).toInt();
+        if (i >= 0 && i < g_ty_n) { dungHet(); Serial2.printf("O%s\n", g_ty_id[i].c_str()); }
+    } else if (k == 'W') {
+        if (g_ssid.length()) bleGui(String("w") + g_ssid + "\t" + g_pass);
+    } else if (k == 'Q') {
+        bleTrangThai();
+        bleGioGui();
+    }
+}
+
+void bleBatDau() {
+    g_bleQ = xQueueCreate(8, 48);
+    NimBLEDevice::init("Rubi");
+    g_bleSrv = NimBLEDevice::createServer();
+    NimBLEService* svc = g_bleSrv->createService(BLE_SVC);
+    g_bleTx = svc->createCharacteristic(BLE_TX, NIMBLE_PROPERTY::NOTIFY);
+    NimBLECharacteristic* rx = svc->createCharacteristic(BLE_RX, NIMBLE_PROPERTY::WRITE | NIMBLE_PROPERTY::WRITE_NR);
+    rx->setCallbacks(new BleRxCb());
+    svc->start();
+    NimBLEAdvertising* adv = NimBLEDevice::getAdvertising();
+    adv->addServiceUUID(BLE_SVC);
+    adv->setScanResponse(true);
+    adv->start();
+    Serial.println("Bluetooth san sang (dong ho ket noi: ten 'Rubi')");
+}
+
+void bleGioTick(uint32_t now) {   // dong bo gio qua Internet khi co Wi-Fi: NTP + mui gio theo vi tri mang
+    if (WiFi.status() != WL_CONNECTED) return;
+    if (!g_timeCfg) { configTime(0, 0, "pool.ntp.org", "time.google.com"); g_timeCfg = true; }
+    if ((int32_t)(now - g_tzNext) < 0) return;
+    if (g_target[0] != 0 || g_target[1] != 0 || g_nhay) { g_tzNext = now + 5000; return; }   // dang chay thi de sau
+    bool ok = false;
+    {
+        WiFiClientSecure cl;
+        cl.setInsecure();
+        HTTPClient http;
+        http.setTimeout(4000);
+        http.setConnectTimeout(4000);
+        if (http.begin(cl, "https://rubi-web-eight.vercel.app/api/time")) {
+            int code = http.GET();
+            if (code == 200) {
+                String b = http.getString();
+                int i = b.indexOf("\"tz\":");
+                if (i >= 0) { g_tzMin = b.substring(i + 5).toInt(); ok = true; }
+            }
+            http.end();
+        }
+    }
+    g_tzNext = now + (ok ? 3600000UL : 120000UL);
+}
+
+void bleTick() {
+    if (!g_bleSrv) return;
+    uint32_t now = millis();
+    char buf[48];
+    while (xQueueReceive(g_bleQ, buf, 0) == pdTRUE) bleLenh(buf);
+    int cn = g_bleSrv->getConnectedCount();
+    if (cn == 0 && g_bleConnPrev > 0) { g_bleAuth = false; dungHet(); Serial.println("Dong ho mat ket noi: dung robot"); }
+    g_bleConnPrev = cn;
+    if (cn == 0 && now - g_bleAdvAt > 2000) {
+        g_bleAdvAt = now;
+        NimBLEAdvertising* a = NimBLEDevice::getAdvertising();
+        if (!a->isAdvertising()) a->start();
+    }
+    if (cn > 0 && g_bleAuth) {
+        if (now - g_bleStatAt > 2000) { g_bleStatAt = now; bleTrangThai(); }
+        if (now - g_bleTimeAt > 20000) { g_bleTimeAt = now; bleGioGui(); }
+    }
+    bleGioTick(now);
+}
+
 void webBatDau() {
     g_web.on("/", HTTP_GET, []() { g_web.sendHeader("Cache-Control", "no-store"); g_web.send_P(200, "text/html; charset=utf-8", PAGE_ROOT); });
     g_web.on("/api/drive", HTTP_GET, webDrive);
@@ -1082,6 +1250,7 @@ void setup() {
     pinNap();
     wifiNapDS();
     wifiKetNoi();
+    bleBatDau();
     Serial.println();
     Serial.printf("Rubi DevKit san sang. Phien ban %s. Motor dang dung.\n", FW_VERSION);
     inHuongDan();
@@ -1099,6 +1268,7 @@ void loop() {
     }
     doPin();
     wifiTick();
+    bleTick();
     if (TU_CAP_NHAT_KHI_BAT && !g_auto_done && g_auto_at != 0 && (int32_t)(millis() - g_auto_at) >= 0) {
         g_auto_done = true;   // chi thu mot lan moi lan bat nguon
         Serial.println("Tu kiem tra ban moi tren GitHub...");

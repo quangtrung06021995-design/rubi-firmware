@@ -1,0 +1,72 @@
+name: Build Rubi watch firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - watch/rubi_watch/**
+      - .github/workflows/watch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stamp version
+        shell: bash
+        run: |
+          VER="1.0.${{ github.run_number }}"
+          sed -i "s/^const char\* FW_VERSION    = \"[^\"]*\";/const char* FW_VERSION    = \"$VER\";/" watch/rubi_watch/rubi_watch.ino
+          grep -n "FW_VERSION    =" watch/rubi_watch/rubi_watch.ino
+          echo "WATCH_VERSION=$VER" >> "$GITHUB_ENV"
+
+      - name: Install arduino-cli
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          arduino-cli config init --overwrite 2>&1 | tee watch-build.log
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json 2>&1 | tee -a watch-build.log
+          arduino-cli core update-index 2>&1 | tee -a watch-build.log
+          arduino-cli core install esp32:esp32 2>&1 | tee -a watch-build.log
+          arduino-cli lib install "GFX Library for Arduino" "NimBLE-Arduino@1.4.3" 2>&1 | tee -a watch-build.log
+          arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc,PartitionScheme=min_spiffs,FlashSize=4M --export-binaries --output-dir out watch/rubi_watch 2>&1 | tee -a watch-build.log
+          ls -la out | tee -a watch-build.log
+
+      - name: Publish build log (branch build-log-watch)
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p /tmp/logpub && cd /tmp/logpub && rm -rf .git
+          { echo "watch run ${{ github.run_number }} sha ${{ github.sha }}"; tail -n 300 "$GITHUB_WORKSPACE/watch-build.log" 2>/dev/null; } > build.log.txt
+          git init -q && git checkout -q -b build-log-watch
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "watch build log"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" build-log-watch || true
+
+      - name: Publish OTA files (branch ota-watch)
+        shell: bash
+        run: |
+          mkdir -p /tmp/otapub && cd /tmp/otapub && rm -rf .git
+          cp "$GITHUB_WORKSPACE/out/rubi_watch.ino.bin" watch.bin
+          MD5=$(md5sum watch.bin | cut -d' ' -f1)
+          SIZE=$(stat -c %s watch.bin)
+          printf '{"version":"%s","url":"https://raw.githubusercontent.com/%s/ota-watch/watch.bin","md5":"%s","size":%s}\n' "$WATCH_VERSION" "${{ github.repository }}" "$MD5" "$SIZE" > manifest.json
+          cat manifest.json
+          git init -q && git checkout -q -b ota-watch
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "Watch OTA $WATCH_VERSION"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ota-watch
+
+      - name: Upload firmware (merged, flash at 0x0)
+        uses: actions/upload-artifact@v4
+        with:
+          name: rubi-watch-firmware
+          path: out/rubi_watch.ino.merged.bin
+          if-no-files-found: error
