@@ -259,6 +259,21 @@ static int g_drvL = 0, g_drvR = 0, g_knobX = 120, g_knobY = 100;
 static uint32_t g_drvSent = 0;
 static uint32_t g_homeDownAt = 0;
 static bool g_homeSwitched = false;
+static bool g_battHold = false;
+
+// Pin dong ho: uoc luong theo thoi gian da chay ke tu moc "pin day" (khong do duoc dien ap that)
+const float BATT_FULL_MIN = 90.0f;        // so phut (quy doi) chay duoc voi 1 lan sac day (pin 140 mAh) - chinh sau khi do thuc te
+static float g_usedMin = 0;
+static int battPct() {
+    float p = 100.0f - g_usedMin * 100.0f / BATT_FULL_MIN;
+    return p < 0 ? 0 : (int)p;
+}
+static void battSave() {
+    Preferences pr;
+    pr.begin("watch", false);
+    pr.putFloat("used", g_usedMin);
+    pr.end();
+}
 
 struct TileDef { const char* label; uint16_t color; };
 
@@ -357,7 +372,15 @@ static uint16_t navyColor() { return gfx->color565(20, 30, 90); }
 
 static void drawHomeStatus() {
     uint16_t pc = pillColor();
-    gfx->fillRect(50, 141, 140, 13, pc);
+    gfx->fillRect(44, 141, 152, 13, pc);
+    {   // bieu tuong pin dong ho (4 vach), do khi con <= 20%
+        int pct = battPct();
+        int bars = pct <= 0 ? 0 : (pct + 24) / 25;
+        uint16_t bc = (pct <= 20) ? C_BAD : navyColor();
+        gfx->drawRect(58, 144, 20, 9, bc);
+        gfx->fillRect(78, 146, 2, 5, bc);
+        for (int i = 0; i < bars; i++) gfx->fillRect(60 + i * 4, 146, 3, 5, bc);
+    }
     uint16_t dot = g_bleAuthed ? C_OK : (g_bleConn ? C_WARN : C_BAD);
     char b[16];
     b[0] = 0;
@@ -365,7 +388,7 @@ static void drawHomeStatus() {
     else if (g_follow) strcpy(b, "Di theo");
     int w = (int)strlen(b) * 6;
     int total = 10 + (w ? 6 + w : 0);
-    int x0 = 120 - total / 2;
+    int x0 = 134 - total / 2;
     gfx->fillCircle(x0 + 4, 148, 4, dot);
     if (w) {
         gfx->setTextSize(1);
@@ -615,7 +638,7 @@ static void otaRun() {
 static void onTouch(int ev, int x, int y) {
     switch (g_page) {
         case P_HOME:
-            if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; }
+            if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); }
             else if (ev == 3 && g_homeDownAt != 0) {
                 if (!g_homeSwitched) gotoPage(P_MENU);   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
                 g_homeDownAt = 0;
@@ -761,6 +784,7 @@ void setup() {
         Preferences pr;
         pr.begin("watch", true);
         g_face = pr.getInt("face", 0);
+        g_usedMin = pr.getFloat("used", 0);
         pr.end();
         if (g_face < 0 || g_face > 5) g_face = 0;
     }
@@ -783,9 +807,18 @@ void loop() {
         else onTouch(ev, g_tx0, g_ty0);
     }
     // giu lau tren man hinh chinh: doi mat dong ho
-    if (g_page == P_HOME && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= 700) {
+    if (g_page == P_HOME && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= (g_battHold ? 2000u : 700u)) {
         g_homeSwitched = true;
-        nextFace();
+        if (g_battHold) { g_usedMin = 0; battSave(); drawHomeStatus(); }   // giu lau len bieu tuong pin = da sac day
+        else nextFace();
+    }
+    // tinh luong pin da dung moi phut (man hinh sang=1, mo=0,5, tat=0,2)
+    static uint32_t battAt = 0;
+    static int battN = 0;
+    if (now - battAt >= 60000) {
+        battAt = now;
+        g_usedMin += (g_bright >= 255) ? 1.0f : (g_bright > 0 ? 0.5f : 0.2f);
+        if (++battN % 5 == 0) battSave();
     }
     // gui lenh lai xe lien tuc khi dang keo
     if (g_page == P_DRIVE && g_drvActive && now - g_drvSent > 120) {
@@ -801,8 +834,9 @@ void loop() {
         drawHomeTime(false);
         static int lastState = -1;
         int st = g_bleAuthed ? 2 : g_bleConn ? 1 : 0;
-        static int lastPct = -2;
-        if (st != lastState || g_robotPct != lastPct) { lastState = st; lastPct = g_robotPct; drawHomeStatus(); }
+        static int lastPct = -2, lastBatt = -2;
+        int bp = battPct();
+        if (st != lastState || g_robotPct != lastPct || bp != lastBatt) { lastState = st; lastPct = g_robotPct; lastBatt = bp; drawHomeStatus(); }
     }
     // 15 giay khong cham o menu/trang con thi tu quay ve mat dong ho (khong ap dung luc dang keo lai xe, luc cap nhat)
     if (g_page != P_HOME && g_page != P_OTA && !g_drvActive && now - g_lastTouchAt > MENU_IDLE_MS) {
