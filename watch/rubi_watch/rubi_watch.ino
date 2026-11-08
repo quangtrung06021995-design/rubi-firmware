@@ -23,6 +23,7 @@
 #include <sys/time.h>
 #include <Preferences.h>
 #include <JPEGDEC.h>
+#include <esp_system.h>
 #include "faces.h"
 #include "icons.h"
 
@@ -769,8 +770,35 @@ static void onTouch(int ev, int x, int y) {
 }
 
 // ---------------- Khoi dong ----------------
+// Boot diagnosis: the reason of the last reset is shown under the version on the splash screen, and after
+// 3 crash/brown-out resets in a row the watch starts without Bluetooth (safe mode) so it stays usable and can
+// still be updated (OTA). The counter clears after 30 s of normal running.
+RTC_NOINIT_ATTR static uint32_t g_bootMagic;
+RTC_NOINIT_ATTR static uint32_t g_crashCount;
+static bool g_safeMode = false;
+static const char* resetName(esp_reset_reason_t r) {
+    switch (r) {
+        case ESP_RST_POWERON:  return "BAT NGUON";
+        case ESP_RST_SW:       return "KHOI DONG LAI";
+        case ESP_RST_PANIC:    return "LOI CHUONG TRINH";
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT:      return "TREO (WDT)";
+        case ESP_RST_BROWNOUT: return "SUT NGUON";
+        case ESP_RST_USB:      return "USB";
+        case ESP_RST_DEEPSLEEP: return "NGU SAU";
+        default:               return "KHAC";
+    }
+}
+
 void setup() {
     Serial.begin(115200);
+    esp_reset_reason_t rr = esp_reset_reason();
+    bool crashed = (rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT || rr == ESP_RST_BROWNOUT);
+    if (g_bootMagic != 0x52554249u) { g_bootMagic = 0x52554249u; g_crashCount = 0; }
+    g_crashCount = crashed ? g_crashCount + 1 : 0;
+    g_safeMode = g_crashCount >= 3;
+    Serial.printf("reset reason %d (%s), crashes in a row %u\n", (int)rr, resetName(rr), (unsigned)g_crashCount);
     g_txQ = xQueueCreate(8, 32);
 
     ledcAttach(TFT_BL, 5000, 8);
@@ -803,10 +831,18 @@ void setup() {
     gfx->fillScreen(C_BG);
     textCenter("RUBI", 120, 105, 4, C_BLUE);
     textCenter(FW_VERSION, 120, 140, 1, C_DIM);
+    {
+        char b[40];
+        snprintf(b, sizeof(b), "%s %u", resetName(rr), (unsigned)g_crashCount);
+        textCenter(b, 120, 165, 1, crashed ? C_BAD : C_DIM);
+        if (g_safeMode) textCenter("AN TOAN: TAT BLUETOOTH", 120, 185, 1, C_WARN);
+    }
     setBacklight(255);
-    delay(800);
+    delay(crashed ? 2500 : 800);
 
-    xTaskCreate(bleTask, "ble", 8192, nullptr, 1, nullptr);
+    textCenter("BLE...", 120, 205, 1, C_DIM);
+    if (!g_safeMode) xTaskCreate(bleTask, "ble", 8192, nullptr, 1, nullptr);
+    delay(crashed ? 1500 : 0);
     xTaskCreate(irTask, "ir", 2048, nullptr, 2, nullptr);
 
     {
@@ -823,6 +859,7 @@ void setup() {
 
 void loop() {
     uint32_t now = millis();
+    if (g_crashCount != 0 && now > 30000) g_crashCount = 0;   // ran 30 s fine: not a crash loop
     touchPoll();
     static bool ignoreUntilUp = false;
     if (g_tEvent) {
