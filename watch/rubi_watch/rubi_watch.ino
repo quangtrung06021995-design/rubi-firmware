@@ -26,6 +26,7 @@
 #include <esp_system.h>
 #include "faces.h"
 #include "icons.h"
+#include "volicons.h"
 
 // ---------------- Chan (theo ban ve cua bo ESP32-2424S012) ----------------
 #define TFT_DC   2
@@ -421,6 +422,30 @@ static uint16_t pillColor() {
 }
 static uint16_t navyColor() { return gfx->color565(20, 30, 90); }
 
+// Hai nut am luong tron tren mat dong ho (icon ve tay), goc tren trai/phai o gio
+static const int VOL_CY = 84, VOL_LX = 33, VOL_RX = 207;
+static void drawVolIcon(const uint16_t* ic, int cx) {
+    int R = VOL_SIZE / 2;
+    for (int dy = 0; dy < VOL_SIZE; dy++) {
+        float d = dy + 0.5f - R;
+        int hw = (int)sqrtf((float)(R * R) - d * d);
+        int off = R - hw;
+        if (hw <= 0) continue;
+        gfx->draw16bitRGBBitmap(cx - hw, VOL_CY - R + dy, (uint16_t*)(ic + dy * VOL_SIZE + off), hw * 2, 1);
+    }
+}
+static void drawVolBtns() {
+    drawVolIcon(VOL_DOWN, VOL_LX);
+    drawVolIcon(VOL_UP, VOL_RX);
+}
+// -1 = giam, +1 = tang, 0 = khong trung nut
+static int volHit(int x, int y) {
+    int dy = y - VOL_CY;
+    if (dy * dy + (x - VOL_LX) * (x - VOL_LX) <= 27 * 27) return -1;
+    if (dy * dy + (x - VOL_RX) * (x - VOL_RX) <= 27 * 27) return 1;
+    return 0;
+}
+
 static void drawHomeStatus() {
     uint16_t pc = pillColor();
     gfx->fillRect(44, 141, 152, 13, pc);
@@ -462,6 +487,7 @@ static void drawHomeTime(bool full) {
     else strcpy(b, "--:--");
     textCenter(b, 120, 121, 5, navyColor());
     drawHomeStatus();
+    drawVolBtns();
 }
 
 static void drawHome() {
@@ -539,12 +565,10 @@ static void drawLearn() {
 static void drawSet() {
     gfx->fillScreen(C_BG);
     drawTitle("CAI DAT");
-    drawTile(0, nullptr, C_BLUE, '+');
-    drawTile(1, nullptr, C_BLUE, '-');
-    drawTile(2, ICON_SLEEP, 0);
-    drawTile(3, ICON_FOLLOW, 0, 0, 0, g_follow);
-    drawTile(4, ICON_UPDATE, 0);
-    drawTile(5, nullptr, C_GREY, 'N');
+    drawTile(0, ICON_SLEEP, 0);
+    drawTile(1, ICON_FOLLOW, 0, 0, 0, g_follow);
+    drawTile(2, ICON_UPDATE, 0);
+    drawTile(3, nullptr, C_GREY, 'N');
     drawBack();
 }
 
@@ -769,6 +793,11 @@ static void otaInstall(const String& ssid, const String& pass, bool quiet) {
 static void onTouch(int ev, int x, int y) {
     switch (g_page) {
         case P_HOME:
+            if (ev == 1 && volHit(x, y) != 0) {   // cham nut am luong: khong mo menu, khong doi mat
+                sendCmd(volHit(x, y) > 0 ? "Cvup" : "Cvdown");
+                g_homeDownAt = 0;
+                break;
+            }
             if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); }
             else if (ev == 3 && g_homeDownAt != 0) {
                 if (!g_homeSwitched) gotoPage(P_MENU);   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
@@ -804,12 +833,10 @@ static void onTouch(int ev, int x, int y) {
             if (ev != 1) break;
             if (backHit(x, y)) { gotoPage(P_MENU); break; }
             switch (tileHit(6, x, y)) {
-                case 0: sendCmd("Cvup"); break;
-                case 1: sendCmd("Cvdown"); break;
-                case 2: sendCmd("Csleep"); break;
-                case 3: g_follow = !g_follow; drawSet(); break;
-                case 4: otaRun(); break;
-                case 5: gotoPage(P_SET2); break;
+                case 0: sendCmd("Csleep"); break;
+                case 1: g_follow = !g_follow; drawSet(); break;
+                case 2: otaRun(); break;
+                case 3: gotoPage(P_SET2); break;
             }
             break;
         case P_SET2:
