@@ -256,12 +256,20 @@ static bool g_touching = false;
 static uint8_t g_miss = 0;
 static uint32_t g_tLast = 0;
 
+// Chip cam ung keo chan INT xuong moi khi co so lieu cham moi (lien tuc khi dang cham). Chi tin so lieu doc ra khi
+// vua co xung INT: doc mu luc khong co INT co the ra so cu/rac (cham ao). Neu chua bao gio thay INT (day khong noi)
+// thi doc nhu cu.
+static volatile uint32_t g_tpIntAt = 0;
+static volatile bool g_tpIntSeen = false;
+static void IRAM_ATTR tpIsr() { g_tpIntAt = millis(); g_tpIntSeen = true; }
+
 static void touchNoSleep() {
     for (int i = 0; i < 5; i++) {
-        Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0x01);
-        if (Wire.endTransmission() == 0) return;
+        Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0x01);   // khong tu ngu
+        if (Wire.endTransmission() == 0) break;
         delay(20);
     }
+    Wire.beginTransmission(0x15); Wire.write(0xFA); Wire.write(0x60); Wire.endTransmission();   // INT: khi cham + khi doi
 }
 
 static void touchPoll() {
@@ -274,12 +282,8 @@ static void touchPoll() {
         Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0x01); Wire.endTransmission();
     }
     int x, y;
-    static uint8_t hits = 0;
     bool t = touchRaw(x, y);
-    if (t && !g_touching) {                      // can 3 lan doc lien tiep (~36 ms) moi tinh la cham that
-        if (++hits < 3) return;
-    }
-    if (!t) hits = 0;
+    if (t && g_tpIntSeen && millis() - g_tpIntAt > 80) t = false;   // khong co xung INT gan day: so cu/rac
     if (t) {
         g_miss = 0;
         g_tx0 = x; g_ty0 = y;
@@ -643,14 +647,22 @@ static void otaRun() {
     g_follow = false;
     gfx->fillScreen(C_BG);
     drawTitle("CAP NHAT");
-    if (!g_bleAuthed) { otaFinish("Chua noi Rubi", "Den gan robot roi thu lai"); return; }
-    otaMsg("Xin Wi-Fi tu Rubi...");
-    g_haveWifi = false;
-    sendCmd("W");
     uint32_t t0 = millis();
-    while (!g_haveWifi && millis() - t0 < 6000) delay(50);
-    if (!g_haveWifi) { otaFinish("Rubi chua co Wi-Fi", "Cai Wi-Fi cho Rubi truoc"); return; }
-    String ssid = g_wifiSsid, pass = g_wifiPass;
+    String ssid, pass;
+    if (g_bleAuthed) {                  // dang noi Rubi: xin Wi-Fi moi nhat cua Rubi
+        otaMsg("Xin Wi-Fi tu Rubi...");
+        g_haveWifi = false;
+        sendCmd("W");
+        while (!g_haveWifi && millis() - t0 < 4000) delay(50);
+        if (g_haveWifi) { ssid = g_wifiSsid; pass = g_wifiPass; }
+    }
+    if (ssid.length() == 0) {           // khong co Rubi: dung Wi-Fi da luu, chua co thi Wi-Fi nha
+        Preferences pr;
+        pr.begin("watch", true);
+        ssid = pr.getString("ssid", ""); pass = pr.getString("pass", "");
+        pr.end();
+        if (ssid.length() == 0) { ssid = DEFAULT_WIFI_SSID; pass = DEFAULT_WIFI_PASS; }
+    }
     g_otaMode = true;                   // tat Bluetooth de du bo nho cho Wi-Fi
     t0 = millis();
     while (!g_bleOff && millis() - t0 < 4000) delay(50);
@@ -912,7 +924,8 @@ void setup() {
     pinMode(TP_RST, OUTPUT);
     digitalWrite(TP_RST, LOW);  delay(10);
     digitalWrite(TP_RST, HIGH); delay(150);
-    pinMode(TP_INT, INPUT);
+    pinMode(TP_INT, INPUT_PULLUP);
+    attachInterrupt(digitalPinToInterrupt(TP_INT), tpIsr, FALLING);
     touchNoSleep();   // khong tu ngu
 
     gfx->begin();
