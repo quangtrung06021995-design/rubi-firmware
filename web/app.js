@@ -87,11 +87,11 @@ $("dkbtn").onclick=function(){var b=this,bar=$("dkbar"),i=bar.firstChild,p=0;b.d
 /* ---- Chế độ thật (mở từ rubi.local): số thật từ DevKit (/api/status) + bản mới nhất trên GitHub ---- */
 if(LIVE){
 var RAW="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/";
-var LAT={ds:"",dk:"",cam:""},latAt=0,ST=null;
+var LAT={ds:"",dk:"",cam:"",c3:""},latAt=0,ST=null;
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function man(br){return fetch(RAW+br+"/manifest.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){return j&&j.version?String(j.version):""}).catch(function(){return ""})}
 function loadLat(){if(Date.now()-latAt<60000)return Promise.resolve();latAt=Date.now();
- return Promise.all([man("ota"),man("ota-devkit"),man("ota-cam")]).then(function(a){LAT.ds=a[0];LAT.dk=a[1];LAT.cam=a[2]})}
+ return Promise.all([man("ota"),man("ota-devkit"),man("ota-cam"),man("ota-c3zero")]).then(function(a){LAT.ds=a[0];LAT.dk=a[1];LAT.cam=a[2];LAT.c3=a[3]})}
 function stat(k,v){return '<div class="stat"><span>'+k+'</span><span>'+esc(v)+'</span></div>'}
 function note(t){return '<p style="color:var(--mute);font-size:13px;margin:8px 0 0">'+t+'</p>'}
 function setCard(id,h,body){var c=$(id);if(c)c.innerHTML='<h2>'+h+'</h2>'+body}
@@ -126,7 +126,7 @@ function render(){
   setCard("csen","Bánh xe",stat("Bánh trái",(s.l!=null?s.l+"%":"—"))+stat("Bánh phải",(s.r!=null?s.r+"%":"—"))+stat("Lỗi motor",s.fault?"Có lỗi":"Không")+note("Cảm biến khoảng cách chưa có số thật."));
   bindPin()}
  function pill(c,t){return '<span class="pill '+c+'"><b></b>'+t+'</span>'}
- var B=[{n:"Bo màn hình",run:s&&s.dsv?String(s.dsv):"",lat:LAT.ds},{n:"DevKit (bánh xe)",run:ver,lat:LAT.dk},{n:"Camera",run:s&&s.cv?String(s.cv):"",lat:LAT.cam}];
+ var B=[{n:"Bo màn hình",run:s&&s.dsv?String(s.dsv):"",lat:LAT.ds},{n:"DevKit (bánh xe)",run:ver,lat:LAT.dk},{n:"Camera",run:s&&s.cv?String(s.cv):"",lat:LAT.cam},{n:"Bo đèn (C3 Zero)",run:s&&s.c3v?String(s.c3v):"",lat:LAT.c3}];
  B.forEach(function(x){x.neu=!!(x.run&&x.lat&&x.run!==x.lat)});
  var moi=B.filter(function(x){return x.neu}).map(function(x){return x.n});
  var tb=$("vtb");
@@ -215,8 +215,8 @@ refresh();
  var RAW2="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/";
  function man2(br){return fetch(RAW2+br+"/manifest.json?t="+Date.now(),{cache:"no-store"}).then(function(r){return r.json()}).then(function(j){return j&&j.version?String(j.version):""}).catch(function(){return ""})}
  var al0=document.querySelector(".alert"),dt0=document.querySelector(".drawer .dot");if(al0)al0.style.display="none";if(dt0)dt0.style.display="none";
- Promise.all([man2("ota"),man2("ota-devkit"),man2("ota-cam")]).then(function(a){
-  var nm=["Bo màn hình","DevKit (bánh xe)","Camera"],tb0=$("vtb"),up0=$("ups");
+ Promise.all([man2("ota"),man2("ota-devkit"),man2("ota-cam"),man2("ota-c3zero")]).then(function(a){
+  var nm=["Bo màn hình","DevKit (bánh xe)","Camera","Bo đèn (C3 Zero)"],tb0=$("vtb"),up0=$("ups");
   if(tb0)tb0.innerHTML=nm.map(function(n,i){return '<tr><td>'+n+'</td><td>—</td><td>'+(a[i]||"—")+'</td><td>Mở từ rubi.local để biết bản đang chạy</td></tr>'}).join("");
   if(up0)up0.innerHTML=nm.map(function(n,i){return '<div class="item"><div class="t">'+n+'<small>Bản mới nhất: '+(a[i]||"—")+'. Bản đang chạy chỉ hiện khi mở từ http://rubi.local</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>'}).join("")});
  if(n0)n0.innerHTML="<b>Chưa kết nối với Rubi.</b> Bạn đang xem bản mẫu: số liệu và nút bấm chưa điều khiển robot. Để điều khiển, nối điện thoại vào cùng Wi-Fi với Rubi rồi mở <b>http://rubi.local</b> hoặc quét mã QR trên màn hình của Rubi."}

@@ -347,6 +347,7 @@ String g_ssid, g_pass;            // mang dang noi / dang thu
 bool g_ota_started = false;
 uint32_t g_upd_ds_den = 0;   // bo man hinh bao dang cap nhat ("U1"), het han sau 60 s neu khong nhac lai
 bool g_upd_ds = false;
+String g_c3_v; uint32_t g_c3_at = 0;   // phien ban bo C3 Zero (den LED) bao qua UART1
 String g_ds_v;                  // phien ban dang chay cua bo man hinh ("V3.0.86" qua UART)
 uint32_t g_ds_at = 0;
 String g_cam_v;                 // phien ban camera (camera tu bao qua /api/cam)
@@ -917,6 +918,7 @@ void webStatus() {
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
                ",\"bat_mv\":" + String((int)g_bat_mv) +
                ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
+               ((g_c3_at != 0 && millis() - g_c3_at < 120000) ? String(",\"c3v\":\"") + g_c3_v + "\"" : String("")) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
                ",\"r\":" + String(A_LA_BANH_TRAI ? g_cmd[1] : g_cmd[0]) +
                ",\"fault\":" + String((g_fault[0] || g_fault[1]) ? "true" : "false") + "}";
@@ -1328,6 +1330,15 @@ void loop() {
         char ch = (char)Serial.read();
         if (ch == '\n' || ch == '\r') { xuLyLenh(line); line = ""; }
         else if (line.length() < 100) line += ch;
+    }
+    while (Serial1.available()) {   // bo C3 Zero: "V<ban>" (phien ban) va "Q" (xin Wi-Fi de tu cap nhat)
+        static String l1;
+        char ch = (char)Serial1.read();
+        if (ch == '\n' || ch == '\r') {
+            if (l1.length() > 1 && l1[0] == 'V' && l1.length() < 20) { g_c3_v = l1.substring(1); g_c3_at = millis() | 1; }
+            else if (l1 == "Q" && g_ssid.length() && WiFi.status() == WL_CONNECTED) Serial1.printf("W%s\t%s\n", g_ssid.c_str(), g_pass.c_str());
+            l1 = "";
+        } else if (l1.length() < 40) l1 += ch;
     }
     while (Serial2.available()) {   // lenh tu bo man hinh
         char ch = (char)Serial2.read();

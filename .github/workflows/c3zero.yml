@@ -9,14 +9,24 @@ on:
       - .github/workflows/c3zero.yml
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Stamp version
+        shell: bash
+        run: |
+          VER="1.0.${{ github.run_number }}"
+          sed -i "s/^const char\* FW_VERSION    = \"[^\"]*\";/const char* FW_VERSION    = \"$VER\";/" c3zero/rubi_c3zero/rubi_c3zero.ino
+          grep -n "FW_VERSION    =" c3zero/rubi_c3zero/rubi_c3zero.ino
+          echo "C3_VERSION=$VER" >> "$GITHUB_ENV"
+
       - uses: arduino/setup-arduino-cli@v2
+
       - name: Build
         shell: bash
         run: |
@@ -28,6 +38,20 @@ jobs:
           arduino-cli lib install "Adafruit NeoPixel"
           arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc --export-binaries --output-dir out c3zero/rubi_c3zero
           ls -la out
+
+      - name: Publish OTA files (branch ota-c3zero)
+        shell: bash
+        run: |
+          mkdir -p /tmp/otapub && cd /tmp/otapub && rm -rf .git
+          cp "$GITHUB_WORKSPACE/out/rubi_c3zero.ino.bin" c3zero.bin
+          MD5=$(md5sum c3zero.bin | cut -d' ' -f1)
+          SIZE=$(stat -c %s c3zero.bin)
+          printf '{"version":"%s","url":"https://raw.githubusercontent.com/%s/ota-c3zero/c3zero.bin","md5":"%s","size":%s}\n' "$C3_VERSION" "${{ github.repository }}" "$MD5" "$SIZE" > manifest.json
+          cat manifest.json; ls -la
+          git init -q && git checkout -q -b ota-c3zero
+          git add . && git -c user.name=rubi-ci -c user.email=ci@rubi.local commit -q -m "C3 Zero OTA $C3_VERSION"
+          git push -q --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" ota-c3zero
+
       - uses: actions/upload-artifact@v4
         with:
           name: rubi-c3zero-firmware
