@@ -841,7 +841,7 @@ void setup() {
     delay(crashed ? 2500 : 800);
 
     textCenter("BLE...", 120, 205, 1, C_DIM);
-    if (!g_safeMode) xTaskCreate(bleTask, "ble", 8192, nullptr, 1, nullptr);
+    if (!g_safeMode) xTaskCreate(bleTask, "ble", 12288, nullptr, 1, nullptr);
     delay(crashed ? 1500 : 0);
     xTaskCreate(irTask, "ir", 2048, nullptr, 2, nullptr);
 
