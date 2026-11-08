@@ -49,7 +49,10 @@ const uint8_t IR_ID       = 0x3C;        // ma cua dong ho (de sac la 0xA5)
 const int  DRIVE_LIMIT    = 60;          // % toc do toi da khi be lai xe tu dong ho
 const uint32_t DIM_MS     = 20000;       // vang tay sau bay nhieu ms thi giam do sang
 const uint32_t MENU_IDLE_MS = 15000;     // khong cham o menu bay nhieu ms thi tu ve mat dong ho
-const uint32_t OFF_MS     = 60000;       // vang tay sau bay nhieu ms thi tat man hinh (cham la sang lai)
+const uint32_t OFF_MS     = 60000;       // (khong dung nua: thay bang man hinh luon hien gio)
+const uint32_t AOD_MS     = 20000;       // vang tay bay nhieu ms o mat dong ho thi chuyen sang man hinh toi chi hien gio
+const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-255): thap de tiet kiem pin
+const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
 const char* FW_VERSION    = "dev";       // GitHub Actions doi thanh 1.0.<so lan build>
 const char* OTA_MANIFEST_URL = "https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/ota-watch/manifest.json";
@@ -75,7 +78,7 @@ volatile bool g_bleConn = false, g_bleAuthed = false, g_otaMode = false, g_bleOf
 volatile int  g_robotPct = -1, g_musicN = 0, g_storyN = 0, g_robotWifi = 0;
 volatile bool g_haveWifi = false;
 String g_wifiSsid, g_wifiPass;
-int g_tzMin = 420;
+int g_tzMin = 540;   // mui gio (phut); Rubi gui mui gio that qua Bluetooth, luu lai trong NVS
 int g_ledMask = 15;                    // den LED tren robot (bit0 nguc, bit1/2 chan bun, bit3 ang-ten); 0 = tat het
 bool g_follow = false;                 // dang phat tin hieu cho robot di theo
 QueueHandle_t g_txQ = nullptr;
@@ -115,7 +118,10 @@ static void xuLyDong(const char* l) {
         if (sscanf(l + 1, "%ld,%d", &ep, &tz) == 2 && ep > 1700000000L) {
             struct timeval tv; tv.tv_sec = ep; tv.tv_usec = 0;
             settimeofday(&tv, nullptr);
-            g_tzMin = tz;
+            if (tz != g_tzMin) {
+                g_tzMin = tz;
+                Preferences pr; pr.begin("watch", false); pr.putInt("tz", tz); pr.end();
+            }
         }
     } else if (l[0] == 'w') {
         String s(l + 1);
@@ -247,10 +253,23 @@ static bool g_touching = false;
 static uint8_t g_miss = 0;
 static uint32_t g_tLast = 0;
 
+static void touchNoSleep() {
+    for (int i = 0; i < 5; i++) {
+        Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0x01);
+        if (Wire.endTransmission() == 0) return;
+        delay(20);
+    }
+}
+
 static void touchPoll() {
     uint32_t now = millis();
     if (now - g_tLast < 12) return;
     g_tLast = now;
+    static uint32_t keepAwakeAt = 0;
+    if (!g_touching && now - keepAwakeAt > 3000) {   // nhac chip cam ung dung tu ngu (ngu roi thi khong doc duoc)
+        keepAwakeAt = now;
+        Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0x01); Wire.endTransmission();
+    }
     int x, y;
     if (touchRaw(x, y)) {
         g_miss = 0;
@@ -437,6 +456,40 @@ static void drawHome() {
     drawHomeTime(true);
 }
 
+// Man hinh luon hien gio (always on): nen den, chi co gio to mau xam va pin, den nen rat toi.
+static bool g_aod = false;
+static void drawAodTime(bool full) {
+    static int lastMin = -2;
+    struct tm tmv;
+    bool ok = getTime(tmv);
+    int cur = ok ? tmv.tm_hour * 60 + tmv.tm_min : -1;
+    if (!full && cur == lastMin) return;
+    lastMin = cur;
+    char b[8];
+    if (ok) snprintf(b, sizeof(b), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+    else strcpy(b, "--:--");
+    gfx->fillRect(20, 85, 200, 60, C_BG);
+    textCenter(b, 120, 112, 6, gfx->color565(200, 200, 210));
+    gfx->fillRect(60, 160, 120, 14, C_BG);
+    int pct = battPct();
+    char p[12];
+    snprintf(p, sizeof(p), "%d%%", pct < 0 ? 0 : pct);
+    textCenter(p, 120, 166, 1, pct <= 20 ? C_BAD : C_DIM);
+}
+static void enterAod() {
+    g_aod = true;
+    g_bright = AOD_BL;
+    gfx->fillScreen(C_BG);
+    drawAodTime(true);
+    setBacklight(AOD_BL);
+}
+static void leaveAod() {
+    g_aod = false;
+    g_bright = 255;
+    drawHome();
+    setBacklight(255);
+}
+
 static void nextFace() {
     g_face = (g_face + 1) % 6;
     Preferences pr;
@@ -540,6 +593,7 @@ static void drawPage() {
 }
 
 static void gotoPage(int p) {
+    if (g_aod) { g_aod = false; g_bright = 255; setBacklight(255); }
     g_page = p;
     g_drvActive = false;
     drawPage();
@@ -610,6 +664,11 @@ static void otaInstall(const String& ssid, const String& pass, bool quiet) {
     t0 = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - t0 < (quiet ? 8000u : 20000u)) delay(200);
     if (WiFi.status() != WL_CONNECTED) { otaFail("Khong noi duoc Wi-Fi", ssid.c_str()); return; }
+    if (time(nullptr) < 1700000000) {   // lay gio tu Internet luon (khong can doi Rubi)
+        configTime(0, 0, "pool.ntp.org", "time.google.com");
+        uint32_t tn = millis();
+        while (time(nullptr) < 1700000000 && millis() - tn < 4000) delay(100);
+    }
 
     if (!quiet) otaMsg("Hoi GitHub...");
     String body;
@@ -843,9 +902,9 @@ void setup() {
     Wire.setClock(400000);
     pinMode(TP_RST, OUTPUT);
     digitalWrite(TP_RST, LOW);  delay(10);
-    digitalWrite(TP_RST, HIGH); delay(60);
+    digitalWrite(TP_RST, HIGH); delay(150);
     pinMode(TP_INT, INPUT);
-    Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0xFF); Wire.endTransmission();   // khong tu ngu
+    touchNoSleep();   // khong tu ngu
 
     gfx->begin();
     C_BG = gfx->color565(0, 0, 0);
@@ -893,6 +952,7 @@ void setup() {
         pr.begin("watch", true);
         g_face = pr.getInt("face", 0);
         g_usedMin = pr.getFloat("used", 0);
+        g_tzMin = pr.getInt("tz", g_tzMin);
         pr.end();
         if (g_face < 0 || g_face > 5) g_face = 0;
     }
@@ -908,15 +968,16 @@ void loop() {
     if (g_tEvent) {
         int ev = g_tEvent;
         g_tEvent = 0;
-        bool sleeping = (g_bright < 255);
+        bool sleeping = g_aod || (g_bright < 255);
         g_lastTouchAt = now;
-        if (sleeping) { g_bright = 255; setBacklight(255); }
+        if (g_aod) leaveAod();                            // cham 1: sang man hinh, hien hinh nen; cham 2: vao menu
+        else if (sleeping) { g_bright = 255; setBacklight(255); }
         if (sleeping && ev == 1) ignoreUntilUp = true;   // cham dau tien luc dang ngu chi de danh thuc
         if (ignoreUntilUp) { if (ev == 3) ignoreUntilUp = false; }
         else onTouch(ev, g_tx0, g_ty0);
     }
     // giu lau tren man hinh chinh: doi mat dong ho
-    if (g_page == P_HOME && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= (g_battHold ? 2000u : 700u)) {
+    if (g_page == P_HOME && !g_aod && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= (g_battHold ? 2000u : 700u)) {
         g_homeSwitched = true;
         if (g_battHold) { g_usedMin = 0; battSave(); drawHomeStatus(); }   // giu lau len bieu tuong pin = da sac day
         else nextFace();
@@ -926,7 +987,7 @@ void loop() {
     static int battN = 0;
     if (now - battAt >= 60000) {
         battAt = now;
-        g_usedMin += (g_bright >= 255) ? 1.0f : (g_bright > 0 ? 0.5f : 0.2f);
+        g_usedMin += (g_bright >= 255) ? 1.0f : (g_bright > 40 ? 0.5f : 0.3f);
         if (++battN % 5 == 0) battSave();
     }
     // gui lenh lai xe lien tuc khi dang keo
@@ -938,7 +999,20 @@ void loop() {
     }
     // cap nhat man hinh chinh moi giay
     static uint32_t homeAt = 0;
-    if (g_page == P_HOME && now - homeAt > 1000) {
+    if (g_page == P_HOME && g_aod && now - homeAt > 1000) {
+        homeAt = now;
+        drawAodTime(false);
+    }
+    // tu doi mat dong ho moi 5 phut (luc dang toi thi lan sang sau se thay mat moi)
+    static uint32_t faceAt = 0;
+    if (now - faceAt > FACE_ROTATE_MS) {
+        if (faceAt != 0) {
+            g_face = (g_face + 1) % 6;
+            if (g_page == P_HOME && !g_aod) drawHome();
+        }
+        faceAt = now;
+    }
+    if (g_page == P_HOME && !g_aod && now - homeAt > 1000) {
         homeAt = now;
         drawHomeTime(false);
         static int lastState = -1;
@@ -953,10 +1027,7 @@ void loop() {
         gotoPage(P_HOME);
     }
     // giam sang / tat man hinh khi khong cham (khong dung o trang lai xe dang keo)
-    if (!g_drvActive && g_page != P_OTA) {
-        uint32_t idle = now - g_lastTouchAt;
-        if (idle > OFF_MS) { if (g_bright != 0) { g_bright = 0; setBacklight(0); } }
-        else if (idle > DIM_MS) { if (g_bright > 40) { g_bright = 40; setBacklight(40); } }
-    }
+    // vang tay 20 giay o mat dong ho: chuyen sang man hinh toi chi hien gio (khong tat han)
+    if (g_page == P_HOME && !g_aod && !g_touching && now - g_lastTouchAt > AOD_MS) enterAod();
     delay(2);
 }
