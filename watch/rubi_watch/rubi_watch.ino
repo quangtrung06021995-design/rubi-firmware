@@ -55,6 +55,8 @@ const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-
 const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
 const char* FW_VERSION    = "dev";       // GitHub Actions doi thanh 1.0.<so lan build>
+const char* DEFAULT_WIFI_SSID = "TP-Link_7FA8";   // Wi-Fi nha, dung khi chua co Wi-Fi tu Rubi
+const char* DEFAULT_WIFI_PASS = "";
 const char* OTA_MANIFEST_URL = "https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/ota-watch/manifest.json";
 
 #define BLE_SVC "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
@@ -936,6 +938,9 @@ void setup() {
         pr.begin("watch", true);
         String ss = pr.getString("ssid", ""), pw = pr.getString("pass", "");
         pr.end();
+        // Chua xin duoc Wi-Fi tu Rubi: dung Wi-Fi nha (khong mat khau). Khi noi Bluetooth voi Rubi, Wi-Fi cua Rubi
+        // duoc luu de va dung tu lan sau.
+        if (ss.length() == 0) { ss = DEFAULT_WIFI_SSID; pw = DEFAULT_WIFI_PASS; }
         if (ss.length() > 0) {
             textCenter("Kiem tra ban moi...", 120, 205, 1, C_DIM);
             otaInstall(ss, pw, true);   // co ban moi thi tu nap va khoi dong lai; khong thi di tiep
