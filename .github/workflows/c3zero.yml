@@ -1,0 +1,34 @@
+name: Build Rubi C3 Zero firmware
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - c3zero/rubi_c3zero/**
+      - .github/workflows/c3zero.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Build
+        shell: bash
+        run: |
+          set -o pipefail
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install "Adafruit NeoPixel"
+          arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc --export-binaries --output-dir out c3zero/rubi_c3zero
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rubi-c3zero-firmware
+          path: out/*.bin

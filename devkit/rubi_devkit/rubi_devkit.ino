@@ -719,6 +719,39 @@ void pinDat(const String& p) {          // p rong = xoa PIN
     g_pin_bad = 0; g_pin_lock_n = 0; g_pin_locked = false;
 }
 
+// ---- Den LED (bo ESP32-C3 Zero tren robot, UART1: TX=GPIO19 -> RX C3 Zero GPIO20, RX=GPIO18 <- TX C3 Zero GPIO21) ----
+uint8_t g_ledMask = 0x0F;      // bit0 nguc, bit1 chan bun trai, bit2 chan bun phai, bit3 hai ang-ten
+uint8_t g_ledColor = 0;        // 0 xanh duong, 1 hong, 2 vang, 3 luc, 4 cau vong
+uint8_t g_ledEff = 0;          // 0 dung yen, 1 nhay cham
+uint32_t g_ledSentAt = 0;
+void bleGui(const String& msg);
+
+void ledGui() { Serial1.printf("L%d,%d,%d\n", g_ledMask, g_ledColor, g_ledEff); g_ledSentAt = millis(); }
+
+void ledLuu() {
+    g_pref.begin("rubi", false);
+    g_pref.putUChar("ledm", g_ledMask);
+    g_pref.putUChar("ledc", g_ledColor);
+    g_pref.end();
+}
+
+void ledNap() {
+    g_pref.begin("rubi", true);
+    g_ledMask = g_pref.getUChar("ledm", 0x0F) & 0x0F;
+    g_ledColor = g_pref.getUChar("ledc", 0);
+    if (g_ledColor > 4) g_ledColor = 0;
+    g_pref.end();
+}
+
+void ledDat(int m, int c, int e) {   // am = giu nguyen
+    if (m >= 0) g_ledMask = m & 0x0F;
+    if (c >= 0 && c <= 4) g_ledColor = c;
+    if (e >= 0 && e <= 1) g_ledEff = e;
+    ledLuu();
+    ledGui();
+    bleGui(String("E") + g_ledMask);
+}
+
 bool webAuth() { return g_pin.length() == 0 || (g_tok.length() > 0 && g_web.arg("t") == g_tok); }
 
 void webTuChoi() {
@@ -828,6 +861,15 @@ void webLenh() {   // /api/lenh?c=<lenh> : chuyen lenh cho bo man hinh (sleep, c
     webJson("{\"ok\":true}");
 }
 
+void webLed() {   // /api/led?m=<0-15>&c=<0-4>&e=<0|1> (thieu tham so nao thi giu nguyen); m: 1 nguc, 2 chan bun trai, 4 chan bun phai, 8 ang-ten
+    if (!webAuth()) { webTuChoi(); return; }
+    int m = g_web.hasArg("m") ? constrain(g_web.arg("m").toInt(), 0, 15) : -1;
+    int c = g_web.hasArg("c") ? constrain(g_web.arg("c").toInt(), 0, 4) : -1;
+    int e = g_web.hasArg("e") ? constrain(g_web.arg("e").toInt(), 0, 1) : -1;
+    if (m >= 0 || c >= 0 || e >= 0) ledDat(m, c, e);
+    webJson(String("{\"ok\":true,\"led\":") + g_ledMask + ",\"lc\":" + g_ledColor + ",\"le\":" + g_ledEff + "}");
+}
+
 void webDance() {   // /api/dance[?t=<ma>] : spin on the spot for ~28 s, /api/stop or any drive command cancels
     if (!webAuth()) { webTuChoi(); return; }
     if (g_pin_thap) { webJson("{\"ok\":false,\"err\":\"pin\"}"); return; }
@@ -874,6 +916,7 @@ void webStatus() {
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
                ",\"bat_mv\":" + String((int)g_bat_mv) +
+               ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
                ",\"r\":" + String(A_LA_BANH_TRAI ? g_cmd[1] : g_cmd[0]) +
                ",\"fault\":" + String((g_fault[0] || g_fault[1]) ? "true" : "false") + "}";
@@ -947,7 +990,7 @@ void bleLenh(const char* m) {
     if (k == 'K') {
         g_bleAuth = (s.substring(1) == WATCH_KEY);
         bleGui(g_bleAuth ? "A1" : "A0");
-        if (g_bleAuth) { bleTrangThai(); bleGioGui(); }
+        if (g_bleAuth) { bleTrangThai(); bleGioGui(); bleGui(String("E") + g_ledMask); }
         return;
     }
     if (!g_bleAuth) return;
@@ -977,6 +1020,9 @@ void bleLenh(const char* m) {
     } else if (k == 'T') {
         int i = s.substring(1).toInt();
         if (i >= 0 && i < g_ty_n) { dungHet(); Serial2.printf("O%s\n", g_ty_id[i].c_str()); }
+    } else if (k == 'E') {
+        int m = s.substring(1).toInt();
+        if (m >= 0 && m <= 15) ledDat(m, -1, -1);
     } else if (k == 'W') {
         if (g_ssid.length()) bleGui(String("w") + g_ssid + "\t" + g_pass);
     } else if (k == 'Q') {
@@ -1055,6 +1101,7 @@ void webBatDau() {
     g_web.on("/api/nhac", HTTP_GET, webNhac);
     g_web.on("/api/cam", HTTP_GET, webCam);
     g_web.on("/api/lenh", HTTP_GET, webLenh);
+    g_web.on("/api/led", HTTP_GET, webLed);
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
     g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });
@@ -1231,6 +1278,8 @@ void setup() {
 
     Serial.begin(115200);
     Serial2.begin(115200, SERIAL_8N1, 16, 17);   // RX=16, TX=17
+    Serial1.begin(115200, SERIAL_8N1, 18, 19);   // sang bo C3 Zero: RX=18, TX=19
+    ledNap();
     analogSetPinAttenuation(PIN_VBAT, ADC_11db);
 
     pinMode(PIN_E1A, INPUT); pinMode(PIN_E1B, INPUT);
@@ -1269,6 +1318,7 @@ void loop() {
     doPin();
     wifiTick();
     bleTick();
+    if (millis() - g_ledSentAt > 2000) ledGui();   // gui lai trang thai den moi 2 giay (C3 Zero moi bat nguon cung nhan duoc)
     if (TU_CAP_NHAT_KHI_BAT && !g_auto_done && g_auto_at != 0 && (int32_t)(millis() - g_auto_at) >= 0) {
         g_auto_done = true;   // chi thu mot lan moi lan bat nguon
         Serial.println("Tu kiem tra ban moi tren GitHub...");

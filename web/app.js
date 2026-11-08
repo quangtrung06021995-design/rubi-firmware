@@ -35,7 +35,11 @@ $("stop2").onclick=function(){stopAll();$("drv").textContent="Đứng yên";toas
 $("estop").onclick=function(){stopAll();$("drv").textContent="Đứng yên";toast("Đã gửi lệnh dừng"+M)};
 document.querySelectorAll(".pad button").forEach(function(b){b.onclick=function(){$("drv").textContent=b.dataset.m==="Dừng"?"Đứng yên":"Đang: "+b.dataset.m+" (mẫu)"}});
 $("spd").oninput=function(){$("spv").textContent=this.value};$("br").oninput=function(){$("brv").textContent=this.value};
-document.querySelectorAll("#leds button").forEach(function(b){b.onclick=function(){document.querySelectorAll("#leds button").forEach(function(x){x.classList.remove("on")});b.classList.add("on");toast("Đổi màu đèn (mẫu)")}});
+document.querySelectorAll("#leds button").forEach(function(b,i){b.onclick=function(){document.querySelectorAll("#leds button").forEach(function(x){x.classList.remove("on")});b.classList.add("on");if(LIVE){api("/api/led?c="+i).then(function(j){toast(j&&j.ok?"Đã đổi màu đèn":"Không đổi được màu đèn")}).catch(function(){toast("Không gọi được Rubi")})}else toast("Đổi màu đèn (mẫu)")}});
+var LB={"l-chest":1,"l-fl":2,"l-fr":4,"l-ant":8};
+function ledMask(){var m=0;for(var k in LB)if($(k).checked)m|=LB[k];return m}
+function ledSend(msg){if(!LIVE)return toast(msg+" (mẫu)");api("/api/led?m="+ledMask()).then(function(j){toast(j&&j.ok?msg:"Không gửi được lệnh đèn")}).catch(function(){toast("Không gọi được Rubi")})}
+function ledSync(){if(!ST||ST.led==null)return;for(var k in LB)$(k).checked=!!(ST.led&LB[k]);est();var b=document.querySelectorAll("#leds button");if(ST.lc!=null&&b[ST.lc]){b.forEach(function(x){x.classList.remove("on")});b[ST.lc].classList.add("on")}}
 document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function(){
  if(LIVE){
   if(b.dataset.g==="Đi ngủ"){lenh("sleep");return}
@@ -48,10 +52,10 @@ document.querySelectorAll("#game .act").forEach(function(b){b.onclick=function()
  document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});b.classList.add("on");$("gst").textContent="Đang chơi: "+b.dataset.g+" (mẫu)";$("state").textContent=b.dataset.g}});
 if($("gstop"))$("gstop").onclick=function(){stopAll();if(LIVE)api("/api/lenh?c=huy").catch(function(){});document.querySelectorAll("#game .act").forEach(function(x){x.classList.remove("on")});$("gst").textContent="Đã dừng.";toast("Đã gửi lệnh dừng"+M)};
 var LC={"l-chest":3,"l-fl":6,"l-fr":6,"l-ant":2};
-function est(){var n=0;for(var k in LC)if($(k).checked)n+=LC[k];var ma=Math.round(n*60*($("br").value/100));$("est").textContent="Đang bật "+n+"/17 đèn, khoảng "+ma+" mA (mẫu).";}
-document.querySelectorAll("[data-l]").forEach(function(c){c.onchange=est});
-$("saver").onclick=function(){document.querySelectorAll("[data-l]").forEach(function(c){c.checked=false});est();toast("Đã tắt hết đèn (mẫu)")};
-$("allon").onclick=function(){document.querySelectorAll("[data-l]").forEach(function(c){c.checked=true});est();toast("Đã bật lại đèn (mẫu)")};
+function est(){var n=0;for(var k in LC)if($(k).checked)n+=LC[k];var ma=Math.round(n*60*($("br").value/100));$("est").textContent="Đang bật "+n+"/17 đèn, khoảng "+ma+" mA"+M+".";}
+document.querySelectorAll("[data-l]").forEach(function(c){c.onchange=function(){est();ledSend(c.checked?"Đã bật cụm đèn":"Đã tắt cụm đèn")}});
+$("saver").onclick=function(){document.querySelectorAll("[data-l]").forEach(function(c){c.checked=false});est();ledSend("Đã tắt hết đèn")};
+$("allon").onclick=function(){document.querySelectorAll("[data-l]").forEach(function(c){c.checked=true});est();ledSend("Đã bật lại đèn")};
 $("br").addEventListener("input",est);est();
 (function(){var joy=$("joy"),k=$("knob"),id=null;
 function set(x,y){var R=joy.clientWidth/2-k.clientWidth/2;var m=Math.hypot(x,y);if(m>1){x/=m;y/=m;m=1}
@@ -138,7 +142,7 @@ function render(){
 function conn(){var c=$("conn"),n=$("demonote");
  if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
  if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Thẻ nhớ hiện số thật. Các mục còn lại (đèn, trò chơi, camera) vẫn là mẫu."}
-function refresh(){return api("/api/status").then(function(j){ST=j}).catch(function(){ST=null}).then(loadLat).then(function(){render();conn()})}
+function refresh(){return api("/api/status").then(function(j){ST=j;ledSync()}).catch(function(){ST=null}).then(loadLat).then(function(){render();conn()})}
 function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"||h==="the-nho"}
 addEventListener("hashchange",function(){if(watching())refresh()});
 setInterval(function(){if(!document.hidden&&watching())refresh()},5000);
