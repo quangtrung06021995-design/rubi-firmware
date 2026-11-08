@@ -103,6 +103,7 @@ static size_t g_inN = 0;
 static void xuLyDong(const char* l) {
     if (l[0] == 'A') {
         g_bleAuthed = (l[1] == '1');
+        if (g_bleAuthed && g_txQ) { char w[32] = "W"; xQueueSend(g_txQ, w, 0); }   // xin Wi-Fi de tu cap nhat
     } else if (l[0] == 'S') {
         int p = -1, m = 0, t = 0, w = 0;
         if (sscanf(l + 1, "%d,%d,%d,%d", &p, &m, &t, &w) == 4) { g_robotPct = p; g_musicN = m; g_storyN = t; g_robotWifi = w; }
@@ -119,7 +120,15 @@ static void xuLyDong(const char* l) {
     } else if (l[0] == 'w') {
         String s(l + 1);
         int k = s.indexOf('\t');
-        if (k > 0) { g_wifiSsid = s.substring(0, k); g_wifiPass = s.substring(k + 1); g_haveWifi = true; }
+        if (k > 0) {
+            g_wifiSsid = s.substring(0, k); g_wifiPass = s.substring(k + 1); g_haveWifi = true;
+            Preferences pr;   // luu Wi-Fi cua Rubi: dong ho tu kiem tra ban moi moi lan khoi dong
+            pr.begin("watch", false);
+            if (pr.getString("ssid", "") != g_wifiSsid || pr.getString("pass", "") != g_wifiPass) {
+                pr.putString("ssid", g_wifiSsid); pr.putString("pass", g_wifiPass);
+            }
+            pr.end();
+        }
     }
 }
 
@@ -565,6 +574,7 @@ static void otaFinish(const char* a, const char* b) {
     ESP.restart();                      // khoi dong lai de Bluetooth chay lai
 }
 
+static void otaInstall(const String& ssid, const String& pass, bool quiet);
 static void otaRun() {
     g_page = P_OTA;
     g_follow = false;
@@ -581,14 +591,27 @@ static void otaRun() {
     g_otaMode = true;                   // tat Bluetooth de du bo nho cho Wi-Fi
     t0 = millis();
     while (!g_bleOff && millis() - t0 < 4000) delay(50);
-    otaMsg("Noi Wi-Fi...", ssid.c_str());
+    otaInstall(ssid, pass, false);
+}
+
+// Tu cap nhat: noi Wi-Fi, hoi GitHub, co ban moi thi tai, nap va khoi dong lai.
+// quiet = true (luc khoi dong): khong co ban moi / loi thi tat Wi-Fi va tra ve, khong khoi dong lai.
+static bool g_otaQuiet = false;
+static void otaFail(const char* a, const char* b) {
+    if (g_otaQuiet) { WiFi.disconnect(true); WiFi.mode(WIFI_OFF); return; }
+    otaFinish(a, b);
+}
+static void otaInstall(const String& ssid, const String& pass, bool quiet) {
+    g_otaQuiet = quiet;
+    uint32_t t0;
+    if (!quiet) otaMsg("Noi Wi-Fi...", ssid.c_str());
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid.c_str(), pass.c_str());
     t0 = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - t0 < 20000) delay(200);
-    if (WiFi.status() != WL_CONNECTED) { otaFinish("Khong noi duoc Wi-Fi", ssid.c_str()); return; }
+    while (WiFi.status() != WL_CONNECTED && millis() - t0 < (quiet ? 8000u : 20000u)) delay(200);
+    if (WiFi.status() != WL_CONNECTED) { otaFail("Khong noi duoc Wi-Fi", ssid.c_str()); return; }
 
-    otaMsg("Hoi GitHub...");
+    if (!quiet) otaMsg("Hoi GitHub...");
     String body;
     {
         WiFiClientSecure cl;
@@ -596,15 +619,24 @@ static void otaRun() {
         HTTPClient http;
         http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
         http.setTimeout(15000);
-        if (!http.begin(cl, OTA_MANIFEST_URL)) { otaFinish("Loi dia chi", ""); return; }
+        if (!http.begin(cl, OTA_MANIFEST_URL)) { otaFail("Loi dia chi", ""); return; }
         int code = http.GET();
-        if (code != 200) { char b[24]; snprintf(b, sizeof(b), "ma %d", code); http.end(); otaFinish("Chua co ban moi", b); return; }
+        if (code != 200) { char b[24]; snprintf(b, sizeof(b), "ma %d", code); http.end(); otaFail("Chua co ban moi", b); return; }
         body = http.getString();
         http.end();
     }
     String ver = jsonGet(body, "version"), url = jsonGet(body, "url"), md5 = jsonGet(body, "md5");
-    if (ver.length() == 0 || url.length() == 0) { otaFinish("Manifest loi", ""); return; }
-    if (ver == FW_VERSION) { otaMsg("Da la ban moi nhat", ver.c_str(), C_OK); delay(3000); ESP.restart(); return; }
+    if (ver.length() == 0 || url.length() == 0) { otaFail("Manifest loi", ""); return; }
+    if (ver == FW_VERSION) {
+        if (quiet) { WiFi.disconnect(true); WiFi.mode(WIFI_OFF); return; }
+        otaMsg("Da la ban moi nhat", ver.c_str(), C_OK); delay(3000); ESP.restart(); return;
+    }
+    if (quiet) {   // co ban moi: hien man hinh cap nhat
+        g_page = P_OTA;
+        setBacklight(255);
+        gfx->fillScreen(C_BG);
+        drawTitle("CAP NHAT");
+    }
 
     otaMsg("Tai ban moi", ver.c_str());
     WiFiClientSecure cl2;
@@ -612,11 +644,11 @@ static void otaRun() {
     HTTPClient h2;
     h2.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     h2.setTimeout(15000);
-    if (!h2.begin(cl2, url)) { otaFinish("Loi dia chi file", ""); return; }
+    if (!h2.begin(cl2, url)) { otaFail("Loi dia chi file", ""); return; }
     int code2 = h2.GET();
     int len = h2.getSize();
-    if (code2 != 200 || len <= 0) { h2.end(); otaFinish("Loi tai file", ""); return; }
-    if (!Update.begin(len)) { h2.end(); otaFinish("Khong du cho nap", Update.errorString()); return; }
+    if (code2 != 200 || len <= 0) { h2.end(); otaFail("Loi tai file", ""); return; }
+    if (!Update.begin(len)) { h2.end(); otaFail("Khong du cho nap", Update.errorString()); return; }
     if (md5.length() == 32) Update.setMD5(md5.c_str());
     WiFiClient* st = h2.getStreamPtr();
     uint8_t buf[1024];
@@ -646,8 +678,8 @@ static void otaRun() {
         }
     }
     h2.end();
-    if (loi || got != len) { Update.abort(); otaFinish("Tai loi, giu ban cu", ""); return; }
-    if (!Update.end(true)) { otaFinish("Nap loi, giu ban cu", Update.errorString()); return; }
+    if (loi || got != len) { Update.abort(); otaFail("Tai loi, giu ban cu", ""); return; }
+    if (!Update.end(true)) { otaFail("Nap loi, giu ban cu", Update.errorString()); return; }
     otaMsg("Xong! Khoi dong lai", ver.c_str(), C_OK);
     delay(1500);
     ESP.restart();
@@ -840,6 +872,17 @@ void setup() {
     setBacklight(255);
     delay(crashed ? 2500 : 800);
 
+    {
+        Preferences pr;
+        pr.begin("watch", true);
+        String ss = pr.getString("ssid", ""), pw = pr.getString("pass", "");
+        pr.end();
+        if (ss.length() > 0) {
+            textCenter("Kiem tra ban moi...", 120, 205, 1, C_DIM);
+            otaInstall(ss, pw, true);   // co ban moi thi tu nap va khoi dong lai; khong thi di tiep
+            gfx->fillRect(0, 196, 240, 18, C_BG);
+        }
+    }
     textCenter("BLE...", 120, 205, 1, C_DIM);
     if (!g_safeMode) xTaskCreate(bleTask, "ble", 12288, nullptr, 1, nullptr);
     delay(crashed ? 1500 : 0);
