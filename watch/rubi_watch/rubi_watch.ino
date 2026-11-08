@@ -240,9 +240,10 @@ static bool touchRaw(int& x, int& y) {
     Wire.read();                       // gesture
     uint8_t n = Wire.read();
     uint8_t xh = Wire.read(), xl = Wire.read(), yh = Wire.read(), yl = Wire.read();
-    if ((n & 0x0F) == 0) return false;
+    if ((n & 0x0F) != 1) return false;          // dung 1 ngon tay; so khac la nhieu/rac
     x = ((xh & 0x0F) << 8) | xl;
     y = ((yh & 0x0F) << 8) | yl;
+    if (x > 239 || y > 239) return false;       // toa do ngoai man hinh = doc rac
     if (TOUCH_SWAP_XY) { int t = x; x = y; y = t; }
     if (TOUCH_FLIP_X) x = 239 - x;
     if (TOUCH_FLIP_Y) y = 239 - y;
@@ -273,7 +274,13 @@ static void touchPoll() {
         Wire.beginTransmission(0x15); Wire.write(0xFE); Wire.write(0x01); Wire.endTransmission();
     }
     int x, y;
-    if (touchRaw(x, y)) {
+    static uint8_t hits = 0;
+    bool t = touchRaw(x, y);
+    if (t && !g_touching) {                      // can 3 lan doc lien tiep (~36 ms) moi tinh la cham that
+        if (++hits < 3) return;
+    }
+    if (!t) hits = 0;
+    if (t) {
         g_miss = 0;
         g_tx0 = x; g_ty0 = y;
         g_tEvent = g_touching ? 2 : 1;
