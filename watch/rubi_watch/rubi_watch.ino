@@ -296,7 +296,7 @@ static void touchPoll() {
 }
 
 // ---------------- Giao dien ----------------
-enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2 };
+enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2, P_PLAY };
 static int g_page = P_HOME;
 static uint32_t g_lastTouchAt = 0;
 static int g_bright = 255;
@@ -541,12 +541,22 @@ static void nextFace() {
 static void drawMenu() {
     gfx->fillScreen(C_BG);
     drawTitle("MENU");
+    drawTile(0, ICON_PLAY, 0);      // Choi cung Rubi (lai xe, nhay, ru ngu, di theo)
+    drawTile(1, ICON_MUSIC, 0);
+    drawTile(2, ICON_STORY, 0);
+    drawTile(3, ICON_LEARN, 0);     // Toan
+    drawTile(4, ICON_ENGLISH, 0);   // Tieng Anh
+    drawTile(5, ICON_SET, 0);
+    drawBack();
+}
+
+static void drawPlay() {
+    gfx->fillScreen(C_BG);
+    drawTitle("CHOI CUNG");
     drawTile(0, ICON_DRIVE, 0);
     drawTile(1, ICON_DANCE, 0);
-    drawTile(2, ICON_MUSIC, 0);
-    drawTile(3, ICON_STORY, 0);
-    drawTile(4, ICON_LEARN, 0);
-    drawTile(5, ICON_SET, 0);
+    drawTile(2, ICON_SLEEP, 0);
+    drawTile(3, ICON_FOLLOW, 0, 0, 0, g_follow);
     drawBack();
 }
 
@@ -557,26 +567,16 @@ static void drawLearn() {
     drawTile(1, ICON_LEARN, 0, 0, '2');
     drawTile(2, ICON_LEARN, 0, 0, '3');
     drawTile(3, ICON_LEARN, 0, 0, '4');
-    drawTile(4, ICON_ENGLISH, 0);
-    drawTile(5, nullptr, C_BAD, 'S');
+    drawTile(4, nullptr, C_BAD, 'S');
     drawBack();
 }
 
 static void drawSet() {
     gfx->fillScreen(C_BG);
     drawTitle("CAI DAT");
-    drawTile(0, ICON_SLEEP, 0);
-    drawTile(1, ICON_FOLLOW, 0, 0, 0, g_follow);
-    drawTile(2, ICON_UPDATE, 0);
-    drawTile(3, nullptr, C_GREY, 'N');
-    drawBack();
-}
-
-static void drawSet2() {
-    gfx->fillScreen(C_BG);
-    drawTitle("CAI DAT 2");
-    drawTile(0, nullptr, g_ledMask ? C_ORANGE : C_GREY, 'B', 0, g_ledMask != 0);   // bat/tat den LED tren robot
-    drawTile(1, nullptr, C_GREY, 'T');                                              // thu cam ung
+    drawTile(0, ICON_UPDATE, 0);
+    drawTile(1, nullptr, g_ledMask ? C_ORANGE : C_GREY, 'B', 0, g_ledMask != 0);   // bat/tat den LED tren robot
+    drawTile(2, nullptr, C_GREY, 'T');                                              // thu cam ung
     drawBack();
 }
 
@@ -624,7 +624,7 @@ static void drawPage() {
         case P_STORY: drawPicker("TRUYEN", "truyen", g_sIdx, g_storyN, C_TEAL); break;
         case P_LEARN: drawLearn(); break;
         case P_SET:   drawSet(); break;
-        case P_SET2:  drawSet2(); break;
+        case P_PLAY:  drawPlay(); break;
         case P_TOUCH: drawTouchTest(); break;
     }
 }
@@ -809,12 +809,22 @@ static void onTouch(int ev, int x, int y) {
             if (ev != 1) break;
             if (backHit(x, y)) { gotoPage(P_HOME); break; }
             switch (tileHit(6, x, y)) {
+                case 0: gotoPage(P_PLAY); break;
+                case 1: gotoPage(P_MUSIC); break;
+                case 2: gotoPage(P_STORY); break;
+                case 3: gotoPage(P_LEARN); break;
+                case 4: sendCmd("Cen"); break;
+                case 5: gotoPage(P_SET); break;
+            }
+            break;
+        case P_PLAY:
+            if (ev != 1) break;
+            if (backHit(x, y)) { gotoPage(P_MENU); break; }
+            switch (tileHit(6, x, y)) {
                 case 0: gotoPage(P_DRIVE); break;
                 case 1: sendCmd("A"); break;
-                case 2: gotoPage(P_MUSIC); break;
-                case 3: gotoPage(P_STORY); break;
-                case 4: gotoPage(P_LEARN); break;
-                case 5: gotoPage(P_SET); break;
+                case 2: sendCmd("Csleep"); break;
+                case 3: g_follow = !g_follow; drawPlay(); break;
             }
             break;
         case P_LEARN:
@@ -825,29 +835,19 @@ static void onTouch(int ev, int x, int y) {
                 case 1: sendCmd("Cm1"); break;
                 case 2: sendCmd("Cm2"); break;
                 case 3: sendCmd("Cm3"); break;
-                case 4: sendCmd("Cen"); break;
-                case 5: sendCmd("Chuy"); break;
+                case 4: sendCmd("Chuy"); break;
             }
             break;
         case P_SET:
             if (ev != 1) break;
             if (backHit(x, y)) { gotoPage(P_MENU); break; }
             switch (tileHit(6, x, y)) {
-                case 0: sendCmd("Csleep"); break;
-                case 1: g_follow = !g_follow; drawSet(); break;
-                case 2: otaRun(); break;
-                case 3: gotoPage(P_SET2); break;
-            }
-            break;
-        case P_SET2:
-            if (ev != 1) break;
-            if (backHit(x, y)) { gotoPage(P_SET); break; }
-            switch (tileHit(6, x, y)) {
-                case 0:
+                case 0: otaRun(); break;
+                case 1:
                     if (g_ledMask) { g_ledMask = 0; sendCmd("E0"); } else { g_ledMask = 15; sendCmd("E15"); }
-                    drawSet2();
+                    drawSet();
                     break;
-                case 1: gotoPage(P_TOUCH); break;
+                case 2: gotoPage(P_TOUCH); break;
             }
             break;
         case P_MUSIC:
@@ -870,7 +870,7 @@ static void onTouch(int ev, int x, int y) {
             break;
         }
         case P_DRIVE: {
-            if (ev == 1 && backHit(x, y)) { sendCmd("X"); gotoPage(P_MENU); break; }
+            if (ev == 1 && backHit(x, y)) { sendCmd("X"); gotoPage(P_PLAY); break; }
             if (ev == 1 && y >= 182 && y < 206 && x >= 70 && x < 170) { sendCmd("X"); break; }
             if (ev == 3) {
                 if (g_drvActive) { g_drvActive = false; sendCmd("L0,0"); sendCmd("X"); drawKnob(true); g_knobX = 120; g_knobY = 100; drawKnob(false); }
@@ -897,7 +897,7 @@ static void onTouch(int ev, int x, int y) {
             break;
         }
         case P_TOUCH:
-            if (ev == 1 && backHit(x, y)) { gotoPage(P_SET2); break; }
+            if (ev == 1 && backHit(x, y)) { gotoPage(P_SET); break; }
             if (ev == 1 || ev == 2) {
                 gfx->fillRect(40, 190, 160, 14, C_BG);
                 gfx->fillCircle(x, y, 6, C_WARN);
