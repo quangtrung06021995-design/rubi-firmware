@@ -58,6 +58,7 @@ const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-
 #define FACE_ANALOG(f) ((f) >= 6)
 const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
+#define TOUCH_DEBUG 1   // 1 = hien toa do cham tren man hinh chinh de chan doan (tat khi xong)
 const char* FW_VERSION    = "dev";       // GitHub Actions doi thanh 1.0.<so lan build>
 const char* DEFAULT_WIFI_SSID = "TP-Link_7FA8";   // Wi-Fi nha, dung khi chua co Wi-Fi tu Rubi
 const char* DEFAULT_WIFI_PASS = "";
@@ -1268,6 +1269,16 @@ void setup() {
     setBacklight(255);
     delay(crashed ? 2500 : 800);
 
+    {   // Chua co gio that (vua reset/mat nguon): dung gio luu lan truoc de man hinh khong trong, se duoc Wi-Fi/Bluetooth chinh lai
+        Preferences pr;
+        pr.begin("watch", true);
+        uint32_t lt = pr.getUInt("lastT", 0);
+        pr.end();
+        if (lt > 1700000000UL && time(nullptr) < 1700000000L) {
+            struct timeval tv = { (time_t)lt, 0 };
+            settimeofday(&tv, nullptr);
+        }
+    }
     {
         Preferences pr;
         pr.begin("watch", true);
@@ -1315,12 +1326,33 @@ void loop() {
         if (sleeping && ev == 1) ignoreUntilUp = true;   // cham dau tien luc dang ngu chi de danh thuc
         if (ignoreUntilUp) { if (ev == 3) ignoreUntilUp = false; }
         else onTouch(ev, g_tx0, g_ty0);
+#if TOUCH_DEBUG
+        if (g_page == P_HOME && !g_aod) {   // tam thoi: hien cham o dau de chan doan
+            char b[24];
+            snprintf(b, sizeof(b), "ev%d %d,%d", ev, g_tx0, g_ty0);
+            gfx->fillRect(78, 44, 84, 10, C_BG);
+            textCenter(b, 120, 49, 1, C_WARN);
+            if (ev != 3) gfx->fillCircle(g_tx0, g_ty0, 4, C_BAD);
+        }
+#endif
     }
     // giu lau tren man hinh chinh: doi mat dong ho
     if (g_page == P_HOME && !g_aod && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= (g_battHold ? 2000u : 700u)) {
         g_homeSwitched = true;
         if (g_battHold) { g_usedMin = 0; battSave(); drawHomeStatus(); }   // giu lau len bieu tuong pin = da sac day
         else nextFace();
+    }
+    // luu gio hien tai moi 5 phut de sau khi reset van con gio gan dung
+    static uint32_t timeSaveAt = 0;
+    if (now - timeSaveAt >= 300000) {
+        timeSaveAt = now;
+        time_t tt = time(nullptr);
+        if (tt > 1700000000L) {
+            Preferences pr;
+            pr.begin("watch", false);
+            pr.putUInt("lastT", (uint32_t)tt);
+            pr.end();
+        }
     }
     // tinh luong pin da dung moi phut (man hinh sang=1, mo=0,5, tat=0,2)
     static uint32_t battAt = 0;
