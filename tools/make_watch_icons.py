@@ -3,9 +3,9 @@
 import re, sys
 from PIL import Image, ImageDraw
 S = 56; K = 8  # supersample
-SRC = {'PLAY':'choi_cung','MUSIC':'nghe_nhac','STORY':'truyen_tranh','LEARN':'toan_lop1','ENGLISH':'song_ngu',
-       'SET':'cai_dat','DRIVE':'lai_xe','DANCE':'nhay_mua','SLEEP':'hat_ru'}
-KEEP = ['FOLLOW','UPDATE']
+SRC = {'MUSIC':'nghe_nhac','STORY':'truyen_tranh','LEARN':'toan_lop1','ENGLISH':'song_ngu',
+       'SET':'cai_dat','DRIVE':'lai_xe','DANCE':'nhay_mua_rb','SLEEP':'ru_ngu_rb','FOLLOW':'di_theo_rb'}
+KEEP = ['UPDATE']
 OUT = 'watch/rubi_watch/icons.h'
 old = open(OUT).read()
 def circle_mask(n):
