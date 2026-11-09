@@ -712,50 +712,77 @@ static void menuLayout(int i, int& cx, int& cy, float& sc) {
     sc = d <= 60 ? 1.0f : 1.0f - 0.55f * (d - 60) / 65.0f;
     if (sc < 0.45f) sc = 0.45f;
 }
+// Ve tung dai 8 dong vao bo dem nho (3,8 KB) roi day ra man hinh: moi diem anh chi ghi 1 lan => khong nhap nhay,
+// va khong can bo nho 115 KB cho ca khung (bo nho trong cua ESP32-C3 khong du khi dang chay BLE + Wi-Fi).
+struct MenuBub { int cx, cy, R, half; uint16_t bgc; const uint16_t* ic; bool follow; uint8_t lut[48]; };
+static uint16_t g_band[240 * 8];
 static void menuDrawTiles() {
-    if (!cvInit()) return;
-    uint16_t* fb = g_cv->getFramebuffer();
-    g_cv->fillScreen(C_BG);
-    uint16_t ring = g_cv->color565(255, 255, 255);
-    int order[M_COUNT]; float scs[M_COUNT]; int cxs[M_COUNT], cys[M_COUNT];
+    const int BH = 8;
+    uint16_t ring = 0xFFFF;
+    MenuBub bub[M_COUNT];
+    int order[M_COUNT]; float scs[M_COUNT];
+    int cxs[M_COUNT], cys[M_COUNT];
     for (int i = 0; i < M_COUNT; i++) { order[i] = i; menuLayout(i, cxs[i], cys[i], scs[i]); }
     for (int a = 1; a < M_COUNT; a++)   // nho ve truoc, to ve sau (to de len tren)
         for (int b = a; b > 0 && scs[order[b - 1]] > scs[order[b]]; b--) { int t = order[b]; order[b] = order[b - 1]; order[b - 1] = t; }
+    int n = 0;
     for (int k = 0; k < M_COUNT; k++) {
         int i = order[k];
-        int cx = cxs[i], cy = cys[i];
-        float sc = scs[i];
-        int R = (int)(MENU_R * sc + 0.5f);
-        if (R < 4 || cx + R < 0 || cx - R >= 240 || cy + R < 0 || cy - R >= 240) continue;
-        const uint16_t* ic = MENU_ICON[i];
-        uint16_t bgc = ic[(ICON_SIZE / 2) * ICON_SIZE + 2];   // mau nen cua chinh icon do
-        int half = (int)(23 * sc + 0.5f);
-        int lut[64];
-        for (int d = 0; d < 2 * half && d < 64; d++) lut[d] = (d * ICON_SIZE) / (2 * half);
-        int R2 = R * R, Ri2 = (R - 2) * (R - 2);
-        for (int y = cy - R; y <= cy + R; y++) {
-            if (y < 0 || y >= 240) continue;
-            int dy = y - cy;
-            for (int x = cx - R; x <= cx + R; x++) {
-                if (x < 0 || x >= 240) continue;
-                int dx = x - cx;
-                int d2 = dx * dx + dy * dy;
-                if (d2 > R2) continue;
-                uint16_t col;
-                if (d2 >= Ri2) col = ring;
-                else if (dx >= -half && dx < half && dy >= -half && dy < half) col = ic[lut[dy + half] * ICON_SIZE + lut[dx + half]];
-                else col = bgc;
-                fb[y * 240 + x] = col;
+        MenuBub& m = bub[n];
+        m.cx = cxs[i]; m.cy = cys[i];
+        m.R = (int)(MENU_R * scs[i] + 0.5f);
+        if (m.R < 4 || m.cx + m.R + 3 < 0 || m.cx - m.R - 3 >= 240 || m.cy + m.R + 3 < 0 || m.cy - m.R - 3 >= 240) continue;
+        m.ic = MENU_ICON[i];
+        m.bgc = m.ic[(ICON_SIZE / 2) * ICON_SIZE + 2];   // mau nen cua chinh icon do
+        m.half = (int)(23 * scs[i] + 0.5f);
+        if (m.half > 23) m.half = 23;
+        for (int d = 0; d < 2 * m.half; d++) m.lut[d] = (uint8_t)((d * ICON_SIZE) / (2 * m.half));
+        m.follow = (i == M_FOLLOW && g_follow);
+        n++;
+    }
+    for (int y0 = 0; y0 < 240; y0 += BH) {
+        for (int j = 0; j < 240 * BH; j++) g_band[j] = C_BG;
+        for (int k = 0; k < n; k++) {
+            const MenuBub& m = bub[k];
+            int R = m.R, ro = m.follow ? R + 3 : R;
+            if (y0 + BH - 1 < m.cy - ro || y0 > m.cy + ro) continue;
+            int R2 = R * R, Ri2 = (R - 2) * (R - 2), Ro2 = ro * ro, Rg2 = (R + 1) * (R + 1);
+            for (int r = 0; r < BH; r++) {
+                int y = y0 + r, dy = y - m.cy;
+                if (dy < -ro || dy > ro) continue;
+                uint16_t* row = g_band + r * 240;
+                int x0 = m.cx - ro, x1 = m.cx + ro;
+                if (x0 < 0) x0 = 0;
+                if (x1 > 239) x1 = 239;
+                for (int x = x0; x <= x1; x++) {
+                    int dx = x - m.cx;
+                    int d2 = dx * dx + dy * dy;
+                    if (d2 > Ro2) continue;
+                    if (d2 > R2) { if (m.follow && d2 >= Rg2) row[x] = C_OK; continue; }
+                    uint16_t col;
+                    if (d2 >= Ri2) col = ring;
+                    else if (dx >= -m.half && dx < m.half && dy >= -m.half && dy < m.half) col = m.ic[m.lut[dy + m.half] * ICON_SIZE + m.lut[dx + m.half]];
+                    else col = m.bgc;
+                    row[x] = col;
+                }
             }
         }
-        if (i == M_FOLLOW && g_follow) g_cv->drawCircle(cx, cy, R + 2, C_OK);
+        if (y0 + BH > 208) {   // nut quay lai (tron xam + dau <)
+            for (int r = 0; r < BH; r++) {
+                int y = y0 + r, dy = y - 224;
+                if (dy < -13 || dy > 13) continue;
+                uint16_t* row = g_band + r * 240;
+                for (int x = 107; x <= 133; x++) {
+                    int dx = x - 120;
+                    if (dx * dx + dy * dy > 169) continue;
+                    int ax = x - 114, ady = dy < 0 ? -dy : dy;
+                    bool arrow = ady <= 7 && ax - ady >= -1 && ax - ady <= 1;
+                    row[x] = arrow ? C_TXT : C_GREY;
+                }
+            }
+        }
+        gfx->draw16bitRGBBitmap(0, y0, g_band, 240, BH);
     }
-    g_cv->fillCircle(120, 224, 13, C_GREY);   // nut quay lai
-    g_cv->setTextSize(2);
-    g_cv->setTextColor(C_TXT);
-    g_cv->setCursor(114, 217);
-    g_cv->print("<");
-    g_cv->flush();
 }
 static void drawMenu() {
     menuDrawTiles();
