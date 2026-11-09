@@ -36,7 +36,8 @@ jobs:
           arduino-cli config init --overwrite 2>&1 | tee devkit-build.log
           arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json 2>&1 | tee -a devkit-build.log
           arduino-cli core update-index 2>&1 | tee -a devkit-build.log
-          arduino-cli core install esp32:esp32 2>&1 | tee -a devkit-build.log
+          for i in 1 2 3 4 5 6 7 8; do arduino-cli core install esp32:esp32 2>&1 | tee -a devkit-build.log && break; echo "core install failed, retry $i"; sleep 60; done
+          arduino-cli core list | grep -q "esp32:esp32" || exit 1
           arduino-cli lib install "NimBLE-Arduino@1.4.3" 2>&1 | tee -a devkit-build.log
           arduino-cli compile --fqbn esp32:esp32:esp32:PartitionScheme=min_spiffs --output-dir out devkit/rubi_devkit 2>&1 | tee -a devkit-build.log
           ls -la out
