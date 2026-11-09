@@ -678,39 +678,97 @@ static void nextFace() {
     drawHome();
 }
 
-// ---- Menu dang luoi cuon doc (2 cot), keo ngon tay de cuon ----
+// ---- Menu dang luoi tron (tong ong) kieu Apple Watch: keo ngon tay de truot, icon o giua to, ra mep nho dan ----
+// Ve ca khung vao bo nho (canvas) roi day ra man hinh 1 lan => khong nhap nhay khi vuot.
 enum { M_MUSIC, M_STORY, M_MATH, M_ENGLISH, M_DRIVE, M_DANCE, M_SLEEP, M_FOLLOW, M_LED, M_SET, M_COUNT };
 static const uint16_t* const MENU_ICON[M_COUNT] = { ICON_MUSIC, ICON_STORY, ICON_LEARN, ICON_ENGLISH, ICON_DRIVE, ICON_DANCE, ICON_SLEEP, ICON_FOLLOW, ICON_LED, ICON_SET };
-static int g_menuScroll = 0;
-static const int MENU_TOP = 36, MENU_BOT = 206, MENU_ROWS = (M_COUNT + 1) / 2, MENU_PITCH = 62;
-static int menuMaxScroll() { int m = 6 + MENU_ROWS * MENU_PITCH - (MENU_BOT - MENU_TOP); return m > 0 ? m : 0; }
-static void menuTileXY(int i, int& x, int& y) { x = (i % 2) ? 132 : 52; y = MENU_TOP + 4 + (i / 2) * MENU_PITCH - g_menuScroll; }
+// vi tri tam moi icon (px, py) so voi tam luoi; hang le lech nua o => hinh tong ong
+static const int16_t MENU_POS[M_COUNT][2] = {
+    {0, 0},      // M_MUSIC (o giua)
+    {64, 0},     // M_STORY
+    {32, 55},    // M_MATH
+    {-32, 55},   // M_ENGLISH
+    {-64, 0},    // M_DRIVE
+    {-32, -55},  // M_DANCE
+    {0, 110},    // M_SLEEP
+    {32, -55},   // M_FOLLOW
+    {96, -55},   // M_LED
+    {96, 55},    // M_SET
+};
+static int g_mox = 0, g_moy = 0;   // do lech luoi do ngon tay keo
+static const int MENU_R = 30;      // ban kinh bong tron khi o giua
+static void menuClampOff(int& ox, int& oy) {
+    if (ox < -96) ox = -96;
+    if (ox > 64) ox = 64;
+    if (oy < -110) oy = -110;
+    if (oy > 55) oy = 55;
+}
+static void menuLayout(int i, int& cx, int& cy, float& sc) {
+    cx = 120 + MENU_POS[i][0] + g_mox;
+    cy = 120 + MENU_POS[i][1] + g_moy;
+    float dx = cx - 120, dy = cy - 120;
+    float d = sqrtf(dx * dx + dy * dy);
+    sc = d <= 60 ? 1.0f : 1.0f - 0.55f * (d - 60) / 65.0f;
+    if (sc < 0.45f) sc = 0.45f;
+}
 static void menuDrawTiles() {
-    gfx->fillRect(0, MENU_TOP, 240, MENU_BOT - MENU_TOP, C_BG);
-    for (int i = 0; i < M_COUNT; i++) {
-        int x, y; menuTileXY(i, x, y);
-        if (y + ICON_SIZE <= MENU_TOP || y >= MENU_BOT) continue;
-        for (int r = 0; r < ICON_SIZE; r++) {
-            int yy = y + r;
-            if (yy < MENU_TOP || yy >= MENU_BOT) continue;
-            gfx->draw16bitRGBBitmap(x, yy, (uint16_t*)(MENU_ICON[i] + r * ICON_SIZE), ICON_SIZE, 1);
+    if (!cvInit()) return;
+    uint16_t* fb = g_cv->getFramebuffer();
+    g_cv->fillScreen(C_BG);
+    uint16_t ring = g_cv->color565(255, 255, 255);
+    int order[M_COUNT]; float scs[M_COUNT]; int cxs[M_COUNT], cys[M_COUNT];
+    for (int i = 0; i < M_COUNT; i++) { order[i] = i; menuLayout(i, cxs[i], cys[i], scs[i]); }
+    for (int a = 1; a < M_COUNT; a++)   // nho ve truoc, to ve sau (to de len tren)
+        for (int b = a; b > 0 && scs[order[b - 1]] > scs[order[b]]; b--) { int t = order[b]; order[b] = order[b - 1]; order[b - 1] = t; }
+    for (int k = 0; k < M_COUNT; k++) {
+        int i = order[k];
+        int cx = cxs[i], cy = cys[i];
+        float sc = scs[i];
+        int R = (int)(MENU_R * sc + 0.5f);
+        if (R < 4 || cx + R < 0 || cx - R >= 240 || cy + R < 0 || cy - R >= 240) continue;
+        const uint16_t* ic = MENU_ICON[i];
+        uint16_t bgc = ic[(ICON_SIZE / 2) * ICON_SIZE + 2];   // mau nen cua chinh icon do
+        int half = (int)(23 * sc + 0.5f);
+        int lut[64];
+        for (int d = 0; d < 2 * half && d < 64; d++) lut[d] = (d * ICON_SIZE) / (2 * half);
+        int R2 = R * R, Ri2 = (R - 2) * (R - 2);
+        for (int y = cy - R; y <= cy + R; y++) {
+            if (y < 0 || y >= 240) continue;
+            int dy = y - cy;
+            for (int x = cx - R; x <= cx + R; x++) {
+                if (x < 0 || x >= 240) continue;
+                int dx = x - cx;
+                int d2 = dx * dx + dy * dy;
+                if (d2 > R2) continue;
+                uint16_t col;
+                if (d2 >= Ri2) col = ring;
+                else if (dx >= -half && dx < half && dy >= -half && dy < half) col = ic[lut[dy + half] * ICON_SIZE + lut[dx + half]];
+                else col = bgc;
+                fb[y * 240 + x] = col;
+            }
         }
-        if (i == M_FOLLOW && g_follow) gfx->drawRoundRect(x - 2, y - 2, ICON_SIZE + 4, ICON_SIZE + 4, 12, C_OK);
+        if (i == M_FOLLOW && g_follow) g_cv->drawCircle(cx, cy, R + 2, C_OK);
     }
+    g_cv->fillCircle(120, 224, 13, C_GREY);   // nut quay lai
+    g_cv->setTextSize(2);
+    g_cv->setTextColor(C_TXT);
+    g_cv->setCursor(114, 217);
+    g_cv->print("<");
+    g_cv->flush();
 }
 static void drawMenu() {
-    gfx->fillScreen(C_BG);
-    drawTitle("MENU");
     menuDrawTiles();
-    drawBack();
 }
 static int menuHit(int px, int py) {
+    int best = -1; float bd = 1e9f;
     for (int i = 0; i < M_COUNT; i++) {
-        int x, y; menuTileXY(i, x, y);
-        if (py < MENU_TOP || py >= MENU_BOT) continue;
-        if (px >= x - 10 && px < x + ICON_SIZE + 10 && py >= y - 2 && py < y + ICON_SIZE + 2) return i;
+        int cx, cy; float sc;
+        menuLayout(i, cx, cy, sc);
+        float dx = px - cx, dy = py - cy;
+        float d = sqrtf(dx * dx + dy * dy);
+        if (d <= MENU_R * sc + 6 && d < bd) { bd = d; best = i; }
     }
-    return -1;
+    return best;
 }
 
 static const uint8_t LED_RGB[5][3] = { {40,110,255}, {255,70,160}, {255,210,0}, {40,210,70}, {255,255,255} };
@@ -969,29 +1027,30 @@ static void onTouch(int ev, int x, int y) {
             }
             if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); }
             else if (ev == 3 && g_homeDownAt != 0) {
-                if (!g_homeSwitched) { g_menuScroll = 0; gotoPage(P_MENU); }   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
+                if (!g_homeSwitched) { g_mox = 0; g_moy = 0; gotoPage(P_MENU); }   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
                 g_homeDownAt = 0;
                 g_homeSwitched = false;
             }
             break;
         case P_MENU: {
-            static int downX, downY, startScroll; static bool moved, tracking; static uint32_t lastDraw;
+            static int downX, downY, startX, startY; static bool moved, tracking; static uint32_t lastDraw;
             if (ev == 1) {
                 if (backHit(x, y)) { tracking = false; gotoPage(P_HOME); break; }
-                downX = x; downY = y; startScroll = g_menuScroll; moved = false; tracking = true; lastDraw = 0;
+                downX = x; downY = y; startX = g_mox; startY = g_moy; moved = false; tracking = true; lastDraw = 0;
                 break;
             }
             if (!tracking) break;
-            if (ev == 2) {
-                int dy = y - downY;
-                if (!moved && abs(dy) > 8) moved = true;
+            if (ev == 2 || ev == 3) {
+                int dx = x - downX, dy = y - downY;
+                if (!moved && (abs(dx) > 8 || abs(dy) > 8)) moved = true;
                 if (moved) {
-                    int ns = startScroll - dy;
-                    if (ns < 0) ns = 0;
-                    if (ns > menuMaxScroll()) ns = menuMaxScroll();
-                    if (ns != g_menuScroll && millis() - lastDraw > 30) { g_menuScroll = ns; menuDrawTiles(); lastDraw = millis(); }
+                    int nx = startX + dx, ny = startY + dy;
+                    menuClampOff(nx, ny);
+                    if ((nx != g_mox || ny != g_moy) && (ev == 3 || millis() - lastDraw > 40)) {
+                        g_mox = nx; g_moy = ny; menuDrawTiles(); lastDraw = millis();
+                    }
                 }
-                break;
+                if (ev == 2) break;
             }
             if (ev == 3) {
                 tracking = false;
