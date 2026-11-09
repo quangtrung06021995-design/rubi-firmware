@@ -94,6 +94,9 @@ public:
         Map(tx, ty, x1, y1);
         int dy = y0 - y1, dx = x1 - x0;
         if (dx < 0) dx = -dx;
+        // A drag across the icon menu is not a tap: without this the finger lifting over an icon opened it (and the
+        // screen flashed between menus while swiping).
+        if (screen_ == Screen::kMain && (dx > 30 || dy > 30 || -dy > 30) && !(y0 >= 205 && dy >= 40 && dx <= dy)) return true;
         if (y0 < 205 || dy < 40 || dx > dy) return false;
         ESP_LOGI("RubiTouch", "swipe up %d,%d -> %d,%d (screen %d)", x0, y0, x1, y1, (int)screen_);
         std::lock_guard<std::recursive_mutex> lk(mutex_);
