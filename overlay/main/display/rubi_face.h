@@ -212,25 +212,7 @@ public:
     // Touch area of the menu button (screen coordinates, 320x240 landscape); a bit bigger than the drawn button.
     static bool InMenuButton(int x, int y) { return x >= 258 && y >= 178; }
 
-    // First menu page: 8 round icons in a honeycomb (rows of 3 - 2 - 3), like the Apple Watch app grid.
-    static constexpr int kHoneyD = 68;   // bubble diameter
-    static void HoneyCenter(int i, int& cx, int& cy) {
-        static const int8_t kRow[8] = {0, 0, 0, 1, 1, 2, 2, 2};
-        static const int16_t kX[8] = {80, 160, 240, 120, 200, 80, 160, 240};
-        cx = kX[i];
-        cy = 56 + kRow[i] * 64;
-    }
-
     static int TileAt(int x, int y, int count) {
-        if (count == 8) {   // honeycomb: the nearest bubble centre, within a finger-friendly radius
-            for (int i = 0; i < 8; i++) {
-                int cx, cy;
-                HoneyCenter(i, cx, cy);
-                int dx = x - cx, dy = y - cy;
-                if (dx * dx + dy * dy <= 40 * 40) return i;
-            }
-            return -1;
-        }
         for (int i = 0; i < count && i < kMaxTiles; i++) {
             if (count > 6) {   // 4 columns when there are more than 6 tiles
                 int x0 = 4 + (i % 4) * 78, y0 = 6 + (i / 4) * 118;
@@ -324,14 +306,10 @@ public:
             lv_obj_clear_flag(bg_img_, LV_OBJ_FLAG_HIDDEN);   // sky + hills picture (320x240) over the gradient
         }
         for (int i = 0; i < kMaxTiles; i++) {
-            lv_obj_set_style_border_width(tile_box_[i], 0, 0);
-            lv_obj_set_style_clip_corner(tile_box_[i], false, 0);
             if (sky) {
-                int hx, hy;
-                HoneyCenter(i, hx, hy);
-                lv_obj_set_size(tile_box_[i], kHoneyD, kHoneyD);
-                lv_obj_set_pos(tile_box_[i], hx - kHoneyD / 2, hy - kHoneyD / 2);
-                lv_image_set_scale(tile_img_[i], 232);   // icons are stored at 72 px, drawn at ~65 px inside the round bubble
+                lv_obj_set_size(tile_box_[i], 76, 92);
+                lv_obj_set_pos(tile_box_[i], 2 + (i % 4) * 80, 10 + (i / 4) * 102);
+                lv_image_set_scale(tile_img_[i], 256);   // the first-page icons are stored at 72 px
             } else if (wide) {   // 4 columns, icons drawn at 82 %
                 lv_obj_set_size(tile_box_[i], 76, 112);
                 lv_obj_set_pos(tile_box_[i], 4 + (i % 4) * 78, 6 + (i / 4) * 118);
@@ -348,11 +326,7 @@ public:
                     if (sky) {   // pale card (0xDDEFFC, same colour as the icon background)
                         lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_COVER, 0);
                         lv_obj_set_style_bg_color(tile_box_[i], lv_color_hex(0xDDEFFC), 0);
-                        lv_obj_set_style_radius(tile_box_[i], LV_RADIUS_CIRCLE, 0);
-                        lv_obj_set_style_clip_corner(tile_box_[i], true, 0);   // the square icon picture is cut to the circle
-                        lv_obj_set_style_border_width(tile_box_[i], 3, 0);
-                        lv_obj_set_style_border_color(tile_box_[i], lv_color_white(), 0);
-                        lv_obj_set_style_border_opa(tile_box_[i], LV_OPA_COVER, 0);
+                        lv_obj_set_style_radius(tile_box_[i], 18, 0);
                         lv_obj_align(tile_img_[i], LV_ALIGN_CENTER, 0, 0);
                     } else {
                     lv_obj_set_style_bg_opa(tile_box_[i], LV_OPA_TRANSP, 0);
