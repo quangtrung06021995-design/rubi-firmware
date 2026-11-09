@@ -696,6 +696,7 @@ static const int16_t MENU_POS[M_COUNT][2] = {
     {96, 55},    // M_SET
 };
 static int g_mox = 0, g_moy = 0;   // do lech luoi do ngon tay keo
+static uint32_t g_menuOpenAt = 0;  // luc vua mo menu
 static const int MENU_R = 30;      // ban kinh bong tron khi o giua
 static void menuClampOff(int& ox, int& oy) {
     if (ox < -96) ox = -96;
@@ -861,6 +862,7 @@ static void gotoPage(int p) {
     g_page = p;
     g_drvActive = false;
     drawPage();
+    if (p == P_MENU) g_menuOpenAt = millis();
 }
 
 // ---------------- Cap nhat OTA ----------------
@@ -1033,28 +1035,36 @@ static void onTouch(int ev, int x, int y) {
             }
             break;
         case P_MENU: {
-            static int downX, downY, startX, startY; static bool moved, tracking; static uint32_t lastDraw;
+            static int downX, downY, startX, startY, pnx, pny; static bool moved, tracking; static uint32_t lastDraw, pressAt;
             if (ev == 1) {
                 if (backHit(x, y)) { tracking = false; gotoPage(P_HOME); break; }
-                downX = x; downY = y; startX = g_mox; startY = g_moy; moved = false; tracking = true; lastDraw = 0;
+                // 0,4 giay dau sau khi mo menu bo qua cham: tranh cham doi/nay tay tu man hinh chinh roi trung icon o giua
+                if (millis() - g_menuOpenAt < 400) { tracking = false; break; }
+                downX = x; downY = y; startX = g_mox; startY = g_moy; pnx = g_mox; pny = g_moy;
+                moved = false; tracking = true; lastDraw = 0; pressAt = millis();
                 break;
             }
             if (!tracking) break;
-            if (ev == 2 || ev == 3) {
+            if (ev == 2) {   // chi ev 2 moi tinh la keo (luc nha tay toa do hay troi)
                 int dx = x - downX, dy = y - downY;
                 if (!moved && (abs(dx) > 8 || abs(dy) > 8)) moved = true;
                 if (moved) {
                     int nx = startX + dx, ny = startY + dy;
                     menuClampOff(nx, ny);
-                    if ((nx != g_mox || ny != g_moy) && (ev == 3 || millis() - lastDraw > 40)) {
+                    pnx = nx; pny = ny;
+                    if ((nx != g_mox || ny != g_moy) && millis() - lastDraw > 40) {
                         g_mox = nx; g_moy = ny; menuDrawTiles(); lastDraw = millis();
                     }
                 }
-                if (ev == 2) break;
+                break;
             }
             if (ev == 3) {
                 tracking = false;
-                if (moved) break;
+                if (moved) {
+                    if (pnx != g_mox || pny != g_moy) { g_mox = pnx; g_moy = pny; menuDrawTiles(); }
+                    break;
+                }
+                if (millis() - pressAt < 40) break;   // cham qua ngan = nhieu/cham ao
                 switch (menuHit(downX, downY)) {
                     case M_MUSIC: gotoPage(P_MUSIC); break;
                     case M_STORY: gotoPage(P_STORY); break;
