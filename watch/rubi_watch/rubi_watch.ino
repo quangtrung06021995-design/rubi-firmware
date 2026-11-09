@@ -315,6 +315,7 @@ static uint32_t g_drvSent = 0;
 static uint32_t g_homeDownAt = 0;
 static bool g_homeSwitched = false;
 static bool g_battHold = false;
+static int g_homeX0 = 0, g_homeY0 = 0;
 
 // Pin dong ho: uoc luong theo thoi gian da chay ke tu moc "pin day" (khong do duoc dien ap that)
 const float BATT_FULL_MIN = 90.0f;        // so phut (quy doi) chay duoc voi 1 lan sac day (pin 140 mAh) - chinh sau khi do thuc te
@@ -672,6 +673,16 @@ static int nextFaceIdx() {
     }
     if (FACE_ANALOG(g_face)) { int f = g_nextD; g_nextD = (g_nextD + 1) % 6; return f; }
     int f = 6 + g_nextA; g_nextA = (g_nextA + 1) % (NFACE - 6); return f;
+}
+
+static void prevFace() {   // vuot sang phai: ve mat truoc (chi xoay vong 6 mat so khi khong co mat kim)
+    if (!g_cv) g_face = (g_face <= 0 || g_face > 5) ? 5 : g_face - 1;
+    else g_face = nextFaceIdx();
+    Preferences pr;
+    pr.begin("watch", false);
+    pr.putInt("face", g_face);
+    pr.end();
+    drawHome();
 }
 
 static void nextFace() {
@@ -1060,7 +1071,15 @@ static void onTouch(int ev, int x, int y) {
                 g_homeDownAt = 0;
                 break;
             }
-            if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); }
+            if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); g_homeX0 = x; g_homeY0 = y; }
+            else if (ev == 2 && g_homeDownAt != 0 && !g_homeSwitched) {
+                // vuot ngang tren mat dong ho: doi mat (trai = mat ke tiep, phai = mat truoc); khong mo menu
+                int dx = x - g_homeX0, dy = y - g_homeY0;
+                if (abs(dx) > 40 && abs(dx) > 2 * abs(dy)) {
+                    g_homeSwitched = true;
+                    if (dx < 0) nextFace(); else prevFace();
+                }
+            }
             else if (ev == 3 && g_homeDownAt != 0) {
                 if (!g_homeSwitched) { g_mox = 0; g_moy = 0; gotoPage(P_MENU); }   // cham (nhanh hay cham giu deu) = mo menu; mat dong ho tu doi moi 5 phut; chi giu 2 giay o bieu tuong pin la khong mo menu
                 g_homeDownAt = 0;
