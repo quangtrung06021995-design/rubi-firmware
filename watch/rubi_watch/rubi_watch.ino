@@ -53,6 +53,7 @@ const uint32_t MENU_IDLE_MS = 15000;     // khong cham o menu bay nhieu ms thi t
 const uint32_t OFF_MS     = 60000;       // (khong dung nua: thay bang man hinh luon hien gio)
 const uint32_t AOD_MS     = 20000;       // vang tay bay nhieu ms o mat dong ho thi chuyen sang man hinh toi chi hien gio
 const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-255): thap de tiet kiem pin
+#define NFACE 7                          // 6 mat anh + 1 mat kim ve bang code
 const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
 const char* FW_VERSION    = "dev";       // GitHub Actions doi thanh 1.0.<so lan build>
@@ -428,19 +429,20 @@ static uint16_t navyColor() { return gfx->color565(20, 30, 90); }
 
 // Hai nut am luong tron tren mat dong ho (icon ve tay), goc tren trai/phai o gio
 static const int VOL_CY = 84, VOL_LX = 33, VOL_RX = 207;
-static void drawVolIcon(const uint16_t* ic, int cx) {
+static void drawVolIcon(const uint16_t* ic, int cx, Arduino_GFX* t = nullptr) {
+    if (!t) t = gfx;
     int R = VOL_SIZE / 2;
     for (int dy = 0; dy < VOL_SIZE; dy++) {
         float d = dy + 0.5f - R;
         int hw = (int)sqrtf((float)(R * R) - d * d);
         int off = R - hw;
         if (hw <= 0) continue;
-        gfx->draw16bitRGBBitmap(cx - hw, VOL_CY - R + dy, (uint16_t*)(ic + dy * VOL_SIZE + off), hw * 2, 1);
+        t->draw16bitRGBBitmap(cx - hw, VOL_CY - R + dy, (uint16_t*)(ic + dy * VOL_SIZE + off), hw * 2, 1);
     }
 }
-static void drawVolBtns() {
-    drawVolIcon(VOL_DOWN, VOL_LX);
-    drawVolIcon(VOL_UP, VOL_RX);
+static void drawVolBtns(Arduino_GFX* t = nullptr) {
+    drawVolIcon(VOL_DOWN, VOL_LX, t);
+    drawVolIcon(VOL_UP, VOL_RX, t);
 }
 // -1 = giam, +1 = tang, 0 = khong trung nut
 static int volHit(int x, int y) {
@@ -451,6 +453,7 @@ static int volHit(int x, int y) {
 }
 
 static void drawHomeStatus() {
+    if (g_face == NFACE - 1) return;   // mat kim tu ve trang thai trong khung hinh
     uint16_t pc = pillColor();
     gfx->fillRect(44, 141, 152, 13, pc);
     {   // bieu tuong pin dong ho (4 vach), do khi con <= 20%
@@ -478,7 +481,89 @@ static void drawHomeStatus() {
     }
 }
 
+static void drawHomeTime(bool full);
+static void drawHome();
+
+// ---- Mat dong ho kim (ve bang code, khung hinh nam trong bo nho roi day ra man hinh moi giay) ----
+static Arduino_Canvas* g_cv = nullptr;
+static bool cvInit() {
+    if (g_cv) return true;
+    Arduino_Canvas* c = new Arduino_Canvas(240, 240, (Arduino_G*)gfx);
+    if (!c->begin(GFX_SKIP_OUTPUT_BEGIN)) { delete c; return false; }
+    g_cv = c;
+    return true;
+}
+static void cvThick(int x0, int y0, int x1, int y1, int w, uint16_t col) {
+    float dx = x1 - x0, dy = y1 - y0, L = sqrtf(dx * dx + dy * dy);
+    if (L < 1) return;
+    float nx = -dy / L * w / 2.0f, ny = dx / L * w / 2.0f;
+    int ax = x0 + nx, ay = y0 + ny, bx = x0 - nx, by = y0 - ny, cx2 = x1 - nx, cy2 = y1 - ny, dx2 = x1 + nx, dy2 = y1 + ny;
+    g_cv->fillTriangle(ax, ay, bx, by, cx2, cy2, col);
+    g_cv->fillTriangle(ax, ay, cx2, cy2, dx2, dy2, col);
+    g_cv->fillCircle(x1, y1, w / 2, col);
+}
+static void cvHand(float deg, float len, float tail, int w, uint16_t col, uint16_t edge) {
+    float r = deg * 0.0174533f, sx = sinf(r), cy = -cosf(r);
+    int x1 = 120 + (int)(len * sx), y1 = 120 + (int)(len * cy);
+    int x0 = 120 - (int)(tail * sx), y0 = 120 - (int)(tail * cy);
+    if (edge) cvThick(x0, y0, x1, y1, w + 4, edge);
+    cvThick(x0, y0, x1, y1, w, col);
+}
+static void cvNum(const char* t, int cx, int cy, uint16_t col) {
+    int16_t bx, by; uint16_t bw, bh;
+    g_cv->setTextSize(3);
+    g_cv->getTextBounds(t, 0, 0, &bx, &by, &bw, &bh);
+    g_cv->setTextColor(col);
+    g_cv->setCursor(cx - bw / 2 - bx, cy - bh / 2 - by);
+    g_cv->print(t);
+}
+static void analogFrame(bool full) {
+    static int lastSec = -1;
+    struct tm tmv;
+    bool ok = getTime(tmv);
+    int sec = ok ? tmv.tm_sec : -1;
+    if (!full && sec == lastSec) return;
+    lastSec = sec;
+    if (!cvInit()) { g_face = 0; drawHome(); return; }
+    uint16_t bg = g_cv->color565(12, 24, 70), rim = g_cv->color565(70, 200, 255), tick = g_cv->color565(235, 240, 255), gold = g_cv->color565(255, 210, 0);
+    g_cv->fillScreen(0);
+    g_cv->fillCircle(120, 120, 119, rim);
+    g_cv->fillCircle(120, 120, 114, bg);
+    for (int i = 0; i < 60; i++) {
+        float r = i * 6 * 0.0174533f, sx = sinf(r), cy = -cosf(r);
+        bool big = (i % 5 == 0);
+        int r0 = big ? 98 : 106, r1 = 111;
+        if (big) cvThick(120 + (int)(r0 * sx), 120 + (int)(r0 * cy), 120 + (int)(r1 * sx), 120 + (int)(r1 * cy), 4, tick);
+        else g_cv->drawLine(120 + (int)(r0 * sx), 120 + (int)(r0 * cy), 120 + (int)(r1 * sx), 120 + (int)(r1 * cy), tick);
+    }
+    cvNum("12", 120, 80, gold); cvNum("3", 160, 120, gold); cvNum("6", 120, 160, gold); cvNum("9", 80, 120, gold);
+    drawVolBtns(g_cv);
+    {   // trang thai: pin dong ho + cham BLE + pin robot (phia duoi)
+        int pct = battPct(), bars = pct <= 0 ? 0 : (pct + 24) / 25;
+        uint16_t bc = (pct <= 20) ? g_cv->color565(255, 90, 90) : tick;
+        g_cv->drawRect(86, 178, 20, 9, bc); g_cv->fillRect(106, 180, 2, 5, bc);
+        for (int i = 0; i < bars; i++) g_cv->fillRect(88 + i * 4, 180, 3, 5, bc);
+        uint16_t dot = g_bleAuthed ? C_OK : (g_bleConn ? C_WARN : C_BAD);
+        g_cv->fillCircle(124, 182, 4, dot);
+        if (g_robotPct >= 0) {
+            char b[12]; snprintf(b, sizeof(b), "%d%%", g_robotPct);
+            g_cv->setTextSize(1); g_cv->setTextColor(tick); g_cv->setCursor(132, 178); g_cv->print(b);
+        }
+    }
+    if (ok) {
+        float h = (tmv.tm_hour % 12) * 30.0f + tmv.tm_min * 0.5f;
+        float m = tmv.tm_min * 6.0f + tmv.tm_sec * 0.1f;
+        cvHand(h, 52, 10, 8, tick, bg);
+        cvHand(m, 80, 12, 6, g_cv->color565(120, 230, 255), bg);
+        cvHand(tmv.tm_sec * 6.0f, 92, 20, 2, g_cv->color565(255, 70, 70), 0);
+    }
+    g_cv->fillCircle(120, 120, 7, gold);
+    g_cv->fillCircle(120, 120, 3, bg);
+    g_cv->flush();
+}
+
 static void drawHomeTime(bool full) {
+    if (g_face == NFACE - 1) { analogFrame(full); return; }
     static int lastMin = -2;
     struct tm tmv;
     bool ok = getTime(tmv);
@@ -495,7 +580,7 @@ static void drawHomeTime(bool full) {
 }
 
 static void drawHome() {
-    drawFaceImage(g_face);
+    if (g_face != NFACE - 1) drawFaceImage(g_face);
     drawHomeTime(true);
 }
 
@@ -534,7 +619,7 @@ static void leaveAod() {
 }
 
 static void nextFace() {
-    g_face = (g_face + 1) % 6;
+    g_face = (g_face + 1) % NFACE;
     Preferences pr;
     pr.begin("watch", false);
     pr.putInt("face", g_face);
@@ -1062,7 +1147,7 @@ void setup() {
         g_usedMin = pr.getFloat("used", 0);
         g_tzMin = pr.getInt("tz", g_tzMin);
         pr.end();
-        if (g_face < 0 || g_face > 5) g_face = 0;
+        if (g_face < 0 || g_face >= NFACE) g_face = 0;
     }
     g_lastTouchAt = millis();
     gotoPage(P_HOME);
@@ -1115,7 +1200,7 @@ void loop() {
     static uint32_t faceAt = 0;
     if (now - faceAt > FACE_ROTATE_MS) {
         if (faceAt != 0) {
-            g_face = (g_face + 1) % 6;
+            g_face = (g_face + 1) % NFACE;
             if (g_page == P_HOME && !g_aod) drawHome();
         }
         faceAt = now;
