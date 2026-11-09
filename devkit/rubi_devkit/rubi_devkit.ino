@@ -751,6 +751,7 @@ void ledDat(int m, int c, int e) {   // am = giu nguyen
     ledLuu();
     ledGui();
     bleGui(String("E") + g_ledMask);
+    bleGui(String("Y") + g_ledColor + "," + g_ledEff);
 }
 
 bool webAuth() { return g_pin.length() == 0 || (g_tok.length() > 0 && g_web.arg("t") == g_tok); }
@@ -992,7 +993,7 @@ void bleLenh(const char* m) {
     if (k == 'K') {
         g_bleAuth = (s.substring(1) == WATCH_KEY);
         bleGui(g_bleAuth ? "A1" : "A0");
-        if (g_bleAuth) { bleTrangThai(); bleGioGui(); bleGui(String("E") + g_ledMask); }
+        if (g_bleAuth) { bleTrangThai(); bleGioGui(); bleGui(String("E") + g_ledMask); bleGui(String("Y") + g_ledColor + "," + g_ledEff); }
         return;
     }
     if (!g_bleAuth) return;
@@ -1025,6 +1026,9 @@ void bleLenh(const char* m) {
     } else if (k == 'E') {
         int m = s.substring(1).toInt();
         if (m >= 0 && m <= 15) ledDat(m, -1, -1);
+    } else if (k == 'Y') {
+        int c = -1, e = -1;
+        if (sscanf(s.c_str() + 1, "%d,%d", &c, &e) == 2) ledDat(-1, c, e);
     } else if (k == 'W') {
         if (g_ssid.length()) bleGui(String("w") + g_ssid + "\t" + g_pass);
     } else if (k == 'Q') {

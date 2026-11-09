@@ -82,6 +82,7 @@ volatile int  g_robotPct = -1, g_musicN = 0, g_storyN = 0, g_robotWifi = 0;
 volatile bool g_haveWifi = false;
 String g_wifiSsid, g_wifiPass;
 int g_tzMin = 540;   // mui gio (phut); Rubi gui mui gio that qua Bluetooth, luu lai trong NVS
+int g_ledColor = 0, g_ledEff = 0;     // mau (0 xanh,1 hong,2 vang,3 luc,4 cau vong), 0 dung yen / 1 nhay
 int g_ledMask = 15;                    // den LED tren robot (bit0 nguc, bit1/2 chan bun, bit3 ang-ten); 0 = tat het
 bool g_follow = false;                 // dang phat tin hieu cho robot di theo
 QueueHandle_t g_txQ = nullptr;
@@ -116,6 +117,9 @@ static void xuLyDong(const char* l) {
     } else if (l[0] == 'E') {
         int m = atoi(l + 1);
         if (m >= 0 && m <= 15) g_ledMask = m;
+    } else if (l[0] == 'Y') {
+        int c = 0, e = 0;
+        if (sscanf(l + 1, "%d,%d", &c, &e) == 2 && c >= 0 && c <= 4) { g_ledColor = c; g_ledEff = (e != 0); }
     } else if (l[0] == 'T') {
         long ep = 0; int tz = 0;
         if (sscanf(l + 1, "%ld,%d", &ep, &tz) == 2 && ep > 1700000000L) {
@@ -296,7 +300,7 @@ static void touchPoll() {
 }
 
 // ---------------- Giao dien ----------------
-enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2 };
+enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2, P_LED };
 static int g_page = P_HOME;
 static uint32_t g_lastTouchAt = 0;
 static int g_bright = 255;
@@ -539,8 +543,8 @@ static void nextFace() {
 }
 
 // ---- Menu dang luoi cuon doc (2 cot), keo ngon tay de cuon ----
-enum { M_MUSIC, M_STORY, M_MATH, M_ENGLISH, M_DRIVE, M_DANCE, M_SLEEP, M_FOLLOW, M_SET, M_COUNT };
-static const uint16_t* const MENU_ICON[M_COUNT] = { ICON_MUSIC, ICON_STORY, ICON_LEARN, ICON_ENGLISH, ICON_DRIVE, ICON_DANCE, ICON_SLEEP, ICON_FOLLOW, ICON_SET };
+enum { M_MUSIC, M_STORY, M_MATH, M_ENGLISH, M_DRIVE, M_DANCE, M_SLEEP, M_FOLLOW, M_LED, M_SET, M_COUNT };
+static const uint16_t* const MENU_ICON[M_COUNT] = { ICON_MUSIC, ICON_STORY, ICON_LEARN, ICON_ENGLISH, ICON_DRIVE, ICON_DANCE, ICON_SLEEP, ICON_FOLLOW, ICON_LED, ICON_SET };
 static int g_menuScroll = 0;
 static const int MENU_TOP = 36, MENU_BOT = 206, MENU_ROWS = (M_COUNT + 1) / 2, MENU_PITCH = 62;
 static int menuMaxScroll() { int m = 6 + MENU_ROWS * MENU_PITCH - (MENU_BOT - MENU_TOP); return m > 0 ? m : 0; }
@@ -573,6 +577,23 @@ static int menuHit(int px, int py) {
     return -1;
 }
 
+static const uint8_t LED_RGB[5][3] = { {40,110,255}, {255,70,160}, {255,210,0}, {40,210,70}, {255,255,255} };
+static void drawLedPage() {
+    gfx->fillScreen(C_BG);
+    drawTitle("DEN LED");
+    drawTile(0, ICON_CHEST, 0, 0, 0, (g_ledMask & 1) != 0);
+    drawTile(1, ICON_FENDER, 0, 0, 0, (g_ledMask & 6) != 0);
+    drawTile(2, ICON_ANT, 0, 0, 0, (g_ledMask & 8) != 0);
+    drawTile(3, ICON_COLOR, 0);
+    int x, y, w, h; tileRect(3, x, y, w, h);
+    uint16_t cc = gfx->color565(LED_RGB[g_ledColor][0], LED_RGB[g_ledColor][1], LED_RGB[g_ledColor][2]);
+    if (g_ledColor == 4) { gfx->fillCircle(x + w - 9, y + h - 9, 10, C_TXT); gfx->fillCircle(x + w - 9, y + h - 9, 7, C_PURPLE); }
+    else { gfx->fillCircle(x + w - 9, y + h - 9, 10, C_TXT); gfx->fillCircle(x + w - 9, y + h - 9, 7, cc); }
+    drawTile(4, ICON_BLINK, 0, 0, 0, g_ledEff != 0);
+    drawTile(5, nullptr, (g_ledMask & 15) ? C_ORANGE : C_GREY, 'B', 0, (g_ledMask & 15) != 0);   // tat/bat het
+    drawBack();
+}
+
 static void drawLearn() {
     gfx->fillScreen(C_BG);
     drawTitle("HOC");
@@ -588,8 +609,7 @@ static void drawSet() {
     gfx->fillScreen(C_BG);
     drawTitle("CAI DAT");
     drawTile(0, ICON_UPDATE, 0);
-    drawTile(1, nullptr, g_ledMask ? C_ORANGE : C_GREY, 'B', 0, g_ledMask != 0);   // bat/tat den LED tren robot
-    drawTile(2, nullptr, C_GREY, 'T');                                              // thu cam ung
+    drawTile(1, nullptr, C_GREY, 'T');                                              // thu cam ung
     drawBack();
 }
 
@@ -637,6 +657,7 @@ static void drawPage() {
         case P_STORY: drawPicker("TRUYEN", "truyen", g_sIdx, g_storyN, C_TEAL); break;
         case P_LEARN: drawLearn(); break;
         case P_SET:   drawSet(); break;
+        case P_LED:   drawLedPage(); break;
         case P_TOUCH: drawTouchTest(); break;
     }
 }
@@ -848,6 +869,7 @@ static void onTouch(int ev, int x, int y) {
                     case M_DANCE: sendCmd("A"); break;
                     case M_SLEEP: sendCmd("Csleep"); break;
                     case M_FOLLOW: g_follow = !g_follow; menuDrawTiles(); break;
+                    case M_LED: gotoPage(P_LED); break;
                     case M_SET: gotoPage(P_SET); break;
                 }
             }
@@ -864,16 +886,24 @@ static void onTouch(int ev, int x, int y) {
                 case 4: sendCmd("Chuy"); break;
             }
             break;
+        case P_LED:
+            if (ev != 1) break;
+            if (backHit(x, y)) { gotoPage(P_MENU); break; }
+            switch (tileHit(6, x, y)) {
+                case 0: g_ledMask ^= 1; sendCmdf("E%d", g_ledMask); drawLedPage(); break;
+                case 1: g_ledMask = (g_ledMask & 6) ? (g_ledMask & ~6) : (g_ledMask | 6); sendCmdf("E%d", g_ledMask); drawLedPage(); break;
+                case 2: g_ledMask ^= 8; sendCmdf("E%d", g_ledMask); drawLedPage(); break;
+                case 3: g_ledColor = (g_ledColor + 1) % 5; sendCmdf("Y%d,%d", g_ledColor, g_ledEff); drawLedPage(); break;
+                case 4: g_ledEff = g_ledEff ? 0 : 1; sendCmdf("Y%d,%d", g_ledColor, g_ledEff); drawLedPage(); break;
+                case 5: g_ledMask = (g_ledMask & 15) ? 0 : 15; sendCmdf("E%d", g_ledMask); drawLedPage(); break;
+            }
+            break;
         case P_SET:
             if (ev != 1) break;
             if (backHit(x, y)) { gotoPage(P_MENU); break; }
             switch (tileHit(6, x, y)) {
                 case 0: otaRun(); break;
-                case 1:
-                    if (g_ledMask) { g_ledMask = 0; sendCmd("E0"); } else { g_ledMask = 15; sendCmd("E15"); }
-                    drawSet();
-                    break;
-                case 2: gotoPage(P_TOUCH); break;
+                case 1: gotoPage(P_TOUCH); break;
             }
             break;
         case P_MUSIC:
