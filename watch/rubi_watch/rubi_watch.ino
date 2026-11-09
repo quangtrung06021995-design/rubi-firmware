@@ -1058,7 +1058,7 @@ static void onTouch(int ev, int x, int y) {
             }
             if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); }
             else if (ev == 3 && g_homeDownAt != 0) {
-                if (!g_homeSwitched) { g_mox = 0; g_moy = 0; gotoPage(P_MENU); }   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
+                if (!g_homeSwitched) { g_mox = 0; g_moy = 0; gotoPage(P_MENU); }   // cham (nhanh hay cham giu deu) = mo menu; mat dong ho tu doi moi 5 phut; chi giu 2 giay o bieu tuong pin la khong mo menu
                 g_homeDownAt = 0;
                 g_homeSwitched = false;
             }
@@ -1258,8 +1258,20 @@ void setup() {
     C_PURPLE = gfx->color565(140, 80, 200);
     C_TEAL = gfx->color565(30, 150, 160);
     C_GREY = gfx->color565(70, 75, 85);
+    // Xin bo nho cho mat dong ho kim NGAY LUC DAU (chua chay Wi-Fi/Bluetooth nen con khoi RAM lien 115 KB); neu sau do
+    // RAM con qua it cho Wi-Fi/Bluetooth thi tra lai va mat dong ho kim se dung mat so.
+    static bool cvOk = false;
+    {
+        cvOk = cvInit();
+        if (cvOk && ESP.getFreeHeap() < 110000) { delete g_cv; g_cv = nullptr; cvOk = false; }
+    }
     gfx->fillScreen(C_BG);
     textCenter("RUBI", 120, 105, 4, C_BLUE);
+    {
+        char hb[32];
+        snprintf(hb, sizeof(hb), "RAM %uK %s", (unsigned)(ESP.getFreeHeap() / 1024), cvOk ? "kim OK" : "kim tat");
+        textCenter(hb, 120, 224, 1, C_DIM);
+    }
     textCenter(FW_VERSION, 120, 140, 1, C_DIM);
     {
         char b[40];
@@ -1338,10 +1350,9 @@ void loop() {
 #endif
     }
     // giu lau tren man hinh chinh: doi mat dong ho
-    if (g_page == P_HOME && !g_aod && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && now - g_homeDownAt >= (g_battHold ? 2000u : 700u)) {
+    if (g_page == P_HOME && !g_aod && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && g_battHold && now - g_homeDownAt >= 2000u) {
         g_homeSwitched = true;
-        if (g_battHold) { g_usedMin = 0; battSave(); drawHomeStatus(); }   // giu lau len bieu tuong pin = da sac day
-        else nextFace();
+        g_usedMin = 0; battSave(); drawHomeStatus();   // giu lau len bieu tuong pin = da sac day
     }
     // luu gio hien tai moi 5 phut de sau khi reset van con gio gan dung
     static uint32_t timeSaveAt = 0;
