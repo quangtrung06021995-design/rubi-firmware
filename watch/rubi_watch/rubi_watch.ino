@@ -58,7 +58,7 @@ const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-
 #define FACE_ANALOG(f) ((f) >= 6)
 const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
-#define TOUCH_DEBUG 1   // 1 = hien toa do cham tren man hinh chinh de chan doan (tat khi xong)
+#define TOUCH_DEBUG 0   // 1 = hien toa do cham tren man hinh chinh de chan doan (tat khi xong)
 const char* FW_VERSION    = "dev";       // GitHub Actions doi thanh 1.0.<so lan build>
 const char* DEFAULT_WIFI_SSID = "TP-Link_7FA8";   // Wi-Fi nha, dung khi chua co Wi-Fi tu Rubi
 const char* DEFAULT_WIFI_PASS = "";
@@ -715,7 +715,7 @@ static void menuLayout(int i, int& cx, int& cy, float& sc) {
 }
 // Ve tung dai 8 dong vao bo dem nho (3,8 KB) roi day ra man hinh: moi diem anh chi ghi 1 lan => khong nhap nhay,
 // va khong can bo nho 115 KB cho ca khung (bo nho trong cua ESP32-C3 khong du khi dang chay BLE + Wi-Fi).
-struct MenuBub { int cx, cy, R, half; uint16_t bgc; const uint16_t* ic; bool follow; uint8_t lut[48]; };
+struct MenuBub { int cx, cy, R, half; uint16_t bgc; const uint16_t* ic; bool follow; uint8_t lut[64]; };
 static uint16_t g_band[240 * 8];
 static void menuDrawTiles() {
     const int BH = 8;
@@ -735,9 +735,10 @@ static void menuDrawTiles() {
         if (m.R < 4 || m.cx + m.R + 3 < 0 || m.cx - m.R - 3 >= 240 || m.cy + m.R + 3 < 0 || m.cy - m.R - 3 >= 240) continue;
         m.ic = MENU_ICON[i];
         m.bgc = m.ic[(ICON_SIZE / 2) * ICON_SIZE + 2];   // mau nen cua chinh icon do
-        m.half = (int)(23 * scs[i] + 0.5f);
-        if (m.half > 23) m.half = 23;
-        for (int d = 0; d < 2 * m.half; d++) m.lut[d] = (uint8_t)((d * ICON_SIZE) / (2 * m.half));
+        m.half = m.R - 2;   // tranh vien trang; anh icon (bo vien 4 diem moi canh) phu kin ca vong tron
+        if (m.half < 2) m.half = 2;
+        if (m.half > 31) m.half = 31;
+        for (int d = 0; d < 2 * m.half; d++) m.lut[d] = (uint8_t)(4 + (d * (ICON_SIZE - 8)) / (2 * m.half));
         m.follow = (i == M_FOLLOW && g_follow);
         n++;
     }
