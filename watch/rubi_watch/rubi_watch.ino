@@ -54,7 +54,7 @@ const uint32_t MENU_IDLE_MS = 15000;     // khong cham o menu bay nhieu ms thi t
 const uint32_t OFF_MS     = 60000;       // (khong dung nua: thay bang man hinh luon hien gio)
 const uint32_t AOD_MS     = 20000;       // vang tay bay nhieu ms o mat dong ho thi chuyen sang man hinh toi chi hien gio
 const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-255): thap de tiet kiem pin
-#define NFACE 11                         // 0-5 mat so anh, 6-9 mat kim nen anh, 10 mat kim ve bang code
+#define NFACE (6 + DIAL_COUNT)           // 0-5 mat so anh, tu 6: mat kim nen anh (dials.h)
 #define FACE_ANALOG(f) ((f) >= 6)
 const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
 const char* WATCH_KEY     = "RB4821WT";  // phai trung WATCH_KEY trong firmware DevKit
@@ -459,7 +459,7 @@ static void drawVolIcon(const uint16_t* ic, int cx, Arduino_GFX* t = nullptr) {
     }
 }
 static void drawVolBtns(Arduino_GFX* t = nullptr) {
-    if (FACE_ANALOG(g_face)) { drawVolIconSmall(t ? t : gfx, VOL_DOWN, VOL_SLX); drawVolIconSmall(t ? t : gfx, VOL_UP, VOL_SRX); return; }
+    if (FACE_ANALOG(g_face)) return;   // tren mat kim 2 nut nam san trong anh nen (xem analogFrame)
     drawVolIcon(VOL_DOWN, VOL_LX, t);
     drawVolIcon(VOL_UP, VOL_RX, t);
 }
@@ -477,8 +477,9 @@ static int volHit(int x, int y) {
     return 0;
 }
 
+static void analogStatus();
 static void drawHomeStatus() {
-    if (FACE_ANALOG(g_face)) return;   // mat kim tu ve trang thai trong khung hinh
+    if (FACE_ANALOG(g_face)) { analogStatus(); return; }
     uint16_t pc = pillColor();
     gfx->fillRect(44, 141, 152, 13, pc);
     {   // bieu tuong pin dong ho (4 vach), do khi con <= 20%
@@ -509,103 +510,128 @@ static void drawHomeStatus() {
 static void drawHomeTime(bool full);
 static void drawHome();
 
-// ---- Mat dong ho kim (ve bang code, khung hinh nam trong bo nho roi day ra man hinh moi giay) ----
-static Arduino_Canvas* g_cv = nullptr;
-static bool cvInit() {
-    if (g_cv) return true;
-    Arduino_Canvas* c = new Arduino_Canvas(240, 240, (Arduino_G*)gfx);
-    if (!c->begin(GFX_SKIP_OUTPUT_BEGIN)) { delete c; return false; }
-    g_cv = c;
-    return true;
+// ---- Mat dong ho kim: nen la anh JPEG (khong co kim), kim ve bang so hoc vao tung dai 8 dong ----
+// Khong dung canvas ca khung 115 KB (RAM lien khoi khong du). Chi giu ban sao vung giua 160x160 (51 KB) cua nen
+// de ve kim len roi day ra man hinh 1 lan: khong nhap nhay. Cap nhat moi phut (khong co kim giay).
+static const int DC_SZ = 160, DC_ORG = 40;   // vung giua: x,y tu 40 den 199
+static uint16_t* g_dc = nullptr;              // nen vung giua, diem anh kieu big-endian (nhu JPEGDEC tra ve)
+static int g_dcFace = -1;
+static bool dcAlloc() {
+    if (!g_dc) g_dc = (uint16_t*)malloc(DC_SZ * DC_SZ * 2);
+    return g_dc != nullptr;
 }
-static int jpegDrawCv(JPEGDRAW* p) {
-    g_cv->draw16bitBeRGBBitmap(p->x, p->y, p->pPixels, p->iWidth, p->iHeight);
+static int jpegDrawDial(JPEGDRAW* p) {
+    gfx->draw16bitBeRGBBitmap(p->x, p->y, p->pPixels, p->iWidth, p->iHeight);
+    if (g_dc) {
+        for (int r = 0; r < p->iHeight; r++) {
+            int y = p->y + r - DC_ORG;
+            if (y < 0 || y >= DC_SZ) continue;
+            for (int c = 0; c < p->iWidth; c++) {
+                int x = p->x + c - DC_ORG;
+                if (x < 0 || x >= DC_SZ) continue;
+                g_dc[y * DC_SZ + x] = p->pPixels[r * p->iWidth + c];
+            }
+        }
+    }
     return 1;
 }
-static void cvThick(int x0, int y0, int x1, int y1, int w, uint16_t col) {
-    float dx = x1 - x0, dy = y1 - y0, L = sqrtf(dx * dx + dy * dy);
-    if (L < 1) return;
-    float nx = -dy / L * w / 2.0f, ny = dx / L * w / 2.0f;
-    int ax = x0 + nx, ay = y0 + ny, bx = x0 - nx, by = y0 - ny, cx2 = x1 - nx, cy2 = y1 - ny, dx2 = x1 + nx, dy2 = y1 + ny;
-    g_cv->fillTriangle(ax, ay, bx, by, cx2, cy2, col);
-    g_cv->fillTriangle(ax, ay, cx2, cy2, dx2, dy2, col);
-    g_cv->fillCircle(x1, y1, w / 2, col);
+static inline uint16_t be565(uint16_t c) { return (uint16_t)((c << 8) | (c >> 8)); }
+// ve nut am luong nho (native RGB565 cua icon) vao ban sao nen
+static void dcBlitVolSmall(const uint16_t* ic, int cx) {
+    int R = VOL_SMALL / 2;
+    for (int dy = 0; dy < VOL_SMALL; dy++) {
+        float d = dy + 0.5f - R;
+        int hw = (int)sqrtf((float)(R * R) - d * d);
+        if (hw <= 0) continue;
+        int sy = dy * VOL_SIZE / VOL_SMALL;
+        int y = VOL_SY - R + dy - DC_ORG;
+        if (y < 0 || y >= DC_SZ) continue;
+        for (int dx = 0; dx < 2 * hw; dx++) {
+            int x = cx - hw + dx - DC_ORG;
+            if (x < 0 || x >= DC_SZ) continue;
+            g_dc[y * DC_SZ + x] = be565(ic[sy * VOL_SIZE + (R - hw + dx) * VOL_SIZE / VOL_SMALL]);
+        }
+    }
 }
-static void cvHand(float deg, float len, float tail, int w, uint16_t col, uint16_t edge) {
-    float r = deg * 0.0174533f, sx = sinf(r), cy = -cosf(r);
-    int x1 = 120 + (int)(len * sx), y1 = 120 + (int)(len * cy);
-    int x0 = 120 - (int)(tail * sx), y0 = 120 - (int)(tail * cy);
-    if (edge) cvThick(x0, y0, x1, y1, w + 4, edge);
-    cvThick(x0, y0, x1, y1, w, col);
+// trang thai: pin dong ho + cham BLE + pin robot, tren nen xanh dam o phia tren giua mat
+static void analogStatus() {
+    uint16_t navy = gfx->color565(12, 24, 70), tick = gfx->color565(235, 240, 255);
+    int pct = battPct(), bars = pct <= 0 ? 0 : (pct + 24) / 25;
+    uint16_t bc = (pct <= 20) ? gfx->color565(255, 90, 90) : tick;
+    int sy = 56;
+    gfx->fillRoundRect(84, sy - 4, 72, 17, 8, navy);
+    gfx->drawRect(88, sy, 20, 9, bc); gfx->fillRect(108, sy + 2, 2, 5, bc);
+    for (int i = 0; i < bars; i++) gfx->fillRect(90 + i * 4, sy + 2, 3, 5, bc);
+    uint16_t dot = g_bleAuthed ? C_OK : (g_bleConn ? C_WARN : C_BAD);
+    gfx->fillCircle(126, sy + 4, 4, dot);
+    if (g_robotPct >= 0) {
+        char b[12]; snprintf(b, sizeof(b), "%d%%", g_robotPct);
+        gfx->setTextSize(1); gfx->setTextColor(tick); gfx->setCursor(134, sy); gfx->print(b);
+    }
 }
-static void cvNum(const char* t, int cx, int cy, uint16_t col) {
-    int16_t bx, by; uint16_t bw, bh;
-    g_cv->setTextSize(3);
-    g_cv->getTextBounds(t, 0, 0, &bx, &by, &bw, &bh);
-    g_cv->setTextColor(col);
-    g_cv->setCursor(cx - bw / 2 - bx, cy - bh / 2 - by);
-    g_cv->print(t);
+struct DHand { int ux, uy, len, tail, hw; };
+static void dhPrep(DHand& h, float deg, int len, int tail, int hw) {
+    float r = deg * 0.0174533f;
+    h.ux = (int)lroundf(256.0f * sinf(r));
+    h.uy = (int)lroundf(-256.0f * cosf(r));
+    h.len = len; h.tail = tail; h.hw = hw;
 }
 static void analogFrame(bool full) {
-    static int lastSec = -1;
+    static int lastMin = -2;
     struct tm tmv;
     bool ok = getTime(tmv);
-    int sec = ok ? tmv.tm_sec : -1;
-    if (!full && sec == lastSec) return;
-    lastSec = sec;
-    if (!cvInit()) { g_face = 0; drawHome(); return; }
-    uint16_t bg = g_cv->color565(12, 24, 70), rim = g_cv->color565(70, 200, 255), tick = g_cv->color565(235, 240, 255), gold = g_cv->color565(255, 210, 0);
-    bool img = (g_face >= 6 && g_face <= 9);
-    bool imgOk = false;
-    if (img) {
+    int cur = ok ? tmv.tm_hour * 60 + tmv.tm_min : -1;
+    if (!full && cur == lastMin) return;
+    lastMin = cur;
+    if (!g_dc) { g_face = 0; drawHome(); return; }
+    if (full || g_dcFace != g_face) {
         int di = g_face - 6;
-        if (g_jpeg.openFLASH((uint8_t*)DIAL_JPG[di], (int)DIAL_JPG_LEN[di], jpegDrawCv)) {
+        if (di < 0 || di >= DIAL_COUNT) di = 0;
+        if (g_jpeg.openFLASH((uint8_t*)DIAL_JPG[di], (int)DIAL_JPG_LEN[di], jpegDrawDial)) {
             g_jpeg.setPixelType(RGB565_BIG_ENDIAN);
             g_jpeg.decode(0, 0, 0);
             g_jpeg.close();
-            imgOk = true;
+            dcBlitVolSmall(VOL_DOWN, VOL_SLX);
+            dcBlitVolSmall(VOL_UP, VOL_SRX);
+            g_dcFace = g_face;
+            gfx->draw16bitBeRGBBitmap(DC_ORG, DC_ORG, g_dc, DC_SZ, DC_SZ);   // da kem 2 nut am luong
+        } else {
+            g_face = 0; drawHome(); return;
         }
     }
-    if (!imgOk) {
-    g_cv->fillScreen(0);
-    g_cv->fillCircle(120, 120, 119, rim);
-    g_cv->fillCircle(120, 120, 114, bg);
-    for (int i = 0; i < 60; i++) {
-        float r = i * 6 * 0.0174533f, sx = sinf(r), cy = -cosf(r);
-        bool big = (i % 5 == 0);
-        int r0 = big ? 98 : 106, r1 = 111;
-        if (big) cvThick(120 + (int)(r0 * sx), 120 + (int)(r0 * cy), 120 + (int)(r1 * sx), 120 + (int)(r1 * cy), 4, tick);
-        else g_cv->drawLine(120 + (int)(r0 * sx), 120 + (int)(r0 * cy), 120 + (int)(r1 * sx), 120 + (int)(r1 * cy), tick);
-    }
-    cvNum("12", 120, 80, gold); cvNum("3", 160, 120, gold); cvNum("6", 120, 160, gold); cvNum("9", 80, 120, gold);
-    }
-    drawVolBtns(g_cv);
-    {   // trang thai: pin dong ho + cham BLE + pin robot (phia duoi)
-        int pct = battPct(), bars = pct <= 0 ? 0 : (pct + 24) / 25;
-        uint16_t bc = (pct <= 20) ? g_cv->color565(255, 90, 90) : tick;
-        int sy = img ? 56 : 178;
-        if (img) g_cv->fillRoundRect(84, sy - 4, 72, 17, 8, g_cv->color565(12, 24, 70));
-        g_cv->drawRect(88, sy, 20, 9, bc); g_cv->fillRect(108, sy + 2, 2, 5, bc);
-        for (int i = 0; i < bars; i++) g_cv->fillRect(90 + i * 4, sy + 2, 3, 5, bc);
-        uint16_t dot = g_bleAuthed ? C_OK : (g_bleConn ? C_WARN : C_BAD);
-        g_cv->fillCircle(126, sy + 4, 4, dot);
-        if (g_robotPct >= 0) {
-            char b[12]; snprintf(b, sizeof(b), "%d%%", g_robotPct);
-            g_cv->setTextSize(1); g_cv->setTextColor(tick); g_cv->setCursor(134, sy); g_cv->print(b);
-        }
-    }
+    DHand hh, mh;
+    uint16_t cHourF = be565(gfx->color565(25, 40, 120)), cMinF = be565(gfx->color565(40, 70, 190));
+    uint16_t cOut = be565(gfx->color565(255, 255, 255)), cGold = be565(gfx->color565(255, 210, 0)), cDark = be565(gfx->color565(12, 24, 70));
     if (ok) {
-        float h = (tmv.tm_hour % 12) * 30.0f + tmv.tm_min * 0.5f;
-        float m = tmv.tm_min * 6.0f + tmv.tm_sec * 0.1f;
-        uint16_t hc = img ? g_cv->color565(25, 40, 120) : tick, mc = img ? g_cv->color565(40, 70, 190) : g_cv->color565(120, 230, 255);
-        uint16_t he = img ? g_cv->color565(255, 255, 255) : bg;
-        cvHand(h, 50, 10, 8, hc, he);
-        cvHand(m, img ? 74 : 80, 12, 6, mc, he);
-        cvHand(tmv.tm_sec * 6.0f, img ? 82 : 92, 20, 2, g_cv->color565(255, 70, 70), 0);
+        dhPrep(hh, (tmv.tm_hour % 12) * 30.0f + tmv.tm_min * 0.5f, 46, 8, 4);
+        dhPrep(mh, tmv.tm_min * 6.0f, 68, 10, 3);
     }
-    g_cv->fillCircle(120, 120, 7, gold);
-    g_cv->fillCircle(120, 120, 3, bg);
-    g_cv->flush();
+    uint16_t band[DC_SZ * 8];
+    for (int y0 = 0; y0 < DC_SZ; y0 += 8) {
+        memcpy(band, g_dc + y0 * DC_SZ, sizeof(band));
+        if (ok) {
+            for (int r = 0; r < 8; r++) {
+                int dy = DC_ORG + y0 + r - 120;
+                uint16_t* row = band + r * DC_SZ;
+                for (int x = 0; x < DC_SZ; x++) {
+                    int dx = DC_ORG + x - 120;
+                    int d2 = dx * dx + dy * dy;
+                    if (d2 <= 9) { row[x] = cDark; continue; }
+                    if (d2 <= 49) { row[x] = cGold; continue; }
+                    int ma = (dx * mh.ux + dy * mh.uy) >> 8, mp = (dx * mh.uy - dy * mh.ux) >> 8;
+                    if (mp < 0) mp = -mp;
+                    if (ma >= -mh.tail && ma <= mh.len && mp <= mh.hw) { row[x] = cMinF; continue; }
+                    int ha = (dx * hh.ux + dy * hh.uy) >> 8, hp = (dx * hh.uy - dy * hh.ux) >> 8;
+                    if (hp < 0) hp = -hp;
+                    if (ha >= -hh.tail && ha <= hh.len && hp <= hh.hw) { row[x] = cHourF; continue; }
+                    if ((ma >= -mh.tail - 2 && ma <= mh.len + 2 && mp <= mh.hw + 2) ||
+                        (ha >= -hh.tail - 2 && ha <= hh.len + 2 && hp <= hh.hw + 2)) row[x] = cOut;
+                }
+            }
+        }
+        gfx->draw16bitBeRGBBitmap(DC_ORG, DC_ORG + y0, band, DC_SZ, 8);
+    }
+    analogStatus();
 }
 
 static void drawHomeTime(bool full) {
@@ -667,7 +693,7 @@ static void leaveAod() {
 // Doi mat xen ke: so, kim, so, kim... (trong moi loai di lan luot de thay du cac mat)
 static int g_nextD = 0, g_nextA = 0;
 static int nextFaceIdx() {
-    if (!g_cv) {   // khong du RAM lien khoi cho mat kim: chi xoay vong 6 mat so
+    if (!g_dc) {   // khong du RAM cho mat kim: chi xoay vong 6 mat so
         if (g_face < 0 || g_face >= 5) return 0;
         return g_face + 1;
     }
@@ -676,7 +702,7 @@ static int nextFaceIdx() {
 }
 
 static void prevFace() {   // vuot sang phai: ve mat truoc (chi xoay vong 6 mat so khi khong co mat kim)
-    if (!g_cv) g_face = (g_face <= 0 || g_face > 5) ? 5 : g_face - 1;
+    if (!g_dc) g_face = (g_face <= 0 || g_face > 5) ? 5 : g_face - 1;
     else g_face = nextFaceIdx();
     Preferences pr;
     pr.begin("watch", false);
@@ -1281,13 +1307,9 @@ void setup() {
     C_PURPLE = gfx->color565(140, 80, 200);
     C_TEAL = gfx->color565(30, 150, 160);
     C_GREY = gfx->color565(70, 75, 85);
-    // Xin bo nho cho mat dong ho kim NGAY LUC DAU (chua chay Wi-Fi/Bluetooth nen con khoi RAM lien 115 KB); neu sau do
-    // RAM con qua it cho Wi-Fi/Bluetooth thi tra lai va mat dong ho kim se dung mat so.
+    // Xin 51 KB cho nen mat dong ho kim NGAY LUC DAU (truoc khi Wi-Fi/Bluetooth lam RAM manh mun)
     static bool cvOk = false;
-    {
-        cvOk = cvInit();
-        if (cvOk && ESP.getFreeHeap() < 110000) { delete g_cv; g_cv = nullptr; cvOk = false; }
-    }
+    cvOk = dcAlloc();
     gfx->fillScreen(C_BG);
     textCenter("RUBI", 120, 105, 4, C_BLUE);
     {

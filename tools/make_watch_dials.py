@@ -1,7 +1,7 @@
 # Tao watch/rubi_watch/dials.h: cac mat so dong ho (khong co kim) 240x240 JPEG. Kim do dong ho tu ve.
 import io, glob, os
 from PIL import Image, ImageDraw
-names = ['dial_be', 'dial_vutru', 'dial_bien', 'dial_xanh']
+names = ['dial_hoathinh', 'dial_be', 'dial_vutru', 'dial_bien', 'dial_xanh']
 S = 240
 out = ['// Tu dong tao boi tools/make_watch_dials.py tu icons/dials/*.png. Khong sua tay.\n#pragma once\n#include <stdint.h>\n#include <pgmspace.h>\n\n']
 lens = []
