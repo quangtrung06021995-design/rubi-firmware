@@ -54,6 +54,7 @@ const uint32_t MENU_IDLE_MS = 15000;     // khong cham o menu bay nhieu ms thi t
 const uint32_t OFF_MS     = 60000;       // (khong dung nua: thay bang man hinh luon hien gio)
 const uint32_t AOD_MS     = 20000;       // vang tay bay nhieu ms o mat dong ho thi chuyen sang man hinh toi chi hien gio
 const int      AOD_BL     = 10;          // do sang den nen luc man hinh toi (0-255): thap de tiet kiem pin
+struct DHand { int ux, uy, len, tail, hw; };   // kim dong ho (dat o day de Arduino tu sinh prototype duoc)
 #define NFACE (6 + DIAL_COUNT)           // 0-5 mat so anh, tu 6: mat kim nen anh (dials.h)
 #define FACE_ANALOG(f) ((f) >= 6)
 const uint32_t FACE_ROTATE_MS = 300000;  // tu doi mat dong ho moi 5 phut
@@ -569,7 +570,6 @@ static void analogStatus() {
         gfx->setTextSize(1); gfx->setTextColor(tick); gfx->setCursor(134, sy); gfx->print(b);
     }
 }
-struct DHand { int ux, uy, len, tail, hw; };
 static void dhPrep(DHand& h, float deg, int len, int tail, int hw) {
     float r = deg * 0.0174533f;
     h.ux = (int)lroundf(256.0f * sinf(r));
