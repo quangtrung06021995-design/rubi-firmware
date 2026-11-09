@@ -296,7 +296,7 @@ static void touchPoll() {
 }
 
 // ---------------- Giao dien ----------------
-enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2, P_PLAY };
+enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2 };
 static int g_page = P_HOME;
 static uint32_t g_lastTouchAt = 0;
 static int g_bright = 255;
@@ -538,26 +538,39 @@ static void nextFace() {
     drawHome();
 }
 
+// ---- Menu dang luoi cuon doc (2 cot), keo ngon tay de cuon ----
+enum { M_MUSIC, M_STORY, M_MATH, M_ENGLISH, M_DRIVE, M_DANCE, M_SLEEP, M_FOLLOW, M_SET, M_COUNT };
+static const uint16_t* const MENU_ICON[M_COUNT] = { ICON_MUSIC, ICON_STORY, ICON_LEARN, ICON_ENGLISH, ICON_DRIVE, ICON_DANCE, ICON_SLEEP, ICON_FOLLOW, ICON_SET };
+static int g_menuScroll = 0;
+static const int MENU_TOP = 36, MENU_BOT = 206, MENU_ROWS = (M_COUNT + 1) / 2, MENU_PITCH = 62;
+static int menuMaxScroll() { int m = 6 + MENU_ROWS * MENU_PITCH - (MENU_BOT - MENU_TOP); return m > 0 ? m : 0; }
+static void menuTileXY(int i, int& x, int& y) { x = (i % 2) ? 132 : 52; y = MENU_TOP + 4 + (i / 2) * MENU_PITCH - g_menuScroll; }
+static void menuDrawTiles() {
+    gfx->fillRect(0, MENU_TOP, 240, MENU_BOT - MENU_TOP, C_BG);
+    for (int i = 0; i < M_COUNT; i++) {
+        int x, y; menuTileXY(i, x, y);
+        if (y + ICON_SIZE <= MENU_TOP || y >= MENU_BOT) continue;
+        for (int r = 0; r < ICON_SIZE; r++) {
+            int yy = y + r;
+            if (yy < MENU_TOP || yy >= MENU_BOT) continue;
+            gfx->draw16bitRGBBitmap(x, yy, (uint16_t*)(MENU_ICON[i] + r * ICON_SIZE), ICON_SIZE, 1);
+        }
+        if (i == M_FOLLOW && g_follow) gfx->drawRoundRect(x - 2, y - 2, ICON_SIZE + 4, ICON_SIZE + 4, 12, C_OK);
+    }
+}
 static void drawMenu() {
     gfx->fillScreen(C_BG);
     drawTitle("MENU");
-    drawTile(0, ICON_PLAY, 0);      // Choi cung Rubi (lai xe, nhay, ru ngu, di theo)
-    drawTile(1, ICON_MUSIC, 0);
-    drawTile(2, ICON_STORY, 0);
-    drawTile(3, ICON_LEARN, 0);     // Toan
-    drawTile(4, ICON_ENGLISH, 0);   // Tieng Anh
-    drawTile(5, ICON_SET, 0);
+    menuDrawTiles();
     drawBack();
 }
-
-static void drawPlay() {
-    gfx->fillScreen(C_BG);
-    drawTitle("CHOI CUNG");
-    drawTile(0, ICON_DRIVE, 0);
-    drawTile(1, ICON_DANCE, 0);
-    drawTile(2, ICON_SLEEP, 0);
-    drawTile(3, ICON_FOLLOW, 0, 0, 0, g_follow);
-    drawBack();
+static int menuHit(int px, int py) {
+    for (int i = 0; i < M_COUNT; i++) {
+        int x, y; menuTileXY(i, x, y);
+        if (py < MENU_TOP || py >= MENU_BOT) continue;
+        if (px >= x - 10 && px < x + ICON_SIZE + 10 && py >= y - 2 && py < y + ICON_SIZE + 2) return i;
+    }
+    return -1;
 }
 
 static void drawLearn() {
@@ -624,7 +637,6 @@ static void drawPage() {
         case P_STORY: drawPicker("TRUYEN", "truyen", g_sIdx, g_storyN, C_TEAL); break;
         case P_LEARN: drawLearn(); break;
         case P_SET:   drawSet(); break;
-        case P_PLAY:  drawPlay(); break;
         case P_TOUCH: drawTouchTest(); break;
     }
 }
@@ -800,33 +812,47 @@ static void onTouch(int ev, int x, int y) {
             }
             if (ev == 1) { g_homeDownAt = millis() | 1; g_homeSwitched = false; g_battHold = (x >= 44 && x <= 92 && y >= 134 && y <= 160); }
             else if (ev == 3 && g_homeDownAt != 0) {
-                if (!g_homeSwitched) gotoPage(P_MENU);   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
+                if (!g_homeSwitched) { g_menuScroll = 0; gotoPage(P_MENU); }   // cham nhanh = mo menu; giu 0,7 giay = doi mat dong ho
                 g_homeDownAt = 0;
                 g_homeSwitched = false;
             }
             break;
-        case P_MENU:
-            if (ev != 1) break;
-            if (backHit(x, y)) { gotoPage(P_HOME); break; }
-            switch (tileHit(6, x, y)) {
-                case 0: gotoPage(P_PLAY); break;
-                case 1: gotoPage(P_MUSIC); break;
-                case 2: gotoPage(P_STORY); break;
-                case 3: gotoPage(P_LEARN); break;
-                case 4: sendCmd("Cen"); break;
-                case 5: gotoPage(P_SET); break;
+        case P_MENU: {
+            static int downX, downY, startScroll; static bool moved, tracking; static uint32_t lastDraw;
+            if (ev == 1) {
+                if (backHit(x, y)) { tracking = false; gotoPage(P_HOME); break; }
+                downX = x; downY = y; startScroll = g_menuScroll; moved = false; tracking = true; lastDraw = 0;
+                break;
+            }
+            if (!tracking) break;
+            if (ev == 2) {
+                int dy = y - downY;
+                if (!moved && abs(dy) > 8) moved = true;
+                if (moved) {
+                    int ns = startScroll - dy;
+                    if (ns < 0) ns = 0;
+                    if (ns > menuMaxScroll()) ns = menuMaxScroll();
+                    if (ns != g_menuScroll && millis() - lastDraw > 30) { g_menuScroll = ns; menuDrawTiles(); lastDraw = millis(); }
+                }
+                break;
+            }
+            if (ev == 3) {
+                tracking = false;
+                if (moved) break;
+                switch (menuHit(downX, downY)) {
+                    case M_MUSIC: gotoPage(P_MUSIC); break;
+                    case M_STORY: gotoPage(P_STORY); break;
+                    case M_MATH: gotoPage(P_LEARN); break;
+                    case M_ENGLISH: sendCmd("Cen"); break;
+                    case M_DRIVE: gotoPage(P_DRIVE); break;
+                    case M_DANCE: sendCmd("A"); break;
+                    case M_SLEEP: sendCmd("Csleep"); break;
+                    case M_FOLLOW: g_follow = !g_follow; menuDrawTiles(); break;
+                    case M_SET: gotoPage(P_SET); break;
+                }
             }
             break;
-        case P_PLAY:
-            if (ev != 1) break;
-            if (backHit(x, y)) { gotoPage(P_MENU); break; }
-            switch (tileHit(6, x, y)) {
-                case 0: gotoPage(P_DRIVE); break;
-                case 1: sendCmd("A"); break;
-                case 2: sendCmd("Csleep"); break;
-                case 3: g_follow = !g_follow; drawPlay(); break;
-            }
-            break;
+        }
         case P_LEARN:
             if (ev != 1) break;
             if (backHit(x, y)) { gotoPage(P_MENU); break; }
@@ -870,7 +896,7 @@ static void onTouch(int ev, int x, int y) {
             break;
         }
         case P_DRIVE: {
-            if (ev == 1 && backHit(x, y)) { sendCmd("X"); gotoPage(P_PLAY); break; }
+            if (ev == 1 && backHit(x, y)) { sendCmd("X"); gotoPage(P_MENU); break; }
             if (ev == 1 && y >= 182 && y < 206 && x >= 70 && x < 170) { sendCmd("X"); break; }
             if (ev == 3) {
                 if (g_drvActive) { g_drvActive = false; sendCmd("L0,0"); sendCmd("X"); drawKnob(true); g_knobX = 120; g_knobY = 100; drawKnob(false); }
