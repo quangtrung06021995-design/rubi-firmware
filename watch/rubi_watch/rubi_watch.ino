@@ -662,8 +662,15 @@ static void leaveAod() {
     setBacklight(255);
 }
 
+// Doi mat xen ke: so, kim, so, kim... (trong moi loai di lan luot de thay du cac mat)
+static int g_nextD = 0, g_nextA = 0;
+static int nextFaceIdx() {
+    if (FACE_ANALOG(g_face)) { int f = g_nextD; g_nextD = (g_nextD + 1) % 6; return f; }
+    int f = 6 + g_nextA; g_nextA = (g_nextA + 1) % (NFACE - 6); return f;
+}
+
 static void nextFace() {
-    g_face = (g_face + 1) % NFACE;
+    g_face = nextFaceIdx();
     Preferences pr;
     pr.begin("watch", false);
     pr.putInt("face", g_face);
@@ -1244,7 +1251,7 @@ void loop() {
     static uint32_t faceAt = 0;
     if (now - faceAt > FACE_ROTATE_MS) {
         if (faceAt != 0) {
-            g_face = (g_face + 1) % NFACE;
+            g_face = nextFaceIdx();
             if (g_page == P_HOME && !g_aod) drawHome();
         }
         faceAt = now;
