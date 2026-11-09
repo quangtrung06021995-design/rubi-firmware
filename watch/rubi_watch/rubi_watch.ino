@@ -666,6 +666,10 @@ static void leaveAod() {
 // Doi mat xen ke: so, kim, so, kim... (trong moi loai di lan luot de thay du cac mat)
 static int g_nextD = 0, g_nextA = 0;
 static int nextFaceIdx() {
+    if (!g_cv) {   // khong du RAM lien khoi cho mat kim: chi xoay vong 6 mat so
+        if (g_face < 0 || g_face >= 5) return 0;
+        return g_face + 1;
+    }
     if (FACE_ANALOG(g_face)) { int f = g_nextD; g_nextD = (g_nextD + 1) % 6; return f; }
     int f = 6 + g_nextA; g_nextA = (g_nextA + 1) % (NFACE - 6); return f;
 }
