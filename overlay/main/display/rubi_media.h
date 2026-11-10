@@ -2628,7 +2628,9 @@ private:
             }
             if (Application::GetInstance().GetDeviceState() != kDeviceStateIdle) stop_ = true;
         }
+        bool voice_again = false;
         do {
+            int64_t cycle_t0 = NowMs();
             for (int i = now_index_; i < (int)songs_.size() && !stop_; i++) {
                 {
                     if (stop_) break;
@@ -2641,7 +2643,14 @@ private:
                 if (sleep_mode_) vTaskDelay(pdMS_TO_TICKS(1500));   // a short pause between lullabies (also avoids a busy loop on a bad file)
             }
             now_index_ = 0;
-        } while (sleep_mode_ && !stop_ && NowMs() < sleep_end_ms_);
+            // Music started by voice keeps going (next song, back to the first after the last) until the child
+            // touches the screen or says "tắt nhạc". The 3 s guard avoids a busy loop if every file fails to play.
+            voice_again = false;
+            if (voice_mode_ && !stop_) {
+                vTaskDelay(pdMS_TO_TICKS(300));
+                voice_again = (NowMs() - cycle_t0) > 3000;
+            }
+        } while ((sleep_mode_ && !stop_ && NowMs() < sleep_end_ms_) || voice_again);
         bool finished_by_itself = !stop_;
         bool was_voice = voice_mode_;
         if (was_voice) {
