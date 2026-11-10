@@ -267,7 +267,7 @@ public:
     }
 
     void MenuShowCard(const lv_image_dsc_t* img, const std::string& title, const std::string& en,
-                      const std::string& vi, const std::string& counter, bool wide = false) {
+                      const std::string& vi, const std::string& counter, bool wide = false, bool no_buttons = false) {
         DisplayLockGuard lock(this);
         EnsureMenu();
         MenuClearAll();
@@ -288,7 +288,7 @@ public:
         lv_label_set_text(card_vi_, vi.c_str());
         lv_obj_clear_flag(card_en_, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(card_vi_, LV_OBJ_FLAG_HIDDEN);
-        for (int i = 0; i < 3; i++) lv_obj_clear_flag(card_btn_[i], LV_OBJ_FLAG_HIDDEN);
+        if (!no_buttons) for (int i = 0; i < 3; i++) lv_obj_clear_flag(card_btn_[i], LV_OBJ_FLAG_HIDDEN);
         ShowMenuLayer();
     }
 

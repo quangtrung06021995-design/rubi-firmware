@@ -45,6 +45,7 @@ extern int16_t* volatile g_rubi_cap_buf;
 #include "rubi_battery.h"
 #include "rubi_face.h"
 #include "rubi_icons.h"
+#include "rubi_viec_icons.h"
 #include "rubi_learn_data.h"
 #include "rubi_upload.h"
 #include "rubi_sync.h"
@@ -185,13 +186,21 @@ public:
             ShowControl();
             break;
         case Screen::kPlay: {
-            int r = RubiDisplay::RowAt(sx, sy, 4);
+            int r = RubiDisplay::RowAt(sx, sy, 5);
             if (r == 0) StartDance();
             else if (r == 1) StartSleep();
             else if (r == 2) ShowTimerMenu();
-            else if (r == 3) ShowMain();
+            else if (r == 3) ShowSched();
+            else if (r == 4) ShowMain();
             break;
         }
+        case Screen::kSched:
+            ShowPlay();
+            break;
+        case Screen::kRemind:   // the child touched the screen: reminder done, close the menu
+            tick_gen_++;
+            Close();
+            break;
         case Screen::kClock:
             tick_gen_++;
             if (back_play_) ShowPlay(); else ShowMain();
@@ -493,7 +502,7 @@ public:
     }
 
 private:
-    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kEngList, kEngMenu, kEngQuiz, kEngDone, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep, kMicMenu, kMicBusy, kMicDone };
+    enum class Screen { kNone, kCalib1, kCalib2, kCalib3, kCalib4, kMain, kMusic, kPlaying, kLearnTopics, kLearnCard, kLearnEmpty, kVolume, kWifiList, kWifiKeys, kWifiBusy, kSettings, kPlay, kDance, kUpload, kSync, kMathMenu, kMathStory, kMathKeys, kMathBusy, kMathDone, kCtl, kPinKeys, kPinBusy, kIp, kStoryList, kStoryPage, kStoryEmpty, kSoon, kEngList, kEngMenu, kEngQuiz, kEngDone, kClock, kTimerMenu, kTimerRun, kTimerDone, kSleep, kMicMenu, kMicBusy, kMicDone, kSched, kRemind };
     static constexpr const char* kTag = "RubiMedia";
     static constexpr const char* kMusicDir = "/sdcard/rubi/music";
     static constexpr int kSongsPerPage = 3;
@@ -1211,8 +1220,19 @@ private:
                 Close();
                 return;
             }
-            if (c.size() == 2 && c[0] == 'n' && c[1] >= '0' && c[1] <= '7') {   // nhac viec trong thoi gian bieu cua be: Rubi noi to cau nhac, khong mo man hinh nao
-                RemindSay(c[1] - '0');
+            if (c.size() == 2 && c[0] == 'n' && c[1] >= '0' && c[1] <= '7') {   // child's schedule reminder: picture card on the screen + Rubi says the sentence
+                int k = c[1] - '0';
+                if (RemotePrepare()) {
+                    std::lock_guard<std::recursive_mutex> lk(mutex_);
+                    sleep_mode_ = false;
+                    StopPlayback();
+                    RestoreBacklight();
+                    screen_ = Screen::kRemind;
+                    remind_at_ = NowMs();
+                    display_->MenuShowCard(rubi_viec_big[k], "ĐẾN GIỜ", RemindName(k), RemindText(k), "", false, true);
+                    StartTicker();
+                }
+                RemindSay(k);
                 return;
             }
             if (!RemotePrepare()) return;
@@ -1236,11 +1256,47 @@ private:
         }, "rubi_remote2");
     }
 
-    // Spoken reminder from the child's schedule (the watch/DevKit sends "Cn<0-7>"): the assistant reads one fixed sentence aloud.
-    void RemindSay(int k) {
-        static const char* const kText[8] = {
+    static const char* RemindName(int k) {
+        static const char* const n[8] = {"Đánh răng", "Ăn cơm", "Học bài", "Đi tắm", "Đi ngủ", "Dọn đồ chơi", "Uống nước", "Đọc sách"};
+        return (k >= 0 && k < 8) ? n[k] : "";
+    }
+    static const char* RemindText(int k) {
+        static const char* const t[8] = {
             "Bé ơi, đến giờ đánh răng rồi!", "Bé ơi, đến giờ ăn cơm rồi!", "Bé ơi, đến giờ học bài rồi!", "Bé ơi, đến giờ đi tắm rồi!",
             "Bé ơi, đến giờ đi ngủ rồi, chúc bé ngủ ngon!", "Bé ơi, đến giờ dọn đồ chơi rồi!", "Bé ơi, uống nước nào!", "Bé ơi, đến giờ đọc sách rồi!"};
+        return (k >= 0 && k < 8) ? t[k] : "";
+    }
+
+    // Today's schedule as set on the web page (the DevKit pushes it as "Z<HHMM:kind,...>").
+    void ShowSched() {
+        screen_ = Screen::kSched;
+        std::string ds = RubiBattery::Sched();
+        std::string txt = "Thời gian biểu của bé\n\n";
+        int n = 0, total = 0;
+        size_t i = 0;
+        while (i < ds.size()) {
+            size_t j = ds.find(',', i);
+            if (j == std::string::npos) j = ds.size();
+            int hhmm = 0, k = -1;
+            if (sscanf(ds.substr(i, j - i).c_str(), "%d:%d", &hhmm, &k) == 2 && k >= 0 && k < 8) {
+                total++;
+                if (n < 6) {
+                    char b[64];
+                    snprintf(b, sizeof(b), "%02d:%02d  %s\n", hhmm / 100, hhmm % 100, RemindName(k));
+                    txt += b;
+                    n++;
+                }
+            }
+            i = j + 1;
+        }
+        if (total == 0) txt += "Chưa có việc nào\n(đặt ở trang web của Rubi)\n";
+        else if (total > n) txt += "... và " + std::to_string(total - n) + " việc nữa\n";
+        txt += "\nChạm để quay lại";
+        if (display_) display_->MenuShowMessage(txt.c_str(), -1, -1);
+    }
+
+    // Spoken reminder from the child's schedule (the DevKit sends "Cn<0-7>"): the assistant reads one fixed sentence aloud.
+    void RemindSay(int k) {
         if (k < 0 || k > 7) return;
         auto& app = Application::GetInstance();
         for (int i = 0; i < 20; i++) {   // bring the assistant back to idle first
@@ -1249,7 +1305,7 @@ private:
             vTaskDelay(pdMS_TO_TICKS(300));
         }
         if (app.GetDeviceState() != kDeviceStateIdle) return;
-        app.WakeWordInvoke(std::string("Hãy đọc to, đúng từng chữ, không thêm lời nào khác: ") + kText[k]);
+        app.WakeWordInvoke(std::string("Hãy đọc to, đúng từng chữ, không thêm lời nào khác: ") + RemindText(k));
         bool spoke = false;
         for (int i = 0; i < 80; i++) {
             vTaskDelay(pdMS_TO_TICKS(250));
@@ -1561,7 +1617,7 @@ private:
     // ---------------- clock, countdown timer, bedtime ----------------
     // The time comes from the server at start-up (already in local time); without it the year is 1970.
     std::atomic<int> tick_gen_{0};
-    int64_t timer_end_ms_ = 0, sleep_end_ms_ = 0;
+    int64_t timer_end_ms_ = 0, sleep_end_ms_ = 0, remind_at_ = 0;
     int alarm_n_ = 0;
     bool sleep_mode_ = false, dimmed_ = false, back_play_ = false;
     uint8_t saved_bright_ = 100;
@@ -1596,6 +1652,9 @@ private:
         switch (screen_) {
         case Screen::kMicMenu:
             display_->MenuSetHint(MicHint().c_str());
+            break;
+        case Screen::kRemind:   // nobody touched it for 90 s: close, so the wake word works again
+            if (NowMs() - remind_at_ > 90000) { tick_gen_++; Close(); }
             break;
         case Screen::kClock:
             display_->MenuSetMessage(ClockText().c_str());
@@ -1694,8 +1753,8 @@ private:
     void ShowPlay() {
         screen_ = Screen::kPlay;
         if (display_) {
-            static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_nhay_mua, &rubi_icon_hat_ru, &rubi_icon_hen_gio, &rubi_icon_quay_lai};
-            display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ", nullptr,
+            static const std::vector<const lv_image_dsc_t*> ico = {&rubi_icon_nhay_mua, &rubi_icon_hat_ru, &rubi_icon_hen_gio, &rubi_icon_lich, &rubi_icon_quay_lai};
+            display_->MenuShowList("CHƠI CÙNG RUBI", {"Nhảy múa", "Đi ngủ (hát ru)", "Hẹn giờ", "Thời gian biểu", "Quay lại"}, "Nhảy múa: Rubi xoay tại chỗ", nullptr,
             &ico);
         }
     }

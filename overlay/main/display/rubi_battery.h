@@ -62,6 +62,9 @@ public:
     // The DevKit passes on a web-page command: "C<word>\n" (sleep, t5, m1, p3 ...).
     static std::function<void(const std::string&)>& OnCommand() { static std::function<void(const std::string&)> f; return f; }
 
+    // Child's schedule pushed by the DevKit: "Z<HHMM:kind,...>\n" (kind 0-7), empty when there is none.
+    static std::string Sched() { return std::string(SchedBuf()); }
+
     static int PinSet() { return PinSetRef().load(); }
     static void PinReplyClear() { PinReplyRef().store(-1); }
     static int PinReply() { return PinReplyRef().load(); }
@@ -72,6 +75,7 @@ private:
     static std::atomic<int>& PinReplyRef() { static std::atomic<int> v{-1}; return v; }   // -1 none yet, 0 refused, 1 done
     static std::atomic<int64_t>& IpAt() { static std::atomic<int64_t> t{-100000}; return t; }
     static char* IpBuf() { static char b[20] = {0}; return b; }
+    static char* SchedBuf() { static char b[96] = {0}; return b; }
     static void Loop(std::function<void(int)> cb) {
         uart_config_t c = {};
         c.baud_rate = 115200;
@@ -87,7 +91,7 @@ private:
             return;
         }
         Ready().store(true);
-        char line[64];
+        char line[100];
         int n = 0;
         float mv_avg = 0;
         int64_t last_ok = 0;
@@ -103,6 +107,7 @@ private:
                         memcpy(IpBuf(), line + 1, n);   // includes the terminating 0
                         IpAt().store(now);
                     }
+                    if (n >= 1 && n <= 80 && line[0] == 'Z') memcpy(SchedBuf(), line + 1, n);   // includes the terminating 0
                     if (n >= 2 && n <= 16 && line[0] == 'C' && OnCommand()) OnCommand()(std::string(line + 1));
                     if (n >= 2 && n <= 41 && line[0] == 'O' && OnOpenStory()) OnOpenStory()(std::string(line + 1));
                     if (n == 2 && line[0] == 'K' && (line[1] == '0' || line[1] == '1')) PinSetRef().store(line[1] - '0');

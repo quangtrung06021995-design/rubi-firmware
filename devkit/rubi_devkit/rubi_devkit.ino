@@ -1139,7 +1139,7 @@ bool tbDat(const String& spec, bool luu) {   // "2030:0,2100:4"; sai dinh dang t
     }
     for (int a = 0; a < n; a++) { g_tbGio[a] = gio[a]; g_tbLoai[a] = loai[a]; g_tbNgay[a] = -1; }
     g_tbN = n;
-    if (luu) { g_pref.begin("rubitb", false); g_pref.putString("ds", tbDanhSach()); g_pref.end(); }
+    if (luu) { g_pref.begin("rubitb", false); g_pref.putString("ds", tbDanhSach()); g_pref.end(); Serial2.printf("Z%s\n", tbDanhSach().c_str()); }
     return true;
 }
 void tbNap() {
@@ -1157,7 +1157,8 @@ void tbNhac(int k) {
 void tbKhiNoi() { if (g_tbCho >= 0) bleGui(String("R") + g_tbCho); }   // dong ho vua ket noi ma con viec chua xong
 void tbXong() { if (g_tbCho >= 0) { Serial.printf("Be bam XONG viec %d\n", g_tbCho); g_tbCho = -1; } }
 void tbTick(uint32_t now) {
-    static uint32_t last = 0;
+    static uint32_t last = 0, guiMan = 0;
+    if (now - guiMan >= 30000 || guiMan == 0) { guiMan = now | 1; Serial2.printf("Z%s\n", tbDanhSach().c_str()); }   // bo man hinh Rubi hien danh sach trong menu
     if (now - last < 1000) return;
     last = now;
     time_t t = time(nullptr);
