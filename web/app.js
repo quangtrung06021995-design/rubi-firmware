@@ -220,4 +220,12 @@ refresh();
   if(tb0)tb0.innerHTML=nm.map(function(n,i){return '<tr><td>'+n+'</td><td>—</td><td>'+(a[i]||"—")+'</td><td>Mở từ rubi.local để biết bản đang chạy</td></tr>'}).join("");
   if(up0)up0.innerHTML=nm.map(function(n,i){return '<div class="item"><div class="t">'+n+'<small>Bản mới nhất: '+(a[i]||"—")+'. Bản đang chạy chỉ hiện khi mở từ http://rubi.local</small></div><button class="btn ghost" disabled>Tự cập nhật</button></div>'}).join("")});
  if(n0)n0.innerHTML="<b>Chưa kết nối với Rubi.</b> Bạn đang xem bản mẫu: số liệu và nút bấm chưa điều khiển robot. Để điều khiển, nối điện thoại vào cùng Wi-Fi với Rubi rồi mở <b>http://rubi.local</b> hoặc quét mã QR trên màn hình của Rubi."}
+
+function tgSync(){if(!LIVE)return;api("/api/status").then(function(j){var e=$("tgs");if(!e||!j)return;e.textContent=j.tg?("Đã bật"+(j.tgbot?" (bot @"+j.tgbot+")":"")+". Bố mẹ sẽ nhận tin trên Telegram."):(j.tgtok?"Đã có token nhưng chưa tìm thấy cuộc trò chuyện: hãy gửi /start cho bot trên Telegram rồi bấm Lưu lại.":"Chưa cài đặt.")}).catch(function(){})}
+var tgErr={token:"Token không đúng.",wifi:"Rubi chưa nối Wi-Fi.",mang:"Không nối được Telegram, thử lại sau.",chua:"Chưa cài Telegram."};
+if($("tgsave")){
+$("tgsave").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để cài đặt");var t=$("tgt").value.trim();if(!t)return toast("Dán token của bot vào trước");var b=this;b.disabled=true;toast("Đang kiểm tra...");api("/api/tg?token="+encodeURIComponent(t)).then(function(j){if(j&&j.ok){$("tgt").value="";toast(j.tg?"Đã bật thông báo":"Lưu token rồi, hãy gửi /start cho bot")}else toast((j&&tgErr[j.err])||"Không lưu được");tgSync()}).catch(function(){toast("Không gọi được Rubi")}).then(function(){b.disabled=false})};
+$("tgtest").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để thử");api("/api/tgtest").then(function(j){toast(j&&j.ok?"Đã gửi tin thử, xem Telegram":(j&&tgErr[j.err])||"Không gửi được")}).catch(function(){toast("Không gọi được Rubi")})};
+$("tgoff").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để tắt");api("/api/tg?off=1").then(function(j){toast(j&&j.ok?"Đã tắt thông báo":"Không tắt được");tgSync()}).catch(function(){toast("Không gọi được Rubi")})};
+setTimeout(tgSync,1200)}
 })();

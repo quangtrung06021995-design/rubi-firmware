@@ -909,6 +909,7 @@ void webCam() {   // /api/cam?v=<ban>&u=<0|1> : camera tu bao phien ban va dang 
     webJson("{\"ok\":true}");
 }
 
+String tgJson();   // dinh nghia o phan Telegram phia duoi
 void webStatus() {
     bool ok = webAuth();
     if (!ok) {   // chua dang nhap: chi cho biet phien ban va can PIN
@@ -917,7 +918,7 @@ void webStatus() {
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
-               ",\"bat_mv\":" + String((int)g_bat_mv) +
+               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() +
                ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
                ((g_c3_at != 0 && millis() - g_c3_at < 120000) ? String(",\"c3v\":\"") + g_c3_v + "\"" : String("")) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
@@ -926,6 +927,169 @@ void webStatus() {
     webJson(j);
 }
 
+
+extern int g_tzMin;
+
+// ---------------- Thong bao cho BO ME qua Telegram ----------------
+// Token bot + ma cuoc tro chuyen luu trong bo nho cua DevKit (KHONG nam trong code / GitHub). Cai o trang Cai dat cua web Rubi.
+// Tin duoc dua vao hang doi va gui bang mot tac vu rieng nen khong lam dung vong lap lai xe.
+String g_tgToken, g_tgChat, g_tgBot;
+QueueHandle_t g_tgQ = nullptr;
+bool g_tgDaThay = false;      // dong ho da tung ket noi tu luc bat nguon
+bool g_tgXa = false;          // da bao "mat ket noi" (be ra xa) va chua bao quay lai
+uint32_t g_tgMatLuc = 0, g_tgBaoXaLuc = 0;
+const uint32_t TG_XA_SAU_MS = 90000;       // mat ket noi tu 90 giay moi coi la be ra xa
+const uint32_t TG_XA_CACH_MS = 300000;     // hai tin "ra xa" cach nhau it nhat 5 phut
+
+bool tgHopLeToken(const String& t) {
+    if (t.length() < 20 || t.length() > 70) return false;
+    for (unsigned i = 0; i < t.length(); i++) { char c = t[i]; if (!(isalnum((unsigned char)c) || c == ':' || c == '_' || c == '-')) return false; }
+    return t.indexOf(':') > 0;
+}
+bool tgCoCauHinh() { return g_tgToken.length() > 0 && g_tgChat.length() > 0; }
+String tgJson() { return String(",\"tg\":") + (tgCoCauHinh() ? "true" : "false") + ",\"tgtok\":" + (g_tgToken.length() ? "true" : "false") + ",\"tgbot\":\"" + g_tgBot + "\""; }
+void tgNap() {
+    g_pref.begin("rubitg", true);
+    g_tgToken = g_pref.getString("tok", "");
+    g_tgChat = g_pref.getString("chat", "");
+    g_tgBot = g_pref.getString("bot", "");
+    g_pref.end();
+}
+void tgLuu() {
+    g_pref.begin("rubitg", false);
+    g_pref.putString("tok", g_tgToken);
+    g_pref.putString("chat", g_tgChat);
+    g_pref.putString("bot", g_tgBot);
+    g_pref.end();
+}
+String tgMaHoa(const String& s) {   // ma hoa % cho form (UTF-8 giu nguyen tung byte)
+    String o;
+    char b[4];
+    for (unsigned i = 0; i < s.length(); i++) {
+        uint8_t c = (uint8_t)s[i];
+        if (isalnum(c) || c == '-' || c == '_' || c == '.') o += (char)c;
+        else { snprintf(b, sizeof(b), "%%%02X", c); o += b; }
+    }
+    return o;
+}
+String tgGio() {
+    time_t t = time(nullptr);
+    if (t < 1700000000) return String("");
+    t += (time_t)g_tzMin * 60;
+    struct tm tmv;
+    gmtime_r(&t, &tmv);
+    char b[8];
+    snprintf(b, sizeof(b), "%02d:%02d", tmv.tm_hour, tmv.tm_min);
+    return String(b);
+}
+void tgGuiTin(const String& msg) {   // dua vao hang doi; khong chan
+    if (!g_tgQ || !tgCoCauHinh()) return;
+    char buf[200];
+    size_t n = msg.length() < 199 ? msg.length() : 199;
+    memcpy(buf, msg.c_str(), n);
+    buf[n] = 0;
+    xQueueSend(g_tgQ, buf, 0);
+}
+static int tgHttp(const String& url, const String* body, String* out) {   // tra ma HTTP (<0 la loi mang)
+    WiFiClientSecure cl;
+    cl.setInsecure();
+    HTTPClient http;
+    http.setTimeout(8000);
+    http.setConnectTimeout(6000);
+    if (!http.begin(cl, url)) return -1;
+    int code;
+    if (body) { http.addHeader("Content-Type", "application/x-www-form-urlencoded"); code = http.POST(*body); }
+    else code = http.GET();
+    if (out && code > 0) *out = http.getString();
+    http.end();
+    return code;
+}
+void tgTask(void*) {
+    char buf[200];
+    for (;;) {
+        if (xQueueReceive(g_tgQ, buf, pdMS_TO_TICKS(1000)) != pdTRUE) continue;
+        bool xong = false;
+        for (int lan = 0; lan < 40 && !xong; lan++) {   // chua co Wi-Fi/Internet thi thu lai toi ~3 phut
+            if (!tgCoCauHinh()) break;
+            if (WiFi.status() == WL_CONNECTED) {
+                String body = String("chat_id=") + tgMaHoa(g_tgChat) + "&text=" + tgMaHoa(String(buf));
+                int code = tgHttp(String("https://api.telegram.org/bot") + g_tgToken + "/sendMessage", &body, nullptr);
+                Serial.printf("Telegram gui tin: HTTP %d\n", code);
+                if (code == 200 || code == 400 || code == 401 || code == 403 || code == 404) xong = true;   // sai cau hinh thi bo, khong thu lai
+            }
+            if (!xong) vTaskDelay(pdMS_TO_TICKS(5000));
+        }
+    }
+}
+void tgBatDau() {
+    tgNap();
+    g_tgQ = xQueueCreate(4, 200);
+    xTaskCreate(tgTask, "tg", 12288, nullptr, 1, nullptr);
+}
+// goi tu bleTick: cn = so thiet bi BLE dang noi, auth = dong ho da dang nhap
+void tgSuKien(int cn, bool auth, uint32_t now) {
+    if (auth && cn > 0) {
+        g_tgDaThay = true;
+        g_tgMatLuc = 0;
+        if (g_tgXa) {
+            g_tgXa = false;
+            String g = tgGio();
+            tgGuiTin(String("\xE2\x9C\x85 B\xC3\xA9 \xC4\x91\xC3\xA3 quay l\xE1\xBA\xA1i g\xE1\xBA\xA7n Rubi (\xC4\x91\xE1\xBB\x93ng h\xE1\xBB\x93 \xC4\x91\xC3\xA3 k\xE1\xBA\xBFt n\xE1\xBB\x91i l\xE1\xBA\xA1i)") + (g.length() ? String(" l\xC3\xBAc ") + g : String("")) + ".");
+        }
+        return;
+    }
+    if (cn == 0 && g_tgDaThay && !g_tgXa) {
+        if (g_tgMatLuc == 0) g_tgMatLuc = now | 1;
+        else if (now - g_tgMatLuc >= TG_XA_SAU_MS && (g_tgBaoXaLuc == 0 || now - g_tgBaoXaLuc >= TG_XA_CACH_MS)) {
+            g_tgXa = true;
+            g_tgBaoXaLuc = now | 1;
+            String g = tgGio();
+            tgGuiTin(String("\xE2\x9A\xA0\xEF\xB8\x8F \xC4\x90\xE1\xBB\x93ng h\xE1\xBB\x93 c\xE1\xBB\xA7a b\xC3\xA9 \xC4\x91\xC3\xA3 m\xE1\xBA\xA5t k\xE1\xBA\xBFt n\xE1\xBB\x91i v\xE1\xBB\x9Bi Rubi") + (g.length() ? String(" t\xE1\xBB\xAB ") + g : String("")) + ". B\xC3\xA9 c\xC3\xB3 th\xE1\xBB\x83 \xC4\x91ang \xE1\xBB\x9F xa Rubi (Bluetooth ch\xE1\xBB\x89 xa kho\xE1\xBA\xA3ng 10-20 m) ho\xE1\xBA\xB7c \xC4\x91\xE1\xBB\x93ng h\xE1\xBB\x93 h\xE1\xBA\xBFt pin/t\xE1\xBA\xAFt.");
+        }
+    }
+}
+
+String tgTimChat(const String& tok) {   // doc tin nhan moi nhat gui cho bot de lay ma cuoc tro chuyen
+    String r;
+    int code = tgHttp(String("https://api.telegram.org/bot") + tok + "/getUpdates?limit=1&offset=-1", nullptr, &r);
+    if (code != 200) return String("");
+    int i = r.indexOf("\"chat\":{\"id\":");
+    if (i < 0) return String("");
+    i += 13;
+    String id;
+    while (i < (int)r.length() && (isdigit((unsigned char)r[i]) || (r[i] == '-' && id.length() == 0)) && id.length() < 20) id += r[i++];
+    return id;
+}
+void webTg() {   // /api/tg?token=<token>  luu token, tu tim ma cuoc tro chuyen (be/me phai nhan tin cho bot truoc); /api/tg?off=1 xoa
+    if (!webAuth()) { webTuChoi(); return; }
+    if (g_web.hasArg("off")) {
+        g_tgToken = ""; g_tgChat = ""; g_tgBot = ""; g_tgXa = false; tgLuu();
+        webJson("{\"ok\":true,\"tg\":false}");
+        return;
+    }
+    String tok = g_web.arg("token");
+    tok.trim();
+    if (!tgHopLeToken(tok)) { webJson("{\"ok\":false,\"err\":\"token\"}"); return; }
+    if (WiFi.status() != WL_CONNECTED) { webJson("{\"ok\":false,\"err\":\"wifi\"}"); return; }
+    dungHet();   // cho nay chan vong lap 1-3 giay: dung robot cho an toan
+    String r;
+    int code = tgHttp(String("https://api.telegram.org/bot") + tok + "/getMe", nullptr, &r);
+    if (code != 200) { webJson(String("{\"ok\":false,\"err\":\"") + (code == 401 || code == 404 ? "token" : "mang") + "\"}"); return; }
+    String bot;
+    int i = r.indexOf("\"username\":\"");
+    if (i >= 0) { i += 12; int j = r.indexOf('"', i); if (j > i && j - i < 40) bot = r.substring(i, j); }
+    String chat = tgTimChat(tok);
+    g_tgToken = tok; g_tgBot = bot;
+    if (chat.length()) g_tgChat = chat;
+    tgLuu();
+    webJson(String("{\"ok\":true,\"tg\":") + (tgCoCauHinh() ? "true" : "false") + ",\"bot\":\"" + bot + "\",\"chat\":" + (tgCoCauHinh() ? "true" : "false") + "}");
+}
+void webTgTest() {   // /api/tgtest : gui thu mot tin
+    if (!webAuth()) { webTuChoi(); return; }
+    if (!tgCoCauHinh()) { webJson("{\"ok\":false,\"err\":\"chua\"}"); return; }
+    tgGuiTin(String("\xF0\x9F\xA4\x96 Rubi: tin g\xE1\xBB\xADi th\xE1\xBB\xAD th\xC3\xA0nh c\xC3\xB4ng. T\xE1\xBB\xAB gi\xE1\xBB\x9D b\xE1\xBB\x91 m\xE1\xBA\xB9 s\xE1\xBA\xBD nh\xE1\xBA\xADn th\xC3\xB4ng b\xC3\xA1o t\xE1\xBA\xA1i \xC4\x91\xC3\xA2y."));
+    webJson("{\"ok\":true}");
+}
 
 // ---------------- Bluetooth cho DONG HO CUA BE ----------------
 // Dong ho noi vao DevKit (BLE), gui lenh dang chu, cac lenh tuong duong web dieu khien:
@@ -1086,6 +1250,7 @@ void bleTick() {
     int cn = g_bleSrv->getConnectedCount();
     if (cn == 0 && g_bleConnPrev > 0) { g_bleAuth = false; dungHet(); Serial.println("Dong ho mat ket noi: dung robot"); }
     g_bleConnPrev = cn;
+    tgSuKien(cn, g_bleAuth, now);
     if (cn == 0 && now - g_bleAdvAt > 2000) {
         g_bleAdvAt = now;
         NimBLEAdvertising* a = NimBLEDevice::getAdvertising();
@@ -1110,6 +1275,8 @@ void webBatDau() {
     g_web.on("/api/led", HTTP_GET, webLed);
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
+    g_web.on("/api/tg", HTTP_GET, webTg);
+    g_web.on("/api/tgtest", HTTP_GET, webTgTest);
     g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });
     g_web.begin();
     g_web_started = true;
@@ -1306,6 +1473,7 @@ void setup() {
     wifiNapDS();
     wifiKetNoi();
     bleBatDau();
+    tgBatDau();
     Serial.println();
     Serial.printf("Rubi DevKit san sang. Phien ban %s. Motor dang dung.\n", FW_VERSION);
     inHuongDan();

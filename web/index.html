@@ -112,6 +112,11 @@
 
 <section class="view" id="v-cai-dat">
  <div class="card"><h2>Cài đặt</h2><div class="field"><label for="nm">Tên robot</label><input id="nm" value="Rubi"></div><div class="field"><label for="wf">Wi-Fi</label><input id="wf" value="TP-Link_7FA8"></div><p class="hint">Mã PIN điều khiển: đặt trên màn hình robot (Cài đặt → Mã PIN) hoặc bằng cáp USB.</p><button class="btn" id="save">Lưu</button></div>
+ <div class="card" id="tgcard"><h2>Thông báo cho bố mẹ (Telegram)</h2><p class="hint" id="tgs">Chưa cài đặt.</p>
+ <p class="hint">Bước 1: mở Telegram, tìm <b>@BotFather</b>, gửi <b>/newbot</b>, đặt tên, rồi copy mã token. Bước 2: tìm bot vừa tạo (hoặc thêm nó vào nhóm gia đình) và gửi cho nó tin <b>/start</b>. Bước 3: dán token vào đây rồi bấm Lưu.</p>
+ <div class="field"><label for="tgt">Token của bot</label><input id="tgt" type="password" autocomplete="off" placeholder="123456789:AA..."></div>
+ <button class="btn" id="tgsave">Lưu và nhận tin</button> <button class="btn ghost" id="tgtest">Gửi tin thử</button> <button class="btn ghost" id="tgoff">Tắt thông báo</button>
+ <p class="hint">Rubi báo khi đồng hồ của bé mất kết nối hơn 90 giây (bé ra xa Rubi, hoặc đồng hồ tắt/hết pin) và khi quay lại. Bluetooth chỉ xa khoảng 10–20 m nên đây không phải định vị.</p></div>
 </section>
 </div>
 <div class="stopbar" id="stopbar"><button class="btn bad" id="estop">DỪNG KHẨN CẤP</button></div>
