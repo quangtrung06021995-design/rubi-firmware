@@ -1,0 +1,32 @@
+watch run 37 sha 79f0c9bca379ef50ff0f6d1797ee2fa1f61cd305
+Config file written to: /home/runner/.arduino15/arduino-cli.yaml
+Downloading index: package_index.tar.bz2 0 B / 111.61 KiB    0.00%Downloading index: package_index.tar.bz2 downloaded
+Downloading index: package_esp32_index.json 0 B / 636.15 KiB    0.00%Downloading index: package_esp32_index.json downloaded
+Platform esp32:esp32@3.0.7 already installed
+Downloading GFX Library for Arduino@1.4.9...
+GFX Library for Arduino@1.4.9 GFX Library for Arduino@1.4.9 already downloaded
+Installing GFX Library for Arduino@1.4.9...
+Installed GFX Library for Arduino@1.4.9
+Downloading NimBLE-Arduino@1.4.3...
+NimBLE-Arduino@1.4.3 NimBLE-Arduino@1.4.3 already downloaded
+Installing NimBLE-Arduino@1.4.3...
+Installed NimBLE-Arduino@1.4.3
+Downloading JPEGDEC@1.8.5...
+JPEGDEC@1.8.5 JPEGDEC@1.8.5 already downloaded
+Installing JPEGDEC@1.8.5...
+Installed JPEGDEC@1.8.5
+Downloading bb_spi_lcd@2.9.10...
+bb_spi_lcd@2.9.10 bb_spi_lcd@2.9.10 already downloaded
+Installing bb_spi_lcd@2.9.10...
+Installed bb_spi_lcd@2.9.10
+Sketch uses 1773520 bytes (90%) of program storage space. Maximum is 1966080 bytes.
+Global variables use 65140 bytes (19%) of dynamic memory, leaving 262540 bytes for local variables. Maximum is 327680 bytes.
+total 42696
+drwxr-xr-x  2 runner runner     4096 Nov 10 04:38 .
+drwxr-xr-x 19 runner runner     4096 Nov 10 04:38 ..
+-rw-r--r--  1 runner runner  1819328 Nov 10 04:38 rubi_watch.ino.bin
+-rw-r--r--  1 runner runner    18688 Nov 10 04:38 rubi_watch.ino.bootloader.bin
+-rwxr-xr-x  1 runner runner 21818276 Nov 10 04:38 rubi_watch.ino.elf
+-rw-r--r--  1 runner runner 15849368 Nov 10 04:38 rubi_watch.ino.map
+-rw-r--r--  1 runner runner  4194304 Nov 10 04:38 rubi_watch.ino.merged.bin
+-rw-r--r--  1 runner runner     3072 Nov 10 04:38 rubi_watch.ino.partitions.bin
