@@ -984,8 +984,8 @@ String tgGio() {
 }
 void tgGuiTin(const String& msg) {   // dua vao hang doi; khong chan
     if (!g_tgQ || !tgCoCauHinh()) return;
-    char buf[200];
-    size_t n = msg.length() < 199 ? msg.length() : 199;
+    char buf[320];
+    size_t n = msg.length() < 319 ? msg.length() : 319;
     memcpy(buf, msg.c_str(), n);
     buf[n] = 0;
     xQueueSend(g_tgQ, buf, 0);
@@ -1005,7 +1005,7 @@ static int tgHttp(const String& url, const String* body, String* out) {   // tra
     return code;
 }
 void tgTask(void*) {
-    char buf[200];
+    char buf[320];
     for (;;) {
         if (xQueueReceive(g_tgQ, buf, pdMS_TO_TICKS(1000)) != pdTRUE) continue;
         bool xong = false;
@@ -1023,7 +1023,7 @@ void tgTask(void*) {
 }
 void tgBatDau() {
     tgNap();
-    g_tgQ = xQueueCreate(4, 200);
+    g_tgQ = xQueueCreate(4, 320);
     xTaskCreate(tgTask, "tg", 12288, nullptr, 1, nullptr);
 }
 // goi tu bleTick: cn = so thiet bi BLE dang noi, auth = dong ho da dang nhap
@@ -1034,7 +1034,7 @@ void tgSuKien(int cn, bool auth, uint32_t now) {
         if (g_tgXa) {
             g_tgXa = false;
             String g = tgGio();
-            tgGuiTin(String("\xE2\x9C\x85 B\xC3\xA9 \xC4\x91\xC3\xA3 quay l\xE1\xBA\xA1i g\xE1\xBA\xA7n Rubi (\xC4\x91\xE1\xBB\x93ng h\xE1\xBB\x93 \xC4\x91\xC3\xA3 k\xE1\xBA\xBFt n\xE1\xBB\x91i l\xE1\xBA\xA1i)") + (g.length() ? String(" l\xC3\xBAc ") + g : String("")) + ".");
+            tgGuiTin(String("✅ Bé đã quay lại gần Rubi (đồng hồ đã kết nối lại)") + (g.length() ? String(" lúc ") + g : String("")) + ".");
         }
         return;
     }
@@ -1044,7 +1044,7 @@ void tgSuKien(int cn, bool auth, uint32_t now) {
             g_tgXa = true;
             g_tgBaoXaLuc = now | 1;
             String g = tgGio();
-            tgGuiTin(String("\xE2\x9A\xA0\xEF\xB8\x8F \xC4\x90\xE1\xBB\x93ng h\xE1\xBB\x93 c\xE1\xBB\xA7a b\xC3\xA9 \xC4\x91\xC3\xA3 m\xE1\xBA\xA5t k\xE1\xBA\xBFt n\xE1\xBB\x91i v\xE1\xBB\x9Bi Rubi") + (g.length() ? String(" t\xE1\xBB\xAB ") + g : String("")) + ". B\xC3\xA9 c\xC3\xB3 th\xE1\xBB\x83 \xC4\x91ang \xE1\xBB\x9F xa Rubi (Bluetooth ch\xE1\xBB\x89 xa kho\xE1\xBA\xA3ng 10-20 m) ho\xE1\xBA\xB7c \xC4\x91\xE1\xBB\x93ng h\xE1\xBB\x93 h\xE1\xBA\xBFt pin/t\xE1\xBA\xAFt.");
+            tgGuiTin(String("⚠️ Đồng hồ của bé đã mất kết nối với Rubi") + (g.length() ? String(" từ ") + g : String("")) + ". Bé có thể đang ở xa Rubi (Bluetooth chỉ xa khoảng 10-20 m) hoặc đồng hồ hết pin/tắt.");
         }
     }
 }
@@ -1087,7 +1087,7 @@ void webTg() {   // /api/tg?token=<token>  luu token, tu tim ma cuoc tro chuyen 
 void webTgTest() {   // /api/tgtest : gui thu mot tin
     if (!webAuth()) { webTuChoi(); return; }
     if (!tgCoCauHinh()) { webJson("{\"ok\":false,\"err\":\"chua\"}"); return; }
-    tgGuiTin(String("\xF0\x9F\xA4\x96 Rubi: tin g\xE1\xBB\xADi th\xE1\xBB\xAD th\xC3\xA0nh c\xC3\xB4ng. T\xE1\xBB\xAB gi\xE1\xBB\x9D b\xE1\xBB\x91 m\xE1\xBA\xB9 s\xE1\xBA\xBD nh\xE1\xBA\xADn th\xC3\xB4ng b\xC3\xA1o t\xE1\xBA\xA1i \xC4\x91\xC3\xA2y."));
+    tgGuiTin(String("🤖 Rubi: tin gửi thử thành công. Từ giờ bố mẹ sẽ nhận thông báo tại đây."));
     webJson("{\"ok\":true}");
 }
 
