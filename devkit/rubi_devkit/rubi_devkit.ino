@@ -1302,10 +1302,6 @@ void bleLenh(const char* m) {
     }
 }
 
-// Loi "esp_bt_controller_init ESP_ERR_INVALID_STATE": core Arduino ESP32 moi giai phong bo nho Bluetooth luc khoi dong
-// neu khong thay ma nao bao dang dung BT. Bao ro la co dung BLE (NimBLE) de no giu lai.
-extern "C" bool btInUse(void) { return true; }
-
 void bleBatDau() {
     g_bleQ = xQueueCreate(8, 48);
     NimBLEDevice::init("Rubi");
