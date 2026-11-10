@@ -26,6 +26,7 @@
 #include <esp_system.h>
 #include "faces.h"
 #include "dials.h"
+#include "viec.h"
 #include "icons.h"
 #include "volicons.h"
 
@@ -960,16 +961,17 @@ static void drawTouchTest() {
 static const char* const REM_LBL[8] = {"DANH RANG", "AN COM", "HOC BAI", "DI TAM", "DI NGU", "DON DO CHOI", "UONG NUOC", "DOC SACH"};
 static void drawRemind() {
     int k = g_remK < 0 ? 0 : g_remK;
-    uint16_t col[8] = {C_TEAL, C_ORANGE, C_BLUE, C_BLUE, C_PURPLE, C_GREEN, C_TEAL, C_ORANGE};
     gfx->fillScreen(C_BG);
-    gfx->fillCircle(120, 88, 56, col[k]);
-    textCenter("DEN GIO", 120, 56, 2, C_TXT);
-    int n = (int)strlen(REM_LBL[k]);
-    textCenter(REM_LBL[k], 120, 98, n > 9 ? 2 : 3, C_TXT);
-    gfx->fillRoundRect(55, 160, 130, 44, 14, C_OK);
-    textCenter("XONG", 120, 182, 3, C_TXT);
+    if (g_jpeg.openFLASH((uint8_t*)VIEC_JPG[k], (int)VIEC_JPG_LEN[k], jpegDraw)) {   // icon viec 112x112 giua tren
+        g_jpeg.setPixelType(RGB565_BIG_ENDIAN);
+        g_jpeg.decode(64, 20, 0);
+        g_jpeg.close();
+    }
+    textCenter(REM_LBL[k], 120, 148, 2, C_TXT);
+    gfx->fillRoundRect(70, 168, 100, 40, 14, C_OK);
+    textCenter("XONG", 120, 188, 2, C_TXT);
 }
-static bool remHit(int px, int py) { return px >= 45 && px <= 195 && py >= 150 && py <= 214; }
+static bool remHit(int px, int py) { return px >= 55 && px <= 185 && py >= 160 && py <= 216; }
 
 static void drawPage() {
     switch (g_page) {
