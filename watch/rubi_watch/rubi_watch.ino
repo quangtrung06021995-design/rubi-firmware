@@ -1311,7 +1311,8 @@ void setup() {
     static bool cvOk = false;
     cvOk = dcAlloc();
     gfx->fillScreen(C_BG);
-    textCenter("RUBI", 120, 105, 4, C_BLUE);
+    textCenter("RUBI", 120, 88, 4, C_BLUE);
+    textCenter("WATCH", 120, 122, 3, C_BLUE);
     {
         char hb[32];
         snprintf(hb, sizeof(hb), "RAM %uK %s", (unsigned)(ESP.getFreeHeap() / 1024), cvOk ? "kim OK" : "kim tat");
