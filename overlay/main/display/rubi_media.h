@@ -1211,6 +1211,10 @@ private:
                 Close();
                 return;
             }
+            if (c.size() == 2 && c[0] == 'n' && c[1] >= '0' && c[1] <= '7') {   // nhac viec trong thoi gian bieu cua be: Rubi noi to cau nhac, khong mo man hinh nao
+                RemindSay(c[1] - '0');
+                return;
+            }
             if (!RemotePrepare()) return;
             std::lock_guard<std::recursive_mutex> lk(mutex_);
             tick_gen_++;
@@ -1230,6 +1234,31 @@ private:
                 if (idx >= 0 && idx < (int)songs_.size()) { page_ = idx / kSongsPerPage; StartPlayback(idx); }
             }
         }, "rubi_remote2");
+    }
+
+    // Spoken reminder from the child's schedule (the watch/DevKit sends "Cn<0-7>"): the assistant reads one fixed sentence aloud.
+    void RemindSay(int k) {
+        static const char* const kText[8] = {
+            "Bé ơi, đến giờ đánh răng rồi!", "Bé ơi, đến giờ ăn cơm rồi!", "Bé ơi, đến giờ học bài rồi!", "Bé ơi, đến giờ đi tắm rồi!",
+            "Bé ơi, đến giờ đi ngủ rồi, chúc bé ngủ ngon!", "Bé ơi, đến giờ dọn đồ chơi rồi!", "Bé ơi, uống nước nào!", "Bé ơi, đến giờ đọc sách rồi!"};
+        if (k < 0 || k > 7) return;
+        auto& app = Application::GetInstance();
+        for (int i = 0; i < 20; i++) {   // bring the assistant back to idle first
+            if (app.GetDeviceState() == kDeviceStateIdle) break;
+            app.WakeWordInvoke("");
+            vTaskDelay(pdMS_TO_TICKS(300));
+        }
+        if (app.GetDeviceState() != kDeviceStateIdle) return;
+        app.WakeWordInvoke(std::string("Hãy đọc to, đúng từng chữ, không thêm lời nào khác: ") + kText[k]);
+        bool spoke = false;
+        for (int i = 0; i < 80; i++) {
+            vTaskDelay(pdMS_TO_TICKS(250));
+            auto st = app.GetDeviceState();
+            if (st == kDeviceStateSpeaking) spoke = true;
+            if (spoke && st == kDeviceStateListening) { app.WakeWordInvoke(""); break; }   // finished: stop listening
+            if (spoke && st == kDeviceStateIdle) break;
+            if (!spoke && i == 48) break;
+        }
     }
 
     void RemoteOpenStory(const std::string& dir) {

@@ -112,6 +112,9 @@
 
 <section class="view" id="v-cai-dat">
  <div class="card"><h2>Cài đặt</h2><div class="field"><label for="nm">Tên robot</label><input id="nm" value="Rubi"></div><div class="field"><label for="wf">Wi-Fi</label><input id="wf" value="TP-Link_7FA8"></div><p class="hint">Mã PIN điều khiển: đặt trên màn hình robot (Cài đặt → Mã PIN) hoặc bằng cáp USB.</p><button class="btn" id="save">Lưu</button></div>
+ <div class="card" id="tbcard"><h2>Thời gian biểu của bé</h2><p class="hint">Đến giờ, đồng hồ của bé hiện việc cần làm, Rubi nói nhắc, bé bấm XONG trên đồng hồ. Chưa bấm sau 5 phút thì nhắc thêm một lần. Cần Rubi nối Wi-Fi để có giờ.</p>
+ <div id="tbl"></div><button class="btn ghost" id="tbadd">+ Thêm việc</button> <button class="btn" id="tbsave">Lưu thời gian biểu</button>
+ <div class="field" style="margin-top:12px"><label for="tbk">Nhắc thử ngay</label><select id="tbk"></select></div><button class="btn ghost" id="tbtest">Nhắc thử</button></div>
  <div class="card" id="tgcard"><h2>Thông báo cho bố mẹ (Telegram)</h2><p class="hint" id="tgs">Chưa cài đặt.</p>
  <p class="hint">Bước 1: mở Telegram, tìm <b>@BotFather</b>, gửi <b>/newbot</b>, đặt tên, rồi copy mã token. Bước 2: tìm bot vừa tạo (hoặc thêm nó vào nhóm gia đình) và gửi cho nó tin <b>/start</b>. Bước 3: dán token vào đây rồi bấm Lưu.</p>
  <div class="field"><label for="tgt">Token của bot</label><input id="tgt" type="password" autocomplete="off" placeholder="123456789:AA..."></div>

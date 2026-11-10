@@ -1091,6 +1091,104 @@ void webTgTest() {   // /api/tgtest : gui thu mot tin
     webJson("{\"ok\":true}");
 }
 
+
+extern bool g_bleAuth;
+// ---------------- Thoi gian bieu cua BE ----------------
+// Toi da 10 viec moi ngay (gio HHMM + loai 0-7: danh rang, an com, hoc bai, di tam, di ngu, don do choi, uong nuoc, doc sach).
+// Den gio: Rubi noi nhac (lenh "Cn<loai>" sang bo man hinh), dong ho hien "DEN GIO ..." (BLE "R<loai>") va cho be bam XONG ("D").
+// Sau 5 phut chua XONG thi nhac them 1 lan, sau 10 phut thi thoi. Can co gio (Wi-Fi/NTP hoac dong ho) moi chay.
+const int TB_MAX = 10;
+int g_tbGio[TB_MAX];
+int g_tbLoai[TB_MAX];
+long g_tbNgay[TB_MAX];
+int g_tbN = 0;
+int g_tbCho = -1;
+uint32_t g_tbChoLuc = 0;
+int g_tbLan = 0;
+
+String tbDanhSach() {
+    String o;
+    for (int i = 0; i < g_tbN; i++) {
+        char b[12];
+        snprintf(b, sizeof(b), "%04d:%d", g_tbGio[i], g_tbLoai[i]);
+        if (i) o += ',';
+        o += b;
+    }
+    return o;
+}
+bool tbDat(const String& spec, bool luu) {   // "2030:0,2100:4"; sai dinh dang thi giu nguyen danh sach cu
+    int gio[TB_MAX], loai[TB_MAX], n = 0;
+    int i = 0, len = spec.length();
+    while (i < len) {
+        int j = spec.indexOf(',', i);
+        if (j < 0) j = len;
+        String tok = spec.substring(i, j);
+        tok.trim();
+        if (tok.length()) {
+            int v = -1, k = -1;
+            if (sscanf(tok.c_str(), "%d:%d", &v, &k) != 2) return false;
+            if (v < 0 || v > 2359 || v % 100 > 59 || k < 0 || k > 7 || n >= TB_MAX) return false;
+            gio[n] = v; loai[n] = k; n++;
+        }
+        i = j + 1;
+    }
+    for (int a = 1; a < n; a++) {   // xep theo gio
+        int g = gio[a], l = loai[a], b = a - 1;
+        while (b >= 0 && gio[b] > g) { gio[b + 1] = gio[b]; loai[b + 1] = loai[b]; b--; }
+        gio[b + 1] = g; loai[b + 1] = l;
+    }
+    for (int a = 0; a < n; a++) { g_tbGio[a] = gio[a]; g_tbLoai[a] = loai[a]; g_tbNgay[a] = -1; }
+    g_tbN = n;
+    if (luu) { g_pref.begin("rubitb", false); g_pref.putString("ds", tbDanhSach()); g_pref.end(); }
+    return true;
+}
+void tbNap() {
+    g_pref.begin("rubitb", true);
+    String s = g_pref.getString("ds", "");
+    g_pref.end();
+    tbDat(s, false);
+}
+void tbNhac(int k) {
+    g_tbCho = k; g_tbChoLuc = millis() | 1; g_tbLan = 1;
+    Serial2.printf("Cn%d\n", k);
+    if (g_bleAuth) bleGui(String("R") + k);
+    Serial.printf("Thoi gian bieu: nhac viec %d\n", k);
+}
+void tbKhiNoi() { if (g_tbCho >= 0) bleGui(String("R") + g_tbCho); }   // dong ho vua ket noi ma con viec chua xong
+void tbXong() { if (g_tbCho >= 0) { Serial.printf("Be bam XONG viec %d\n", g_tbCho); g_tbCho = -1; } }
+void tbTick(uint32_t now) {
+    static uint32_t last = 0;
+    if (now - last < 1000) return;
+    last = now;
+    time_t t = time(nullptr);
+    if (t < 1700000000) return;
+    long loc = (long)t + (long)g_tzMin * 60;
+    long ngay = loc / 86400;
+    int sec = (int)(loc % 86400);
+    int hhmm = (sec / 3600) * 100 + (sec % 3600) / 60;
+    for (int i = 0; i < g_tbN; i++)
+        if (g_tbGio[i] == hhmm && g_tbNgay[i] != ngay) { g_tbNgay[i] = ngay; tbNhac(g_tbLoai[i]); }
+    if (g_tbCho >= 0) {
+        if (g_tbLan < 2 && now - g_tbChoLuc >= 300000UL) {
+            g_tbLan = 2;
+            Serial2.printf("Cn%d\n", g_tbCho);
+            if (g_bleAuth) bleGui(String("R") + g_tbCho);
+        } else if (now - g_tbChoLuc >= 600000UL) g_tbCho = -1;
+    }
+}
+void webTb() {   // /api/tb[?set=2030:0,2100:4] : xem hoac dat thoi gian bieu
+    if (!webAuth()) { webTuChoi(); return; }
+    if (g_web.hasArg("set") && !tbDat(g_web.arg("set"), true)) { webJson("{\"ok\":false,\"err\":\"dinh dang\"}"); return; }
+    webJson(String("{\"ok\":true,\"ds\":\"") + tbDanhSach() + "\",\"gio\":" + (time(nullptr) > 1700000000 ? "true" : "false") + "}");
+}
+void webTbTest() {   // /api/tbtest?k=0..7 : nhac thu ngay
+    if (!webAuth()) { webTuChoi(); return; }
+    int k = g_web.arg("k").toInt();
+    if (k < 0 || k > 7) { webJson("{\"ok\":false}"); return; }
+    tbNhac(k);
+    webJson("{\"ok\":true}");
+}
+
 // ---------------- Bluetooth cho DONG HO CUA BE ----------------
 // Dong ho noi vao DevKit (BLE), gui lenh dang chu, cac lenh tuong duong web dieu khien:
 //   K<khoa>    dang nhap (khoa = WATCH_KEY, phai trung firmware dong ho); chua dang nhap thi bo qua moi lenh khac
@@ -1157,7 +1255,7 @@ void bleLenh(const char* m) {
     if (k == 'K') {
         g_bleAuth = (s.substring(1) == WATCH_KEY);
         bleGui(g_bleAuth ? "A1" : "A0");
-        if (g_bleAuth) { bleTrangThai(); bleGioGui(); bleGui(String("E") + g_ledMask); bleGui(String("Y") + g_ledColor + "," + g_ledEff); }
+        if (g_bleAuth) { bleTrangThai(); bleGioGui(); bleGui(String("E") + g_ledMask); bleGui(String("Y") + g_ledColor + "," + g_ledEff); tbKhiNoi(); }
         return;
     }
     if (!g_bleAuth) return;
@@ -1173,6 +1271,8 @@ void bleLenh(const char* m) {
         }
     } else if (k == 'X') {
         dungHet();
+    } else if (k == 'D') {
+        tbXong();
     } else if (k == 'A') {
         if (!g_pin_thap) nhayBat();
     } else if (k == 'C') {
@@ -1275,6 +1375,8 @@ void webBatDau() {
     g_web.on("/api/led", HTTP_GET, webLed);
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
+    g_web.on("/api/tb", HTTP_GET, webTb);
+    g_web.on("/api/tbtest", HTTP_GET, webTbTest);
     g_web.on("/api/tg", HTTP_GET, webTg);
     g_web.on("/api/tgtest", HTTP_GET, webTgTest);
     g_web.onNotFound([]() { g_web.send(404, "text/plain", "Khong co trang nay"); });
@@ -1474,6 +1576,7 @@ void setup() {
     wifiKetNoi();
     bleBatDau();
     tgBatDau();
+    tbNap();
     Serial.println();
     Serial.printf("Rubi DevKit san sang. Phien ban %s. Motor dang dung.\n", FW_VERSION);
     inHuongDan();
@@ -1492,6 +1595,7 @@ void loop() {
     doPin();
     wifiTick();
     bleTick();
+    tbTick(millis());
     if (millis() - g_ledSentAt > 2000) ledGui();   // gui lai trang thai den moi 2 giay (C3 Zero moi bat nguon cung nhan duoc)
     if (TU_CAP_NHAT_KHI_BAT && !g_auto_done && g_auto_at != 0 && (int32_t)(millis() - g_auto_at) >= 0) {
         g_auto_done = true;   // chi thu mot lan moi lan bat nguon

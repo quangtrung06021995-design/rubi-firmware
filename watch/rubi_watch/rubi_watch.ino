@@ -112,7 +112,15 @@ static NimBLERemoteCharacteristic* g_tx = nullptr;
 static char g_in[160];
 static size_t g_inN = 0;
 
+static volatile int g_remK = -1;        // viec trong thoi gian bieu dang nhac (0-7), -1 = khong co
+static volatile bool g_remNew = false;  // co loi nhac moi tu DevKit, vong lap chinh se hien len
+static uint32_t g_remAt = 0;
 static void xuLyDong(const char* l) {
+    if (l[0] == 'R') {
+        int k = atoi(l + 1);
+        if (k >= 0 && k <= 7) { g_remK = k; g_remNew = true; }
+        return;
+    }
     if (l[0] == 'A') {
         g_bleAuthed = (l[1] == '1');
         if (g_bleAuthed && g_txQ) { char w[32] = "W"; xQueueSend(g_txQ, w, 0); }   // xin Wi-Fi de tu cap nhat
@@ -305,7 +313,7 @@ static void touchPoll() {
 }
 
 // ---------------- Giao dien ----------------
-enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2, P_LED };
+enum { P_HOME, P_MENU, P_DRIVE, P_MUSIC, P_STORY, P_LEARN, P_SET, P_TOUCH, P_OTA, P_SET2, P_LED, P_REMIND };
 static int g_page = P_HOME;
 static uint32_t g_lastTouchAt = 0;
 static int g_bright = 255;
@@ -948,6 +956,21 @@ static void drawTouchTest() {
     drawBack();
 }
 
+// ---------------- Nhac viec theo thoi gian bieu ----------------
+static const char* const REM_LBL[8] = {"DANH RANG", "AN COM", "HOC BAI", "DI TAM", "DI NGU", "DON DO CHOI", "UONG NUOC", "DOC SACH"};
+static void drawRemind() {
+    int k = g_remK < 0 ? 0 : g_remK;
+    uint16_t col[8] = {C_TEAL, C_ORANGE, C_BLUE, C_BLUE, C_PURPLE, C_GREEN, C_TEAL, C_ORANGE};
+    gfx->fillScreen(C_BG);
+    gfx->fillCircle(120, 88, 56, col[k]);
+    textCenter("DEN GIO", 120, 56, 2, C_TXT);
+    int n = (int)strlen(REM_LBL[k]);
+    textCenter(REM_LBL[k], 120, 98, n > 9 ? 2 : 3, C_TXT);
+    gfx->fillRoundRect(55, 160, 130, 44, 14, C_OK);
+    textCenter("XONG", 120, 182, 3, C_TXT);
+}
+static bool remHit(int px, int py) { return px >= 45 && px <= 195 && py >= 150 && py <= 214; }
+
 static void drawPage() {
     switch (g_page) {
         case P_HOME:  drawHome(); break;
@@ -959,6 +982,7 @@ static void drawPage() {
         case P_SET:   drawSet(); break;
         case P_LED:   drawLedPage(); break;
         case P_TOUCH: drawTouchTest(); break;
+        case P_REMIND: drawRemind(); break;
     }
 }
 
@@ -1203,6 +1227,9 @@ static void onTouch(int ev, int x, int y) {
                 case 3: sendCmd("Cm3"); break;
                 case 4: sendCmd("Chuy"); break;
             }
+            break;
+        case P_REMIND:
+            if (ev == 1 && remHit(x, y)) { sendCmd("D"); g_remK = -1; gotoPage(P_HOME); }   // be bam XONG
             break;
         case P_LED:
             if (ev != 1) break;
@@ -1489,7 +1516,13 @@ void loop() {
         if (st != lastState || g_robotPct != lastPct || bp != lastBatt) { lastState = st; lastPct = g_robotPct; lastBatt = bp; drawHomeStatus(); }
     }
     // 15 giay khong cham o menu/trang con thi tu quay ve mat dong ho (khong ap dung luc dang keo lai xe, luc cap nhat)
-    if (g_page != P_HOME && g_page != P_OTA && !g_drvActive && now - g_lastTouchAt > MENU_IDLE_MS) {
+    if (g_remNew) {   // DevKit nhac viec: hien man hinh "DEN GIO ..." va cho be bam XONG (toi da 10 phut)
+        g_remNew = false;
+        g_remAt = now | 1;
+        gotoPage(P_REMIND);
+    }
+    if (g_page == P_REMIND && now - g_remAt > 600000UL) { g_remK = -1; gotoPage(P_HOME); }
+    if (g_page != P_HOME && g_page != P_OTA && g_page != P_REMIND && !g_drvActive && now - g_lastTouchAt > MENU_IDLE_MS) {
         if (g_page == P_DRIVE) sendCmd("X");
         gotoPage(P_HOME);
     }

@@ -228,4 +228,17 @@ $("tgsave").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.loca
 $("tgtest").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để thử");api("/api/tgtest").then(function(j){toast(j&&j.ok?"Đã gửi tin thử, xem Telegram":(j&&tgErr[j.err])||"Không gửi được")}).catch(function(){toast("Không gọi được Rubi")})};
 $("tgoff").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để tắt");api("/api/tg?off=1").then(function(j){toast(j&&j.ok?"Đã tắt thông báo":"Không tắt được");tgSync()}).catch(function(){toast("Không gọi được Rubi")})};
 setTimeout(tgSync,1200)}
+
+var TBN=["Đánh răng","Ăn cơm","Học bài","Đi tắm","Đi ngủ","Dọn đồ chơi","Uống nước","Đọc sách"],TB=[];
+function tbOpts(sel){return TBN.map(function(n,i){return '<option value="'+i+'"'+(i===sel?" selected":"")+'>'+n+'</option>'}).join("")}
+function tbDraw(){var l=$("tbl");if(!l)return;l.innerHTML=TB.length?TB.map(function(r,i){return '<div class="field" style="flex-direction:row;gap:8px;align-items:center"><input type="time" data-i="'+i+'" data-f="h" value="'+r.h+'"><select data-i="'+i+'" data-f="k">'+tbOpts(r.k)+'</select><button class="btn ghost" data-d="'+i+'" aria-label="Xóa">✕</button></div>'}).join(""):'<p class="hint">Chưa có việc nào.</p>'}
+function tbLoad(){if(!LIVE)return;api("/api/tb").then(function(j){if(!j||!j.ok)return;TB=(j.ds?j.ds.split(","):[]).map(function(x){var p=x.split(":");return{h:p[0].slice(0,2)+":"+p[0].slice(2),k:+p[1]}});tbDraw()}).catch(function(){})}
+if($("tbl")){
+$("tbk").innerHTML=tbOpts(0);
+$("tbl").addEventListener("change",function(e){var t=e.target,i=+t.dataset.i;if(isNaN(i)||!TB[i])return;if(t.dataset.f==="h")TB[i].h=t.value||"00:00";else TB[i].k=+t.value});
+$("tbl").addEventListener("click",function(e){var b=e.target.closest("[data-d]");if(!b)return;TB.splice(+b.dataset.d,1);tbDraw()});
+$("tbadd").onclick=function(){if(TB.length>=10)return toast("Tối đa 10 việc");TB.push({h:"20:30",k:0});tbDraw()};
+$("tbsave").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để lưu");var ds=TB.map(function(r){return r.h.replace(":","")+":"+r.k}).join(",");api("/api/tb?set="+encodeURIComponent(ds)).then(function(j){toast(j&&j.ok?(j.gio?"Đã lưu thời gian biểu":"Đã lưu (Rubi chưa có giờ, cần nối Wi-Fi)"):"Không lưu được");tbLoad()}).catch(function(){toast("Không gọi được Rubi")})};
+$("tbtest").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để thử");api("/api/tbtest?k="+$("tbk").value).then(function(j){toast(j&&j.ok?"Đã nhắc thử: xem đồng hồ và nghe Rubi":"Không nhắc được")}).catch(function(){toast("Không gọi được Rubi")})};
+setTimeout(tbLoad,1500)}
 })();
