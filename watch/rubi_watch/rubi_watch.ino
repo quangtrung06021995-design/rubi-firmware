@@ -321,8 +321,9 @@ static int g_homeX0 = 0, g_homeY0 = 0;
 // Pin dong ho: uoc luong theo thoi gian da chay ke tu moc "pin day" (khong do duoc dien ap that)
 const float BATT_FULL_MIN = 90.0f;        // so phut (quy doi) chay duoc voi 1 lan sac day (pin 140 mAh) - chinh sau khi do thuc te
 static float g_usedMin = 0;
+static float g_battFull = BATT_FULL_MIN;   // dung luong that do dong ho tu hoc (phut quy doi), mac dinh BATT_FULL_MIN
 static int battPct() {
-    float p = 100.0f - g_usedMin * 100.0f / BATT_FULL_MIN;
+    float p = 100.0f - g_usedMin * 100.0f / g_battFull;
     return p < 0 ? 0 : (int)p;
 }
 static void battSave() {
@@ -330,6 +331,40 @@ static void battSave() {
     pr.begin("watch", false);
     pr.putFloat("used", g_usedMin);
     pr.end();
+}
+// Bam giu bieu tuong pin = da sac day: ve 100% va xoa co "pin da can"
+static void battReset() {
+    g_usedMin = 0;
+    Preferences pr;
+    pr.begin("watch", false);
+    pr.putFloat("used", 0);
+    pr.putBool("dead", false);
+    pr.end();
+}
+// Luc khoi dong: doc luong pin da dung va TU HOC dung luong that.
+// - SUT NGUON (pin can nen dien ap tut): thoi gian chay vua roi = dung luong that (chi tin neu hop ly, tranh sut do dong dot bien)
+// - BAT NGUON ma da chay qua 100%: coi nhu pin da can (mach bao ve cat), hoc roi coi nhu da sac lai
+// - BAT NGUON sau khi pin da can (co "dead"): coi nhu da sac, ve 100%
+static void battBoot(esp_reset_reason_t rr) {
+    Preferences pr;
+    pr.begin("watch", false);
+    g_battFull = pr.getFloat("bfull", BATT_FULL_MIN);
+    g_usedMin = pr.getFloat("used", 0);
+    bool dead = pr.getBool("dead", false);
+    if (rr == ESP_RST_POWERON && dead) {
+        g_usedMin = 0; pr.putFloat("used", 0); pr.putBool("dead", false);
+    } else if (!dead && (rr == ESP_RST_BROWNOUT || (rr == ESP_RST_POWERON && g_usedMin >= g_battFull))) {
+        float ran = g_usedMin + (rr == ESP_RST_BROWNOUT ? 2.5f : 0.0f);   // gia tri luu cham toi 5 phut
+        if (ran >= 0.4f * g_battFull && ran <= 3.0f * g_battFull) {
+            float nf = 0.4f * g_battFull + 0.6f * ran;
+            g_battFull = nf < 30.0f ? 30.0f : (nf > 400.0f ? 400.0f : nf);
+            pr.putFloat("bfull", g_battFull);
+        }
+        if (rr == ESP_RST_BROWNOUT) { g_usedMin = g_battFull; pr.putFloat("used", g_usedMin); pr.putBool("dead", true); }
+        else { g_usedMin = 0; pr.putFloat("used", 0); }
+    }
+    pr.end();
+    Serial.printf("pin: dung luong %.0f phut, da dung %.1f, %d%%\n", g_battFull, g_usedMin, battPct());
 }
 
 struct TileDef { const char* label; uint16_t color; };
@@ -1361,9 +1396,9 @@ void setup() {
         Preferences pr;
         pr.begin("watch", true);
         g_face = pr.getInt("face", 0);
-        g_usedMin = pr.getFloat("used", 0);
         g_tzMin = pr.getInt("tz", g_tzMin);
         pr.end();
+        battBoot(rr);
         if (g_face < 0 || g_face >= NFACE) g_face = 0;
     }
     g_lastTouchAt = millis();
@@ -1398,7 +1433,7 @@ void loop() {
     // giu lau tren man hinh chinh: doi mat dong ho
     if (g_page == P_HOME && !g_aod && g_touching && g_homeDownAt != 0 && !g_homeSwitched && !ignoreUntilUp && g_battHold && now - g_homeDownAt >= 2000u) {
         g_homeSwitched = true;
-        g_usedMin = 0; battSave(); drawHomeStatus();   // giu lau len bieu tuong pin = da sac day
+        battReset(); drawHomeStatus();   // giu lau len bieu tuong pin = da sac day
     }
     // luu gio hien tai moi 5 phut de sau khi reset van con gio gan dung
     static uint32_t timeSaveAt = 0;
@@ -1418,6 +1453,8 @@ void loop() {
     if (now - battAt >= 60000) {
         battAt = now;
         g_usedMin += (g_bright >= 255) ? 1.0f : (g_bright > 40 ? 0.5f : 0.3f);
+        if (g_bleConn) g_usedMin += 0.1f;     // radio Bluetooth dang ket noi
+        if (g_otaMode) g_usedMin += 0.6f;     // Wi-Fi dang bat (cap nhat) ton nhieu dien
         if (++battN % 5 == 0) battSave();
     }
     // gui lenh lai xe lien tuc khi dang keo
