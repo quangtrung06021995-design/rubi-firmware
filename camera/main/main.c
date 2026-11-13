@@ -7,6 +7,9 @@
 //   forget the Wi-Fi and start the setup again.
 // Updates: at every boot the board reads manifest.json from GitHub (branch ota-cam) and installs
 //   a newer firmware by itself.
+// Remote viewing (from any network): the board also connects OUT to the Rubi relay (a Cloudflare Worker, address read from
+//   branch relay-cfg) with a "relay key" (10-40 letters/digits, set on the camera page). While somebody watches through
+//   the relay it sends JPEG frames; when nobody watches it sends nothing.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +35,7 @@
 #include "esp_wifi.h"
 #include "esp_timer.h"
 #include "mdns.h"
+#include "esp_websocket_client.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -57,6 +61,10 @@ static const char *TAG = "rubicam";
 #define CAM_PIN_HREF 7
 #define CAM_PIN_PCLK 13
 
+#ifndef RELAY_CFG_URL
+#define RELAY_CFG_URL "https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/relay-cfg/relay.json"
+#endif
+
 #define AP_SSID "Rubi-Cam-Setup"
 #define AP_PASS "rubicam123"
 #define MIN_KEY_LEN 6
@@ -64,6 +72,10 @@ static const char *TAG = "rubicam";
 static char g_ssid[33];
 static char g_pass[65];
 static char g_key[33];
+static char g_rkey[48];                 // relay key (remote viewing); empty = remote viewing off
+static char g_rhost[96];                // relay host, e.g. rubi-relay.name.workers.dev
+static volatile int g_rviewers = 0;     // people watching through the relay right now (told by the relay)
+static volatile bool g_rconn = false;   // connected to the relay
 static volatile bool g_updating = false;
 static bool g_cam_ok = false;
 static EventGroupHandle_t g_wifi_events;
@@ -78,10 +90,11 @@ static volatile int g_frame_kb = 0;   // size of the last JPEG frame in KB
 static bool load_settings(void) {
     nvs_handle_t h;
     if (nvs_open("rubicam", NVS_READONLY, &h) != ESP_OK) return false;
-    size_t n1 = sizeof(g_ssid), n2 = sizeof(g_pass), n3 = sizeof(g_key);
+    size_t n1 = sizeof(g_ssid), n2 = sizeof(g_pass), n3 = sizeof(g_key), n4 = sizeof(g_rkey);
     bool ok = nvs_get_str(h, "ssid", g_ssid, &n1) == ESP_OK;
     if (nvs_get_str(h, "pass", g_pass, &n2) != ESP_OK) g_pass[0] = 0;
     if (nvs_get_str(h, "key", g_key, &n3) != ESP_OK) g_key[0] = 0;
+    if (nvs_get_str(h, "rkey", g_rkey, &n4) != ESP_OK) g_rkey[0] = 0;
     nvs_close(h);
     return ok && g_ssid[0] != 0;
 }
@@ -92,6 +105,14 @@ static void save_settings(const char *ssid, const char *pass, const char *key) {
     nvs_set_str(h, "ssid", ssid);
     nvs_set_str(h, "pass", pass);
     nvs_set_str(h, "key", key);
+    nvs_commit(h);
+    nvs_close(h);
+}
+
+static void save_relay_key(const char *rk) {
+    nvs_handle_t h;
+    if (nvs_open("rubicam", NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_str(h, "rkey", rk);
     nvs_commit(h);
     nvs_close(h);
 }
@@ -263,9 +284,9 @@ static esp_err_t index_get(httpd_req_t *req) {
     httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host));
     char *colon = strchr(host, ':');
     if (colon) *colon = 0;
-    char *page = malloc(1800);
+    char *page = malloc(3000);
     if (!page) return ESP_FAIL;
-    snprintf(page, 1800,
+    snprintf(page, 3000,
              "<!doctype html><html><head><meta charset=utf-8>"
              "<meta name=viewport content='width=device-width,initial-scale=1'><title>Rubi Cam</title>"
              "<style>body{margin:0;background:#111;color:#eee;font-family:sans-serif;text-align:center}"
@@ -273,8 +294,13 @@ static esp_err_t index_get(httpd_req_t *req) {
              "<h3>Rubi Cam %s</h3>"
              "<img src='http://%s:81/stream?k=%s' alt='video'>"
              "<p><a href='/snap?k=%s'>Chup anh</a> &middot; <a href='/status?k=%s'>Trang thai</a></p>"
-             "<p>Camera: %s</p></body></html>",
-             version(), host, g_key, g_key, g_key, g_cam_ok ? "OK" : "LOI - kiem tra day camera");
+             "<p>Camera: %s</p>"
+             "<hr><p>Xem tu xa (ngoai Wi-Fi nha): <b>%s</b></p>"
+             "<form method=get action=/relay><input type=hidden name=k value='%s'>"
+             "<input name=rk placeholder='Khoa tu xa 10-40 chu/so (de trong = tat)' maxlength=40 size=34>"
+             " <button>Luu</button></form></body></html>",
+             version(), host, g_key, g_key, g_key, g_cam_ok ? "OK" : "LOI - kiem tra day camera",
+             g_rkey[0] ? (g_rconn ? "dang bat, da noi may chu" : "dang bat, chua noi may chu") : "dang tat", g_key);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     esp_err_t r = httpd_resp_send(req, page, HTTPD_RESP_USE_STRLEN);
     free(page);
@@ -300,15 +326,43 @@ static esp_err_t snap_get(httpd_req_t *req) {
 
 static esp_err_t status_get(httpd_req_t *req) {
     if (!key_ok(req)) return deny(req);
-    char out[300];
+    char out[400];
     wifi_ap_record_t ap;
     int rssi = (esp_wifi_sta_get_ap_info(&ap) == ESP_OK) ? ap.rssi : 0;
     snprintf(out, sizeof(out),
-             "{\"version\":\"%s\",\"camera\":%s,\"updating\":%s,\"free_heap\":%u,\"rssi\":%d,\"fps\":%d,\"frame_kb\":%d}",
+             "{\"version\":\"%s\",\"camera\":%s,\"updating\":%s,\"free_heap\":%u,\"rssi\":%d,\"fps\":%d,\"frame_kb\":%d,"
+             "\"relay\":%s,\"relay_conn\":%s,\"relay_viewers\":%d}",
              version(), g_cam_ok ? "true" : "false", g_updating ? "true" : "false", (unsigned)esp_get_free_heap_size(), rssi,
-             g_fps, g_frame_kb);
+             g_fps, g_frame_kb, g_rkey[0] ? "true" : "false", g_rconn ? "true" : "false", (int)g_rviewers);
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, out);
+}
+
+static bool relay_key_valid(const char *k) {
+    size_t n = strlen(k);
+    if (n < 10 || n > 40) return false;
+    for (; *k; k++) {
+        char c = *k;
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) return false;
+    }
+    return true;
+}
+
+// /relay?k=<view key>&rk=<relay key>   saves the relay key (empty rk = switch remote viewing off)
+static esp_err_t relay_set_get(httpd_req_t *req) {
+    if (!key_ok(req)) return deny(req);
+    char q[240], rk[56] = "";
+    if (httpd_req_get_url_query_str(req, q, sizeof(q)) == ESP_OK) httpd_query_key_value(q, "rk", rk, sizeof(rk));
+    url_decode(rk);
+    httpd_resp_set_type(req, "text/plain; charset=utf-8");
+    if (rk[0] != 0 && !relay_key_valid(rk)) {
+        return httpd_resp_sendstr(req, "Khoa tu xa phai dai 10-40 ky tu, chi chu va so. Quay lai thu lai.");
+    }
+    save_relay_key(rk);
+    strncpy(g_rkey, rk, sizeof(g_rkey) - 1);
+    g_rkey[sizeof(g_rkey) - 1] = 0;
+    return httpd_resp_sendstr(req, rk[0] ? "Da luu khoa tu xa. Camera se tu noi may chu trong it giay."
+                                         : "Da tat xem tu xa.");
 }
 
 static esp_err_t stream_get(httpd_req_t *req) {
@@ -432,6 +486,8 @@ static void start_servers(bool setup_mode) {
     httpd_register_uri_handler(g_srv_main, &u1);
     httpd_register_uri_handler(g_srv_main, &u2);
     httpd_register_uri_handler(g_srv_main, &u3);
+    httpd_uri_t u4 = {.uri = "/relay", .method = HTTP_GET, .handler = relay_set_get};
+    httpd_register_uri_handler(g_srv_main, &u4);
 
     // The video stream runs on its own server (port 81) so it never blocks the other pages.
     httpd_config_t scfg = HTTPD_DEFAULT_CONFIG();
@@ -573,6 +629,146 @@ static void ota_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+// ---------------------------------------------------------------- remote viewing through the relay
+
+// Reads {"host":"rubi-relay.name.workers.dev"} published by the relay deploy (branch relay-cfg).
+static bool fetch_relay_host(char *host, size_t hl) {
+    char buf[200];
+    esp_http_client_config_t hc = {.url = RELAY_CFG_URL, .crt_bundle_attach = esp_crt_bundle_attach, .timeout_ms = 10000};
+    esp_http_client_handle_t c = esp_http_client_init(&hc);
+    if (!c) return false;
+    bool ok = false;
+    if (esp_http_client_open(c, 0) == ESP_OK) {
+        esp_http_client_fetch_headers(c);
+        int n = esp_http_client_read(c, buf, sizeof(buf) - 1);
+        if (n > 0 && esp_http_client_get_status_code(c) == 200) {
+            buf[n] = 0;
+            char *p = strstr(buf, "\"host\":\"");
+            if (p) {
+                p += 8;
+                char *e = strchr(p, '"');
+                if (e && e > p && (size_t)(e - p) < hl) {
+                    bool clean = true;
+                    for (char *x = p; x < e; x++) {
+                        char ch = *x;
+                        if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '.' || ch == '-')) clean = false;
+                    }
+                    if (clean) {
+                        memcpy(host, p, e - p);
+                        host[e - p] = 0;
+                        ok = true;
+                    }
+                }
+            }
+        }
+    }
+    esp_http_client_cleanup(c);
+    return ok;
+}
+
+static void relay_event(void *arg, esp_event_base_t base, int32_t id, void *data) {
+    esp_websocket_event_data_t *d = (esp_websocket_event_data_t *)data;
+    switch (id) {
+        case WEBSOCKET_EVENT_CONNECTED:
+            g_rconn = true;
+            ESP_LOGI(TAG, "relay: connected");
+            break;
+        case WEBSOCKET_EVENT_DISCONNECTED:
+        case WEBSOCKET_EVENT_ERROR:
+            if (g_rconn) ESP_LOGW(TAG, "relay: disconnected");
+            g_rconn = false;
+            g_rviewers = 0;
+            break;
+        case WEBSOCKET_EVENT_DATA:
+            // the relay tells the camera "V<n>": n people are watching
+            if (d->op_code == 0x1 && d->data_len >= 2 && d->data_ptr[0] == 'V') {
+                char t[8] = {0};
+                int n = d->data_len - 1 < 7 ? d->data_len - 1 : 7;
+                memcpy(t, d->data_ptr + 1, n);
+                int v = atoi(t);
+                g_rviewers = v < 0 ? 0 : (v > 9 ? 9 : v);
+                ESP_LOGI(TAG, "relay: %d viewer(s)", (int)g_rviewers);
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+static void relay_task(void *arg) {
+    xEventGroupWaitBits(g_wifi_events, WIFI_GOT_IP, pdFALSE, pdTRUE, portMAX_DELAY);
+    vTaskDelay(pdMS_TO_TICKS(20000));  // let the update check at boot finish first
+    esp_websocket_client_handle_t cl = NULL;
+    static char cur_uri[220];
+    cur_uri[0] = 0;
+    int64_t host_at = 0;
+    int64_t frame_at = 0;
+    for (;;) {
+        bool want = g_rkey[0] != 0 && !g_updating && g_cam_ok;
+        if (!want) {
+            if (cl) {
+                esp_websocket_client_destroy(cl);
+                cl = NULL;
+                cur_uri[0] = 0;
+                g_rconn = false;
+                g_rviewers = 0;
+            }
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            continue;
+        }
+        int64_t now = esp_timer_get_time();
+        if (g_rhost[0] == 0 || now - host_at > 6LL * 3600 * 1000000LL) {
+            if (fetch_relay_host(g_rhost, sizeof(g_rhost))) {
+                host_at = now;
+            } else if (g_rhost[0] == 0) {
+                ESP_LOGW(TAG, "relay: address not published yet (deploy the relay first)");
+                vTaskDelay(pdMS_TO_TICKS(30000));
+                continue;
+            } else {
+                host_at = now - 5LL * 3600 * 1000000LL;  // retry in an hour
+            }
+        }
+        char uri[220];
+        snprintf(uri, sizeof(uri), "wss://%s/ws?role=cam&k=%s", g_rhost, g_rkey);
+        if (cl == NULL || strcmp(uri, cur_uri) != 0) {
+            if (cl) esp_websocket_client_destroy(cl);
+            g_rconn = false;
+            g_rviewers = 0;
+            strncpy(cur_uri, uri, sizeof(cur_uri) - 1);
+            esp_websocket_client_config_t wc = {
+                .uri = cur_uri,
+                .crt_bundle_attach = esp_crt_bundle_attach,
+                .buffer_size = 2048,
+                .task_stack = 6144,
+                .ping_interval_sec = 20,
+                .network_timeout_ms = 10000,
+                .reconnect_timeout_ms = 5000,
+            };
+            cl = esp_websocket_client_init(&wc);
+            if (cl == NULL) {
+                vTaskDelay(pdMS_TO_TICKS(10000));
+                continue;
+            }
+            esp_websocket_register_events(cl, WEBSOCKET_EVENT_ANY, relay_event, NULL);
+            esp_websocket_client_start(cl);
+        }
+        if (g_rconn && g_rviewers > 0 && esp_websocket_client_is_connected(cl)) {
+            if (now - frame_at >= 200000) {  // about 5 frames per second
+                frame_at = now;
+                camera_fb_t *fb = esp_camera_fb_get();
+                if (fb) {
+                    esp_websocket_client_send_bin(cl, (const char *)fb->buf, fb->len, pdMS_TO_TICKS(3000));
+                    g_frame_kb = (int)(fb->len / 1024);
+                    esp_camera_fb_return(fb);
+                }
+            }
+            vTaskDelay(pdMS_TO_TICKS(20));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(300));
+        }
+    }
+}
+
 // ---------------------------------------------------------------- main
 
 static bool boot_button_held(void) {
@@ -658,4 +854,5 @@ void app_main(void) {
 
     xTaskCreate(ota_task, "ota", 8192, NULL, 4, NULL);
     xTaskCreate(report_task, "report", 4096, NULL, 3, NULL);
+    xTaskCreate(relay_task, "relay", 6144, NULL, 3, NULL);
 }
