@@ -1,8 +1,8 @@
 
 (function(){
 var lt=0;document.addEventListener("touchend",function(e){var n=Date.now();if(n-lt<350)e.preventDefault();lt=n},{passive:false});document.addEventListener("gesturestart",function(e){e.preventDefault()});
-var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","choi-cung","bai-hat","truyen-tranh","song-ngu","toan","tieng-anh","the-nho","cai-dat"];
-var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","song-ngu":"Học song ngữ","toan":"Toán lớp 1","tieng-anh":"Tiếng Anh","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
+var views=["trang-chu","tinh-trang","cap-nhat","dieu-khien","xem-tu-xa","choi-cung","bai-hat","truyen-tranh","song-ngu","toan","tieng-anh","the-nho","cai-dat"];
+var names={"trang-chu":"Trang chủ","tinh-trang":"Tình trạng","cap-nhat":"Cập nhật","dieu-khien":"Điều khiển","xem-tu-xa":"Xem Rubi","choi-cung":"Chơi cùng Rubi","bai-hat":"Bài hát","truyen-tranh":"Truyện tranh","song-ngu":"Học song ngữ","toan":"Toán lớp 1","tieng-anh":"Tiếng Anh","the-nho":"Quản lý thẻ nhớ","cai-dat":"Cài đặt"};
 var $=function(i){return document.getElementById(i)},tt;
 function toast(m){var t=$("toast");t.textContent=m;t.classList.add("on");clearTimeout(tt);tt=setTimeout(function(){t.classList.remove("on")},1600)}
 var LIVE=location.protocol==="http:"&&!/vercel\.app$/.test(location.hostname),M=LIVE?"":" (mẫu)";
@@ -25,7 +25,7 @@ function pulse(l,r,ms){drive(l,r);setTimeout(stopAll,ms)}
 function show(){var h=(location.hash||"#trang-chu").slice(1);if(views.indexOf(h)<0)h="trang-chu";
  views.forEach(function(v){$("v-"+v).classList.toggle("on",v===h)});
  document.querySelectorAll(".drawer a").forEach(function(a){a.classList.toggle("on",a.dataset.v===h)});
- $("title").textContent=names[h];document.body.dataset.v=h;document.body.classList.remove("open");window.scrollTo(0,0)}
+ $("title").textContent=names[h];document.body.dataset.v=h;document.body.classList.remove("open");window.scrollTo(0,0);if(window.__rubiRemote)window.__rubiRemote(h==="xem-tu-xa")}
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest('a[href^="#"]');if(a){e.preventDefault();location.hash=a.getAttribute("href")}});
 addEventListener("hashchange",show);show();
 if(LIVE){if($("pinok"))$("pinok").onclick=tryPin;if($("pinin"))$("pinin").onkeydown=function(e){if(e.key==="Enter")tryPin()};
@@ -241,4 +241,53 @@ $("tbadd").onclick=function(){if(TB.length>=10)return toast("Tối đa 10 việc
 $("tbsave").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để lưu");var ds=TB.map(function(r){return r.h.replace(":","")+":"+r.k}).join(",");api("/api/tb?set="+encodeURIComponent(ds)).then(function(j){toast(j&&j.ok?(j.gio?"Đã lưu thời gian biểu":"Đã lưu (Rubi chưa có giờ, cần nối Wi-Fi)"):"Không lưu được");tbLoad()}).catch(function(){toast("Không gọi được Rubi")})};
 $("tbtest").onclick=function(){if(!LIVE)return toast("Mở từ http://rubi.local để thử");api("/api/tbtest?k="+$("tbk").value).then(function(j){toast(j&&j.ok?"Đã nhắc thử: xem đồng hồ và nghe Rubi":"Không nhắc được")}).catch(function(){toast("Không gọi được Rubi")})};
 setTimeout(tbLoad,1500)}
+
+/* ---- Xem Rubi từ xa: camera -> máy chủ trung gian Cloudflare -> trang này (không cần cùng Wi-Fi) ---- */
+(function(){
+var CFG="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/relay-cfg/relay.json";
+var host=null,ws=null,key="",paused=false,retry=0,timer=null,beat=null,lastUrl=null,frames=0,fpsT=Date.now(),lastMsg=0,active=false;
+function sto(k,v){try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
+function lod(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}
+function say(t){$("rmsg").textContent=t;$("rmsg").style.display="flex";$("rimg").style.display="none";$("rlive").hidden=true;$("rfps").hidden=true}
+function st(t,on){$("rst").textContent=t;$("rdot").className="rdot"+(on?" on":"")}
+function getHost(){if(host)return Promise.resolve(host);
+ return fetch(CFG+"?_="+Math.floor(Date.now()/60000),{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){if(!j||!/^[A-Za-z0-9.-]+$/.test(j.host||""))throw 0;host=j.host;return host})}
+function drop(){var s=ws;ws=null;if(s){try{s.close(1000,"bye")}catch(e){}}}
+function stop(){clearTimeout(timer);clearInterval(beat);beat=null;drop();frames=0}
+function connect(){clearTimeout(timer);if(!active||document.hidden||!key)return;
+ getHost().then(function(h){
+  if(!active)return;
+  var s=new WebSocket("wss://"+h+"/ws?role=view&k="+encodeURIComponent(key));s.binaryType="blob";ws=s;
+  s.onopen=function(){retry=0;lastMsg=Date.now();st("Đã nối máy chủ, đang chờ camera...",false)};
+  s.onmessage=function(e){lastMsg=Date.now();
+   if(typeof e.data==="string"){var j;try{j=JSON.parse(e.data)}catch(x){return}
+    if(j.t==="s"){if(!j.cam){say("Camera Rubi chưa kết nối ra mạng.\nKiểm tra Rubi đã bật nguồn, có Wi-Fi và đã cài khóa từ xa.");st("Camera ngoại tuyến",false)}
+     else{st("Camera đã kết nối",true);if(!frames)say("Camera đã kết nối, đang chờ hình...")}}
+    return}
+   if(paused)return;
+   var u=URL.createObjectURL(new Blob([e.data],{type:"image/jpeg"})),im=$("rimg");
+   im.onload=function(){if(lastUrl)URL.revokeObjectURL(lastUrl);lastUrl=u};im.src=u;im.style.display="block";$("rmsg").style.display="none";$("rlive").hidden=false;
+   frames++;var n=Date.now();if(n-fpsT>=2000){$("rfps").textContent=(frames*1000/(n-fpsT)).toFixed(0)+" hình/giây";$("rfps").hidden=false;frames=0;fpsT=n}};
+  s.onclose=function(){if(ws!==s)return;ws=null;frames=0;st("Mất kết nối, thử lại...",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(1000*retry*retry,20000))};
+  s.onerror=function(){try{s.close()}catch(x){}};
+ }).catch(function(){if(!active)return;say("Chưa tìm thấy máy chủ trung gian.\nNếu mới cài, đợi vài phút rồi thử lại.");st("Chưa có địa chỉ máy chủ",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(3000*retry,20000))})}
+function begin(){$("rkeybox").hidden=true;$("rscreen").parentNode.hidden=false;say("Đang kết nối...");st("Đang kết nối...",false);stop();retry=0;
+ // nhịp tim mỗi 15 giây; im 40 giây = kết nối chết âm thầm -> nối lại
+ beat=setInterval(function(){if(!ws||document.hidden)return;if(Date.now()-lastMsg>40000){drop();frames=0;retry=0;st("Mất kết nối, thử lại...",false);connect();return}if(ws&&ws.readyState===1){try{ws.send("h")}catch(x){}}},15000);
+ connect()}
+function ask(){stop();$("rscreen").parentNode.hidden=true;$("rkeybox").hidden=false;$("rkey").value="";}
+window.__rubiRemote=function(on){active=on;if(!on){stop();return}key=lod("rubi_rkey");if(key)begin();else ask()};
+$("rok").onclick=function(){var k=$("rkey").value.trim();if(!/^[A-Za-z0-9]{10,40}$/.test(k)){toast("Khóa phải dài 10-40 ký tự, chỉ gồm chữ và số");return}key=k;sto("rubi_rkey",k);begin()};
+$("rkey").onkeydown=function(e){if(e.key==="Enter")$("rok").onclick()};
+$("rchg").onclick=function(){sto("rubi_rkey",null);key="";ask()};
+$("rpause").onclick=function(){paused=!paused;this.textContent=paused?"Tiếp tục":"Tạm dừng"};
+$("rfull").onclick=function(){var el=$("rscreen");(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el)};
+$("rsnap").onclick=function(){var im=$("rimg");if(!im.src||im.style.display==="none")return toast("Chưa có hình để chụp");
+ var c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext("2d").drawImage(im,0,0);
+ c.toBlob(function(b){var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="rubi-"+new Date().toISOString().replace(/[:.]/g,"-")+".jpg";a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},2000)},"image/jpeg",.92)};
+// tiết kiệm dữ liệu và pin camera: ẩn trang thì ngắt, quay lại thì nối
+document.addEventListener("visibilitychange",function(){if(!active||!key)return;if(document.hidden)stop();else{retry=0;begin()}});
+addEventListener("pagehide",function(){stop()});
+if((location.hash||"")==="#xem-tu-xa")window.__rubiRemote(true);
+})();
 })();
