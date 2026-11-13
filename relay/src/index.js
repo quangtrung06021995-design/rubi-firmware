@@ -13,6 +13,7 @@
 //   room -> viewer  (text)  {"t":"s","cam":true|false,"n":<viewers>}   state, sent on every change
 //   camera -> room  (binary) one JPEG frame; (text) short status, passed on to the viewers as it is
 //   viewer -> room  (text)  short command like "q:2", passed on to the camera
+//   camera/viewer -> room (text) "h" heartbeat; the room answers with the state (camera: "V<n>", viewer: the JSON above)
 //
 // Cost on the Cloudflare free plan: only INCOMING messages count (20 messages = 1 request), outgoing are free.
 // The camera is silent while nobody watches, so an idle Rubi costs next to nothing.
@@ -81,6 +82,15 @@ export class Room extends DurableObject {
 
   webSocketMessage(ws, msg) {
     const tags = this.ctx.getTags(ws);
+    // Heartbeat "h" (every ~15 s from camera and viewers): answer with the current state, do not pass it on.
+    // Both sides use the answer to notice a silently dead connection and reconnect.
+    if (msg === "h") {
+      try {
+        if (tags.includes("cam")) ws.send("V" + this.#open("view").length);
+        else ws.send(JSON.stringify({ t: "s", cam: this.#open("cam").length > 0, n: this.#open("view").length }));
+      } catch (e) { /* closing */ }
+      return;
+    }
     if (tags.includes("cam")) {
       for (const v of this.#open("view")) {
         try { v.send(msg); } catch (e) { /* closing */ }

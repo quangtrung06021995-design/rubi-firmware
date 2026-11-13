@@ -76,6 +76,7 @@ static char g_rkey[48];                 // relay key (remote viewing); empty = r
 static char g_rhost[96];                // relay host, e.g. rubi-relay.name.workers.dev
 static volatile int g_rviewers = 0;     // people watching through the relay right now (told by the relay)
 static volatile bool g_rconn = false;   // connected to the relay
+static volatile int64_t g_rlast_us = 0; // when the relay last said anything (heartbeat watchdog)
 static volatile bool g_updating = false;
 static bool g_cam_ok = false;
 static EventGroupHandle_t g_wifi_events;
@@ -671,6 +672,7 @@ static void relay_event(void *arg, esp_event_base_t base, int32_t id, void *data
     switch (id) {
         case WEBSOCKET_EVENT_CONNECTED:
             g_rconn = true;
+            g_rlast_us = esp_timer_get_time();
             ESP_LOGI(TAG, "relay: connected");
             break;
         case WEBSOCKET_EVENT_DISCONNECTED:
@@ -680,6 +682,7 @@ static void relay_event(void *arg, esp_event_base_t base, int32_t id, void *data
             g_rviewers = 0;
             break;
         case WEBSOCKET_EVENT_DATA:
+            g_rlast_us = esp_timer_get_time();
             // the relay tells the camera "V<n>": n people are watching
             if (d->op_code == 0x1 && d->data_len >= 2 && d->data_ptr[0] == 'V') {
                 char t[8] = {0};
@@ -703,6 +706,7 @@ static void relay_task(void *arg) {
     cur_uri[0] = 0;
     int64_t host_at = 0;
     int64_t frame_at = 0;
+    int64_t beat_at = 0;
     for (;;) {
         bool want = g_rkey[0] != 0 && !g_updating && g_cam_ok;
         if (!want) {
@@ -743,6 +747,10 @@ static void relay_task(void *arg) {
                 .ping_interval_sec = 20,
                 .network_timeout_ms = 10000,
                 .reconnect_timeout_ms = 5000,
+                .keep_alive_enable = true,   // TCP keep-alive: a dead link is noticed in about 25 s
+                .keep_alive_idle = 10,
+                .keep_alive_interval = 5,
+                .keep_alive_count = 3,
             };
             cl = esp_websocket_client_init(&wc);
             if (cl == NULL) {
@@ -751,6 +759,24 @@ static void relay_task(void *arg) {
             }
             esp_websocket_register_events(cl, WEBSOCKET_EVENT_ANY, relay_event, NULL);
             esp_websocket_client_start(cl);
+        }
+        // Heartbeat: every 15 s say "h"; the relay answers. No word from the relay for 45 s = the link died silently
+        // (router / mobile carrier dropped it): throw the client away, the loop above builds a new one.
+        if (g_rconn && esp_websocket_client_is_connected(cl)) {
+            if (now - beat_at >= 15000000LL) {
+                beat_at = now;
+                esp_websocket_client_send_text(cl, "h", 1, pdMS_TO_TICKS(2000));
+            }
+            if (now - g_rlast_us > 45000000LL) {
+                ESP_LOGW(TAG, "relay: silent for 45 s, reconnecting");
+                esp_websocket_client_destroy(cl);
+                cl = NULL;
+                cur_uri[0] = 0;
+                g_rconn = false;
+                g_rviewers = 0;
+                vTaskDelay(pdMS_TO_TICKS(2000));
+                continue;
+            }
         }
         if (g_rconn && g_rviewers > 0 && esp_websocket_client_is_connected(cl)) {
             if (now - frame_at >= 200000) {  // about 5 frames per second

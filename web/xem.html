@@ -53,7 +53,7 @@ input{font:inherit;width:100%;padding:10px;border-radius:10px;border:1px solid #
 "use strict";
 var CFG_URL="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/relay-cfg/relay.json";
 var $=function(i){return document.getElementById(i)};
-var host=null,ws=null,key="",paused=false,retry=0,timer=null,lastUrl=null,frames=0,fpsT=Date.now(),dead=false;
+var host=null,ws=null,key="",paused=false,retry=0,timer=null,lastUrl=null,frames=0,fpsT=Date.now(),dead=false,lastMsg=0,beat=null;
 function store(k,v){try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
 function load(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}
 function say(t){$("msg").textContent=t;$("msg").style.display="flex";$("img").style.display="none"}
@@ -76,8 +76,9 @@ function connect(){
     var s=new WebSocket("wss://"+h+"/ws?role=view&k="+encodeURIComponent(key));
     s.binaryType="blob";
     ws=s;
-    s.onopen=function(){retry=0;status("Đã nối máy chủ, đang chờ camera...",false)};
+    s.onopen=function(){retry=0;lastMsg=Date.now();status("Đã nối máy chủ, đang chờ camera...",false)};
     s.onmessage=function(e){
+      lastMsg=Date.now();
       if(typeof e.data==="string"){
         var j;try{j=JSON.parse(e.data)}catch(x){return}
         if(j.t==="s"){
@@ -111,6 +112,14 @@ function connect(){
     timer=setTimeout(connect,Math.min(3000*retry,20000));
   });
 }
+
+// Heartbeat: say "h" every 15 s (the relay answers with the state). 40 s of silence = dead link: reconnect.
+clearInterval(beat);
+beat=setInterval(function(){
+  if(!ws||document.hidden)return;
+  if(Date.now()-lastMsg>40000){var s=ws;ws=null;try{s.close()}catch(x){}frames=0;retry=0;status("Mất kết nối, thử lại...",false);connect();return}
+  if(ws.readyState===1){try{ws.send("h")}catch(x){}}
+},15000);
 
 function stop(){clearTimeout(timer);if(ws){var s=ws;ws=null;try{s.close(1000,"bye")}catch(x){}}}
 
