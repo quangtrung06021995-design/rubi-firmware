@@ -207,6 +207,12 @@ jobs:
         run: |
           python3 ../patches/apply_media.py
 
+      - name: Remote talking (microphone tap)
+        shell: bash
+        working-directory: upstream
+        run: |
+          python3 ../patches/apply_remote.py
+
       - name: Spoken music commands (speech-to-text hook)
         shell: bash
         working-directory: upstream

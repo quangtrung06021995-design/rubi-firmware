@@ -112,3 +112,5 @@ html,body,button,.btn{touch-action:manipulation}
 .rst{margin-top:8px;font-size:13px;color:var(--mute);display:flex;align-items:center;gap:6px}
 .rdot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#8a96a3}.rdot.on{background:#3fcf6e}
 #rlive[hidden],#rfps[hidden],.card[hidden]{display:none!important}
+
+#rtalk.on{background:#d64545;color:#fff}#rlisten.on{background:#d64545;color:#fff;border-color:#d64545}#rtalk:disabled,#rlisten:disabled{opacity:.5}

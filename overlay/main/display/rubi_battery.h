@@ -65,6 +65,14 @@ public:
     // Child's schedule pushed by the DevKit: "Z<HHMM:kind,...>\n" (kind 0-7), empty when there is none.
     static std::string Sched() { return std::string(SchedBuf()); }
 
+    // Key of the parents' remote-viewing room, pushed by the DevKit: "R<10-40 letters/digits>\n". Empty until it has arrived.
+    static std::string RKey() {
+        char b[44];
+        memcpy(b, RKeyBuf(), sizeof(b));
+        b[sizeof(b) - 1] = 0;
+        return std::string(b);
+    }
+
     static int PinSet() { return PinSetRef().load(); }
     static void PinReplyClear() { PinReplyRef().store(-1); }
     static int PinReply() { return PinReplyRef().load(); }
@@ -76,6 +84,7 @@ private:
     static std::atomic<int64_t>& IpAt() { static std::atomic<int64_t> t{-100000}; return t; }
     static char* IpBuf() { static char b[20] = {0}; return b; }
     static char* SchedBuf() { static char b[96] = {0}; return b; }
+    static char* RKeyBuf() { static char b[44] = {0}; return b; }
     static void Loop(std::function<void(int)> cb) {
         uart_config_t c = {};
         c.baud_rate = 115200;
@@ -108,6 +117,14 @@ private:
                         IpAt().store(now);
                     }
                     if (n >= 1 && n <= 80 && line[0] == 'Z') memcpy(SchedBuf(), line + 1, n);   // includes the terminating 0
+                    if (n >= 11 && n <= 41 && line[0] == 'R') {
+                        bool ok = true;
+                        for (int i = 1; i < n; i++) {
+                            char c = line[i];
+                            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) ok = false;
+                        }
+                        if (ok) memcpy(RKeyBuf(), line + 1, n);   // includes the terminating 0
+                    }
                     if (n >= 2 && n <= 16 && line[0] == 'C' && OnCommand()) OnCommand()(std::string(line + 1));
                     if (n >= 2 && n <= 41 && line[0] == 'O' && OnOpenStory()) OnOpenStory()(std::string(line + 1));
                     if (n == 2 && line[0] == 'K' && (line[1] == '0' || line[1] == '1')) PinSetRef().store(line[1] - '0');

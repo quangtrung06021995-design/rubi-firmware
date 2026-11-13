@@ -44,6 +44,7 @@ extern int16_t* volatile g_rubi_cap_buf;
 #include "board.h"
 #include "rubi_battery.h"
 #include "rubi_face.h"
+#include "rubi_remote.h"
 #include "rubi_icons.h"
 #include "rubi_viec_icons.h"
 #include "rubi_learn_data.h"
@@ -68,6 +69,8 @@ public:
             xTaskCreatePinnedToCore(&RubiMedia::StoryReportTask, "rubi_storyrep", 6144, this, 2, nullptr, 1);
             RubiBattery::OnCommand() = [](const std::string& c) { RubiMedia::Get().RemoteAction(c); };
             RubiBattery::OnOpenStory() = [](const std::string& dir) { RubiMedia::Get().RemoteOpenStory(dir); };
+            // A parent starts talking from far away: stop the music so the voice is heard alone
+            RubiRemote::Takeover() = []() { RubiMedia::Get().StopPlayback(); };
         }
     }
     void SetWifiCallback(std::function<void()> cb) { wifi_cb_ = std::move(cb); }

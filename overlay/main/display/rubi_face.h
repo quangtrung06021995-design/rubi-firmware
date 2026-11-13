@@ -24,6 +24,7 @@
 #include "rubi_battery.h"
 #include "rubi_qr.h"
 #include "rubi_wifisync.h"
+#include "rubi_remote.h"
 #include <esp_heap_caps.h>
 
 class RubiDisplay : public SpiLcdDisplay {
@@ -108,6 +109,37 @@ public:
         if (battery_label_ != nullptr) lv_obj_add_flag(battery_label_, LV_OBJ_FLAG_HIDDEN);   // use our own icon only
         RubiBattery::Start([this](int pct) { SetBatteryPercent(pct); });
         RubiWifiSync::Start();
+        // Remote viewing / talking (parents on another network): show who is doing what, then start the relay client.
+        remote_box_ = lv_obj_create(lv_layer_top());
+        lv_obj_remove_style_all(remote_box_);
+        lv_obj_set_size(remote_box_, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+        lv_obj_align(remote_box_, LV_ALIGN_TOP_LEFT, 6, 4);
+        lv_obj_set_style_radius(remote_box_, 10, 0);
+        lv_obj_set_style_bg_opa(remote_box_, LV_OPA_80, 0);
+        lv_obj_set_style_bg_color(remote_box_, lv_color_hex(0x1E88E5), 0);
+        lv_obj_set_style_pad_hor(remote_box_, 8, 0);
+        lv_obj_set_style_pad_ver(remote_box_, 3, 0);
+        lv_obj_remove_flag(remote_box_, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_remove_flag(remote_box_, LV_OBJ_FLAG_SCROLLABLE);
+        remote_lbl_ = MakeLabel(remote_box_, &rubi_vi_font, 0xFFFFFF);
+        lv_label_set_text(remote_lbl_, "");
+        lv_obj_add_flag(remote_box_, LV_OBJ_FLAG_HIDDEN);
+        RubiRemote::Indicator() = [this](int m) { SetRemoteMode(m); };
+        RubiRemote::Start();
+    }
+
+    // 0 = hidden, 1 = parents watching, 2 = parent talking, 3 = parents listening
+    void SetRemoteMode(int m) {
+        DisplayLockGuard lock(this);
+        if (remote_box_ == nullptr || remote_lbl_ == nullptr) return;
+        if (m <= 0) {
+            lv_obj_add_flag(remote_box_, LV_OBJ_FLAG_HIDDEN);
+            return;
+        }
+        const char* t = m == 2 ? "Bố mẹ đang nói" : (m == 3 ? "Bố mẹ đang nghe" : "Bố mẹ đang xem");
+        lv_label_set_text(remote_lbl_, t);
+        lv_obj_set_style_bg_color(remote_box_, lv_color_hex(m == 2 ? 0x43A047 : (m == 3 ? 0xE53935 : 0x1E88E5)), 0);
+        lv_obj_remove_flag(remote_box_, LV_OBJ_FLAG_HIDDEN);
     }
 
     // Permanent battery percentage, top-right corner (always visible, also in the menu).
@@ -912,6 +944,8 @@ private:
     lv_obj_t* frown_ = nullptr;
     lv_obj_t* tag_ = nullptr;
     lv_obj_t* bat_label_ = nullptr;
+    lv_obj_t* remote_box_ = nullptr;
+    lv_obj_t* remote_lbl_ = nullptr;
     lv_obj_t* bat_box_ = nullptr;
     lv_obj_t* bat_seg_[4] = {nullptr, nullptr, nullptr, nullptr};
     lv_obj_t* bat_nub_ = nullptr;

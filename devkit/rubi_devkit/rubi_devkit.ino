@@ -350,6 +350,7 @@ bool g_upd_ds = false;
 String g_c3_v; uint32_t g_c3_at = 0;   // phien ban bo C3 Zero (den LED) bao qua UART1
 String g_ds_v;                  // phien ban dang chay cua bo man hinh ("V3.0.86" qua UART)
 uint32_t g_ds_at = 0;
+String g_rkey;                  // khoa phong xem/noi chuyen tu xa (relay Cloudflare); bo man hinh Rubi nhan khoa nay qua UART
 String g_cam_v;                 // phien ban camera (camera tu bao qua /api/cam)
 bool g_cam_u = false;
 uint32_t g_cam_at = 0;
@@ -918,7 +919,7 @@ void webStatus() {
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
-               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() +
+               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") +
                ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
                ((g_c3_at != 0 && millis() - g_c3_at < 120000) ? String(",\"c3v\":\"") + g_c3_v + "\"" : String("")) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
@@ -1142,7 +1143,26 @@ bool tbDat(const String& spec, bool luu) {   // "2030:0,2100:4"; sai dinh dang t
     if (luu) { g_pref.begin("rubitb", false); g_pref.putString("ds", tbDanhSach()); g_pref.end(); Serial2.printf("Z%s\n", tbDanhSach().c_str()); }
     return true;
 }
+void rkeyNap() {
+    g_pref.begin("rubirk", true);
+    g_rkey = g_pref.getString("k", "");
+    g_pref.end();
+}
+void webRKey() {   // /api/rkey?set=<10-40 chu/so>[&t=<ma>] : luu khoa phong tu xa va chuyen cho bo man hinh Rubi
+    if (!webAuth()) { webTuChoi(); return; }
+    if (g_web.hasArg("set")) {
+        String k = g_web.arg("set");
+        bool ok = k.length() >= 10 && k.length() <= 40;
+        for (unsigned i = 0; ok && i < k.length(); i++) ok = isalnum((unsigned char)k[i]);
+        if (!ok) { webJson("{\"ok\":false,\"err\":\"dinh dang\"}"); return; }
+        g_rkey = k;
+        g_pref.begin("rubirk", false); g_pref.putString("k", g_rkey); g_pref.end();
+        Serial2.printf("R%s\n", g_rkey.c_str());
+    }
+    webJson(String("{\"ok\":true,\"has\":") + (g_rkey.length() ? "true" : "false") + "}");
+}
 void tbNap() {
+    rkeyNap();
     g_pref.begin("rubitb", true);
     String s = g_pref.getString("ds", "");
     g_pref.end();
@@ -1158,7 +1178,7 @@ void tbKhiNoi() { if (g_tbCho >= 0) bleGui(String("R") + g_tbCho); }   // dong h
 void tbXong() { if (g_tbCho >= 0) { Serial.printf("Be bam XONG viec %d\n", g_tbCho); g_tbCho = -1; } }
 void tbTick(uint32_t now) {
     static uint32_t last = 0, guiMan = 0;
-    if (now - guiMan >= 30000 || guiMan == 0) { guiMan = now | 1; Serial2.printf("Z%s\n", tbDanhSach().c_str()); }   // bo man hinh Rubi hien danh sach trong menu
+    if (now - guiMan >= 30000 || guiMan == 0) { guiMan = now | 1; Serial2.printf("Z%s\n", tbDanhSach().c_str()); if (g_rkey.length()) Serial2.printf("R%s\n", g_rkey.c_str()); }   // bo man hinh Rubi hien danh sach trong menu + nhan khoa phong tu xa
     if (now - last < 1000) return;
     last = now;
     time_t t = time(nullptr);
@@ -1377,6 +1397,7 @@ void webBatDau() {
     g_web.on("/api/login", HTTP_GET, webLogin);
     g_web.on("/api/status", HTTP_GET, webStatus);
     g_web.on("/api/tb", HTTP_GET, webTb);
+    g_web.on("/api/rkey", HTTP_GET, webRKey);
     g_web.on("/api/tbtest", HTTP_GET, webTbTest);
     g_web.on("/api/tg", HTTP_GET, webTg);
     g_web.on("/api/tgtest", HTTP_GET, webTgTest);
