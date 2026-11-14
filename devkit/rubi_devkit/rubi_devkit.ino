@@ -350,6 +350,7 @@ bool g_upd_ds = false;
 String g_c3_v; uint32_t g_c3_at = 0;   // phien ban bo C3 Zero (den LED) bao qua UART1
 String g_ds_v;                  // phien ban dang chay cua bo man hinh ("V3.0.86" qua UART)
 uint32_t g_ds_at = 0;
+bool g_rkoff = false;            // true = nguoi dung tat ket noi tu xa cua Rubi (bo man hinh khong noi ra may chu trung gian)
 String g_rkey;                  // khoa phong xem/noi chuyen tu xa (relay Cloudflare); bo man hinh Rubi nhan khoa nay qua UART
 String g_cam_v;                 // phien ban camera (camera tu bao qua /api/cam)
 bool g_cam_u = false;
@@ -945,7 +946,7 @@ void webStatus() {
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
-               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") + ",\"rd\":" + (g_laiTuXaCamBienOk ? "50" : "30") +
+               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") + ",\"rd\":" + (g_laiTuXaCamBienOk ? "50" : "30") + ",\"rko\":" + (g_rkoff ? "true" : "false") +
                ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
                ((g_c3_at != 0 && millis() - g_c3_at < 120000) ? String(",\"c3v\":\"") + g_c3_v + "\"" : String("")) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
@@ -1172,10 +1173,16 @@ bool tbDat(const String& spec, bool luu) {   // "2030:0,2100:4"; sai dinh dang t
 void rkeyNap() {
     g_pref.begin("rubirk", true);
     g_rkey = g_pref.getString("k", "");
+    g_rkoff = g_pref.getBool("off", false);
     g_pref.end();
 }
 void webRKey() {   // /api/rkey?set=<10-40 chu/so>[&t=<ma>] : luu khoa phong tu xa va chuyen cho bo man hinh Rubi
     if (!webAuth()) { webTuChoi(); return; }
+    if (g_web.hasArg("off")) {   // /api/rkey?off=1 tat ket noi tu xa, off=0 bat lai
+        g_rkoff = g_web.arg("off") == "1";
+        g_pref.begin("rubirk", false); g_pref.putBool("off", g_rkoff); g_pref.end();
+        if (g_rkoff) Serial2.print("Roff\n"); else if (g_rkey.length()) Serial2.printf("R%s\n", g_rkey.c_str());
+    }
     if (g_web.hasArg("set")) {
         String k = g_web.arg("set");
         bool ok = k.length() >= 10 && k.length() <= 40;
@@ -1183,9 +1190,9 @@ void webRKey() {   // /api/rkey?set=<10-40 chu/so>[&t=<ma>] : luu khoa phong tu 
         if (!ok) { webJson("{\"ok\":false,\"err\":\"dinh dang\"}"); return; }
         g_rkey = k;
         g_pref.begin("rubirk", false); g_pref.putString("k", g_rkey); g_pref.end();
-        Serial2.printf("R%s\n", g_rkey.c_str());
+        if (!g_rkoff) Serial2.printf("R%s\n", g_rkey.c_str());
     }
-    webJson(String("{\"ok\":true,\"has\":") + (g_rkey.length() ? "true" : "false") + "}");
+    webJson(String("{\"ok\":true,\"has\":") + (g_rkey.length() ? "true" : "false") + ",\"off\":" + (g_rkoff ? "true" : "false") + "}");
 }
 void tbNap() {
     rkeyNap();
@@ -1204,7 +1211,7 @@ void tbKhiNoi() { if (g_tbCho >= 0) bleGui(String("R") + g_tbCho); }   // dong h
 void tbXong() { if (g_tbCho >= 0) { Serial.printf("Be bam XONG viec %d\n", g_tbCho); g_tbCho = -1; } }
 void tbTick(uint32_t now) {
     static uint32_t last = 0, guiMan = 0;
-    if (now - guiMan >= 30000 || guiMan == 0) { guiMan = now | 1; Serial2.printf("Z%s\n", tbDanhSach().c_str()); if (g_rkey.length()) Serial2.printf("R%s\n", g_rkey.c_str()); }   // bo man hinh Rubi hien danh sach trong menu + nhan khoa phong tu xa
+    if (now - guiMan >= 30000 || guiMan == 0) { guiMan = now | 1; Serial2.printf("Z%s\n", tbDanhSach().c_str()); if (g_rkoff) Serial2.print("Roff\n"); else if (g_rkey.length()) Serial2.printf("R%s\n", g_rkey.c_str()); }   // bo man hinh Rubi hien danh sach trong menu + nhan khoa phong tu xa
     if (now - last < 1000) return;
     last = now;
     time_t t = time(nullptr);

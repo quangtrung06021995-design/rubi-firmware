@@ -329,7 +329,7 @@ function begin(){applyRot();$("rkeybox").hidden=true;$("rscreen").parentNode.hid
 function ask(){stop();$("rdrive").hidden=true;$("rscreen").parentNode.hidden=true;$("rkeybox").hidden=false;$("rkey").value="";}
 // Mở từ http://rubi.local: gửi khóa cho DevKit để bo màn hình Rubi tự nối ra máy chủ (cần cho nói chuyện từ xa)
 function pushKey(){if(!LIVE||!key)return;api("/api/rkey?set="+encodeURIComponent(key)).then(function(j){if(j&&j.ok)toast("Đã gửi khóa cho Rubi")}).catch(function(){})}
-window.__rubiRemote=function(on){active=on;if(!on){stop();return}setTimeout(applyRot,50);key=lod("rubi_rkey");if(key){pushKey();begin()}else ask()};
+window.__rubiRemote=function(on){active=on;if(!on){stop();return}linkSync();setTimeout(applyRot,50);key=lod("rubi_rkey");if(key){pushKey();begin()}else ask()};
 $("rdon").onclick=function(){if(drvOn)endDrive();else{drvOn=true;uiDrive();toast("Giữ nút mũi tên để Rubi đi, thả ra là dừng")}};
 (function(){var pad=$("rpad"),cur=null;
  function dirs(d,s){s=s/100;var v=Math.round(100*s);return d==="f"?[v,v]:d==="b"?[-v,-v]:d==="l"?[-v,v]:d==="r"?[v,-v]:[0,0]}
@@ -350,6 +350,10 @@ $("rkey").onkeydown=function(e){if(e.key==="Enter")$("rok").onclick()};
 $("rchg").onclick=function(){sto("rubi_rkey",null);key="";ask()};
 $("rpause").onclick=function(){paused=!paused;this.textContent=paused?"Tiếp tục":"Tạm dừng"};
 $("rfull").onclick=function(){var el=$("rscreen");(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el)};
+// Công tắc kết nối từ xa của bo màn hình Rubi (chỉ dùng được từ http://rubi.local): tắt khi cần so sánh hoặc nghi ngờ gây lỗi tiếng
+function linkUi(off){var b=$("rlink");b.hidden=false;b.textContent=off?"Kết nối từ xa của Rubi: ĐANG TẮT (bấm để bật)":"Kết nối từ xa của Rubi: đang bật (bấm để tắt)"}
+function linkSync(){if(!LIVE)return;api("/api/status").then(function(j){if(j&&j.auth!==false&&typeof j.rko==="boolean")linkUi(j.rko)}).catch(function(){})}
+$("rlink").onclick=function(){var off=/ĐANG TẮT/.test(this.textContent);api("/api/rkey?off="+(off?"0":"1")).then(function(j){if(j&&j.ok){linkUi(!!j.off);toast(j.off?"Đã tắt kết nối từ xa của Rubi (xem, nói, lái sẽ không dùng được)":"Đã bật lại, đợi khoảng 20 giây")}}).catch(function(){toast("Không gọi được Rubi")})};
 $("rrot").onclick=function(){rot=(rot+90)%360;sto("rubi_rrot",String(rot));applyRot();tell("o:"+rot)};
 addEventListener("resize",layoutRot);document.addEventListener("fullscreenchange",function(){setTimeout(layoutRot,80)});document.addEventListener("webkitfullscreenchange",function(){setTimeout(layoutRot,80)});
 $("rsnap").onclick=function(){var im=$("rimg");if(!im.src||im.style.display==="none")return toast("Chưa có hình để chụp");

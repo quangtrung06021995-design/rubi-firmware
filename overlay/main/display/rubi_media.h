@@ -928,6 +928,16 @@ private:
         return b;
     }
 
+    // One line for finding faults: free internal memory (now / lowest ever), the remote link, and the sound packets of the last answer
+    static std::string DiagHint() {
+        char b[112];
+        snprintf(b, sizeof(b), "RAM %d/%dk Xa:%s Gói%d Bỏ%d",
+                 (int)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+                 (int)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),
+                 RubiRemote::Get().StatusText(), g_rubi_pkts.load(), g_rubi_drop.load());
+        return b;
+    }
+
     void ShowSettings() {
         screen_ = Screen::kSettings;
         StartTicker();   // refreshes the mic line once a second
@@ -1655,6 +1665,9 @@ private:
         switch (screen_) {
         case Screen::kMicMenu:
             display_->MenuSetHint(MicHint().c_str());
+            break;
+        case Screen::kSettings:
+            display_->MenuSetHint(DiagHint().c_str());
             break;
         case Screen::kRemind:   // nobody touched it for 90 s: close, so the wake word works again
             if (NowMs() - remind_at_ > 90000) { tick_gen_++; Close(); }

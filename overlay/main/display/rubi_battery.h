@@ -117,6 +117,7 @@ private:
                         IpAt().store(now);
                     }
                     if (n >= 1 && n <= 80 && line[0] == 'Z') memcpy(SchedBuf(), line + 1, n);   // includes the terminating 0
+                    if (n == 4 && line[0] == 'R' && line[1] == 'o' && line[2] == 'f' && line[3] == 'f') RKeyBuf()[0] = 0;   // remote link switched off
                     if (n >= 11 && n <= 41 && line[0] == 'R') {
                         bool ok = true;
                         for (int i = 1; i < n; i++) {

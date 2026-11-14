@@ -56,6 +56,16 @@ public:
         xTaskCreate([](void*) { Get().Loop(); vTaskDelete(nullptr); }, "rubi_remote", 8192, nullptr, 3, nullptr);
     }
 
+    // For the diagnostics line in Settings: "tat" (no key / switched off), "cho" (waiting: Rubi is busy or not connected yet),
+    // "noi" (connected), "xem" (connected and parents watching)
+    const char* StatusText() const {
+        switch (state_.load()) {
+            case 2: return viewers_.load() > 0 ? "xem" : "nối";
+            case 1: return "chờ";
+            default: return "tắt";
+        }
+    }
+
     // Called by the audio input task for every 10 ms block of microphone samples (16 kHz, `ch` interleaved channels).
     void MicTap(const int16_t* d, int samples_total, int ch) {
         if (!listening_.load(std::memory_order_relaxed) || d == nullptr || ch < 1) return;
@@ -73,6 +83,7 @@ private:
     static constexpr int kPrebufferMs = 300;          // jitter buffer before the parent's voice starts playing
 
     static int64_t NowMs() { return esp_timer_get_time() / 1000; }
+    static bool DeviceIdle() { return Application::GetInstance().GetDeviceState() == kDeviceStateIdle; }
 
     // ---- shared state ----
     std::atomic<int> viewers_{0};
@@ -81,6 +92,7 @@ private:
     std::atomic<int64_t> last_rx_{0};                 // last message from the relay (any kind)
     std::atomic<int64_t> talk_audio_at_{0};           // last parent audio frame
     std::atomic<bool> ws_dropped_{false};
+    std::atomic<int> state_{0};   // 0 off, 1 waiting, 2 connected
     std::atomic<int64_t> drive_at_{0};                // last drive command from the parents
     std::atomic<bool> driving_{false};
     std::mutex pcm_mutex_;
@@ -90,6 +102,7 @@ private:
     uint32_t rd_ = 0;
     float gain_ = 1.0f;
     int shown_mode_ = -1;
+    int64_t idle_since_ = 0;
     std::string host_;
     int64_t host_at_ = 0;
 
@@ -259,8 +272,22 @@ private:
         for (;;) {
             std::string key = RubiBattery::RKey();
             if (key.empty() || !WifiUp()) {
+                state_.store(0);
                 ShowMode(0);
                 vTaskDelay(pdMS_TO_TICKS(5000));
+                continue;
+            }
+            state_.store(1);
+            // The child's conversation with Rubi always comes first: only connect after Rubi has been idle for 15 s,
+            // so the extra connection never competes with the wake word, the microphone or the answer.
+            if (!DeviceIdle()) {
+                idle_since_ = 0;
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+            if (idle_since_ == 0) idle_since_ = NowMs();
+            if (NowMs() - idle_since_ < 15000) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
             }
             // TLS needs some internal memory: do not start when the board is short of it
@@ -300,8 +327,10 @@ private:
             }
             fail = 0;
             ESP_LOGW(kTag, "relay connected");
+            state_.store(2);
             last_rx_.store(NowMs());
             int64_t beat_at = 0;
+            int64_t key_check_at = 0;
             bool playing = false;
             double pos = 0;
             std::vector<float> in;
@@ -312,7 +341,17 @@ private:
                     ws->Send(std::string("h"));
                 }
                 if (now - last_rx_.load() > 45000) { ESP_LOGW(kTag, "relay silent, reconnecting"); break; }
-                if (RubiBattery::RKey() != key) break;   // the parents changed the key
+                if (now - key_check_at >= 5000) {
+                    key_check_at = now;
+                    if (RubiBattery::RKey() != key) break;   // the parents changed the key (or switched the link off)
+                }
+                // Nobody is watching and the child starts talking to Rubi (or memory runs low): let go of the connection
+                // at once, so Rubi has everything for the conversation. It comes back 15 s after Rubi is idle again.
+                if (viewers_.load() == 0 && (!DeviceIdle() ||
+                    heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < 40 * 1024)) {
+                    ESP_LOGW(kTag, "giving the connection back (Rubi busy or low memory)");
+                    break;
+                }
                 if (listening_.load() && now > listen_until_.load()) listening_.store(false);   // no refresh: stop listening
                 if (driving_.load() && (now - drive_at_.load() > 800 || viewers_.load() == 0)) {   // commands stopped: make sure Rubi stops
                     driving_.store(false);
@@ -334,6 +373,8 @@ private:
             viewers_.store(0);
             ShowMode(0);
             ws.reset();
+            idle_since_ = 0;
+            state_.store(1);
             vTaskDelay(pdMS_TO_TICKS(3000));
         }
     }
