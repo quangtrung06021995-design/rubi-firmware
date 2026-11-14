@@ -142,6 +142,7 @@ patch('main/protocols/mqtt_protocol.cc', [
      '                if (remote_sequence_ > 0 && sequence > remote_sequence_ + 1 && sequence - remote_sequence_ < 1000) g_rubi_lost += (int)(sequence - remote_sequence_ - 1);\n'),
 ])
 patch('main/application.cc', [
+    ('#include "application.h"\n', '#include "application.h"\n#include <esp_wifi.h>\n'),
     ('        if (GetDeviceState() == kDeviceStateSpeaking) {\n            audio_service_.PushPacketToDecodeQueue(std::move(packet));\n        }\n',
      '        if (GetDeviceState() == kDeviceStateSpeaking) {\n            g_rubi_pkts++;\n            audio_service_.PushPacketToDecodeQueue(std::move(packet));\n        } else {\n            g_rubi_drop++;\n        }\n'),
     ('    DeviceState new_state = state_machine_.GetState();\n    clock_ticks_ = 0;\n',
@@ -153,11 +154,15 @@ patch('main/application.cc', [
      '        }\n'
      '        if (rubi_prev == kDeviceStateSpeaking && new_state != kDeviceStateSpeaking && g_rubi_pkts > 0) {\n'
      '            char b[96];\n'
-     '            snprintf(b, sizeof(b), "Goi %d  Mat %d  Bo %d  Hut %d  %s", g_rubi_pkts.load(), g_rubi_lost.load(),\n'
-     '                     g_rubi_drop.load(), g_rubi_hut.load(), g_rubi_udp ? "UDP" : "WS");\n'
+     '            wifi_ap_record_t rubi_ap = {};\n'
+     '            int rubi_rssi = esp_wifi_sta_get_ap_info(&rubi_ap) == ESP_OK ? rubi_ap.rssi : 0;\n'
+     '            snprintf(b, sizeof(b), "Gói %d Mất %d Hụt %d Wifi %d", g_rubi_pkts.load(), g_rubi_lost.load(),\n'
+     '                     g_rubi_hut.load(), rubi_rssi);\n'
      '            // shown after this state change has finished: the Listening/Idle status set below would hide it at once\n'
      '            std::string rubi_msg(b);\n'
-     '            ESP_LOGW(TAG, "Rubi voice: %s", rubi_msg.c_str());  // on-screen line removed (fixed: WebSocket), kept in the log\n'
+     '            ESP_LOGW(TAG, "Rubi voice: %s", rubi_msg.c_str());\n'
+     '            // shown for 3 s after each reply (temporary, to find where voice dropouts come from)\n'
+     '            Schedule([rubi_msg]() { Board::GetInstance().GetDisplay()->ShowNotification(rubi_msg.c_str(), 3000); });\n'
      '            g_rubi_drop = 0;\n'
      '        }\n'
      '        rubi_prev = new_state;\n'
