@@ -955,7 +955,7 @@ private:
         if (!display_) return;
         static const std::vector<const lv_image_dsc_t*> ico = {nullptr, nullptr, &rubi_icon_cam_ung_s, &rubi_icon_quay_lai};
         const char* f = g_rubi_mic_force == 1 ? "Dùng mic: NGOÀI" : (g_rubi_mic_force == 2 ? "Dùng mic: TRONG" : "Dùng mic: TỰ ĐỘNG");
-        display_->MenuShowList("MIC", {"Thử mic (nói 4 giây)", f, "Chỉnh cảm ứng", "Quay lại"}, MicHint().c_str(), nullptr, &ico);
+        display_->MenuShowList("MIC", {"Thử mic (nói 4 giây)", f, "Chỉnh cảm ứng", "Quay lại"}, "", nullptr, &ico);
     }
 
     void StartMicTest() {
@@ -1663,12 +1663,7 @@ private:
     void TickOnce(int gen) {
         if (display_ == nullptr) return;
         switch (screen_) {
-        case Screen::kMicMenu:
-            display_->MenuSetHint(MicHint().c_str());
-            break;
-        case Screen::kSettings:
-            display_->MenuSetHint(DiagHint().c_str());
-            break;
+        // (mic / RAM diagnostic lines hidden at the user's request; MicHint()/DiagHint() kept for debugging)
         case Screen::kRemind:   // nobody touched it for 90 s: close, so the wake word works again
             if (NowMs() - remind_at_ > 90000) { tick_gen_++; Close(); }
             break;
