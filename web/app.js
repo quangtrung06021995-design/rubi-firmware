@@ -308,7 +308,8 @@ function connect(){clearTimeout(timer);if(!active||document.hidden||!key)return;
   s.onopen=function(){retry=0;lastMsg=Date.now();st("Đã nối máy chủ, đang chờ camera...",false);uiTalk()};
   s.onmessage=function(e){lastMsg=Date.now();
    if(typeof e.data==="string"){var j;try{j=JSON.parse(e.data)}catch(x){return}
-    if(j.t==="s"){var dv0=!!j.dev;if(dv0!==devOn){devOn=dv0;if(!devOn){endDrive();endTalk();endListen()}uiTalk();uiDrive()}
+    if(j.t==="s"){if(typeof j.rot==="number"&&j.rot!==rot&&[0,90,180,270].indexOf(j.rot)>=0){rot=j.rot;sto("rubi_rrot",String(rot));applyRot()}
+     var dv0=!!j.dev;if(dv0!==devOn){devOn=dv0;if(!devOn){endDrive();endTalk();endListen()}uiTalk();uiDrive()}
      if(!j.cam){say("Camera Rubi chưa kết nối ra mạng.\nKiểm tra Rubi đã bật nguồn, có Wi-Fi và đã cài khóa từ xa.");st("Camera ngoại tuyến",false)}
      else{st("Camera đã kết nối",true);if(!frames)say("Camera đã kết nối, đang chờ hình...")}}
     return}
@@ -349,7 +350,7 @@ $("rkey").onkeydown=function(e){if(e.key==="Enter")$("rok").onclick()};
 $("rchg").onclick=function(){sto("rubi_rkey",null);key="";ask()};
 $("rpause").onclick=function(){paused=!paused;this.textContent=paused?"Tiếp tục":"Tạm dừng"};
 $("rfull").onclick=function(){var el=$("rscreen");(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el)};
-$("rrot").onclick=function(){rot=(rot+90)%360;sto("rubi_rrot",String(rot));applyRot()};
+$("rrot").onclick=function(){rot=(rot+90)%360;sto("rubi_rrot",String(rot));applyRot();tell("o:"+rot)};
 addEventListener("resize",layoutRot);document.addEventListener("fullscreenchange",function(){setTimeout(layoutRot,80)});document.addEventListener("webkitfullscreenchange",function(){setTimeout(layoutRot,80)});
 $("rsnap").onclick=function(){var im=$("rimg");if(!im.src||im.style.display==="none")return toast("Chưa có hình để chụp");
  var c=document.createElement("canvas"),sw=rot===90||rot===270,nw=im.naturalWidth,nh=im.naturalHeight;c.width=sw?nh:nw;c.height=sw?nw:nh;

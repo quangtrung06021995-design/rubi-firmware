@@ -12,11 +12,14 @@
 // Messages
 //   room -> camera  (text)  "V<n>"   n = how many viewers are watching. The camera sends video only while n > 0.
 //   room -> dev     (text)  "V<n>"   same, so Rubi can show "someone is watching" and stop the microphone at n = 0
-//   room -> viewer  (text)  {"t":"s","cam":true|false,"dev":true|false,"n":<viewers>}   state, sent on every change
+//   room -> viewer  (text)  {"t":"s","cam":true|false,"dev":true|false,"n":<viewers>,"rot":0|90|180|270|null}   state, sent on every change
+//                           "rot" = how the camera picture must be turned to look upright; the room remembers it so every page
+//                           (Vercel, rubi.local, other phones) shows the picture the same way
 //   camera -> room  (binary) one JPEG frame; (text) short status, passed on to the viewers as it is
 //   dev -> room     (binary) 0xA1 + 16 kHz mono PCM16 little-endian: what Rubi's microphone hears, passed on to the viewers
 //   viewer -> room  (binary) 0xA0 + 16 kHz mono PCM16 little-endian: the parent's voice, passed on to the dev (never to the camera)
 //   viewer -> room  (text)  short command like "q:2"; letters c,q go to the camera, all others (t = talking, l = listening) to the dev
+//   viewer -> room  (text)  "o:<0|90|180|270>"  set the picture rotation; kept by the room, not passed on
 //   camera/viewer -> room (text) "h" heartbeat; the room answers with the state (camera: "V<n>", viewer: the JSON above)
 //
 // Cost on the Cloudflare free plan: only INCOMING messages count (20 messages = 1 request), outgoing are free.
@@ -53,6 +56,20 @@ export default {
 };
 
 export class Room extends DurableObject {
+  #rot = null;
+
+  constructor(ctx, env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => {
+      const r = await ctx.storage.get("rot");
+      this.#rot = r === 0 || r === 90 || r === 180 || r === 270 ? r : null;
+    });
+  }
+
+  #state() {
+    return JSON.stringify({ t: "s", cam: this.#open("cam").length > 0, dev: this.#open("dev").length > 0, n: this.#open("view").length, rot: this.#rot });
+  }
+
   #open(tag) {
     return this.ctx.getWebSockets(tag).filter((w) => w.readyState === OPEN);
   }
@@ -61,7 +78,7 @@ export class Room extends DurableObject {
     const cams = this.#open("cam");
     const devs = this.#open("dev");
     const views = this.#open("view");
-    const state = JSON.stringify({ t: "s", cam: cams.length > 0, dev: devs.length > 0, n: views.length });
+    const state = this.#state();
     for (const v of views) {
       try { v.send(state); } catch (e) { /* closing */ }
     }
@@ -94,7 +111,7 @@ export class Room extends DurableObject {
     if (msg === "h") {
       try {
         if (tags.includes("cam") || tags.includes("dev")) ws.send("V" + this.#open("view").length);
-        else ws.send(JSON.stringify({ t: "s", cam: this.#open("cam").length > 0, dev: this.#open("dev").length > 0, n: this.#open("view").length }));
+        else ws.send(this.#state());
       } catch (e) { /* closing */ }
       return;
     }
@@ -111,7 +128,14 @@ export class Room extends DurableObject {
       }
     } else if (tags.includes("view")) {
       if (typeof msg === "string") {
-        if (CMD_RE.test(msg)) {
+        if (/^o:(0|90|180|270)$/.test(msg)) {
+          const r = Number(msg.slice(2));
+          if (r !== this.#rot) {
+            this.#rot = r;
+            this.ctx.storage.put("rot", r);
+            this.#notify();
+          }
+        } else if (CMD_RE.test(msg)) {
           const to = CAM_CMDS.includes(msg[0]) ? "cam" : "dev";
           for (const c of this.#open(to)) {
             try { c.send(msg); } catch (e) { /* closing */ }
