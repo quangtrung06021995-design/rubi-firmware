@@ -89,7 +89,11 @@ void Es8311AudioCodec::ExtMicInit() {
         ESP_LOGW(TAG, "external mic: init failed");
         return;
     }
-    ESP_LOGI(TAG, "external mic: I2S1 started (BCLK 2, WS 14, SD 3)");
+    // INMP441 datasheet: SD needs a pull-down (~100k) because the mic lets the line float during the other slot.
+    // Without it the empty slot (and the edge bits of the mic's own slot) read random noise -> "xoet xoet" crackle.
+    gpio_pulldown_en(GPIO_NUM_3);
+    gpio_pullup_dis(GPIO_NUM_3);
+    ESP_LOGI(TAG, "external mic: I2S1 started (BCLK 2, WS 14, SD 3, SD pull-down)");
 }
 
 // Reads ~0.3 s from the external port. A real INMP441 gives a small but non-zero noise floor; a missing mic gives
@@ -129,10 +133,14 @@ void Es8311AudioCodec::ExtMicProbe() {
     // So: prefer the left slot; use the right one only when the left one is dead and the right one clearly has a signal.
     g_rubi_mic_sdl = (int)sdc[0];
     g_rubi_mic_sdr = (int)sdc[1];
-    g_rubi_ext_slot = (sdc[0] < 8.0 && sdc[1] > 8.0) ? 1 : 0;
+    // With the SD pull-down the empty slot reads ~0. Random floating bits give a std-dev in the millions.
+    auto alive = [](double v) { return v > 3.0 && v < 1000000.0; };
+    if (alive(sdc[0])) g_rubi_ext_slot = 0;
+    else if (alive(sdc[1])) g_rubi_ext_slot = 1;
+    else g_rubi_ext_slot = 0;
     double sd = sdc[g_rubi_ext_slot];
     ESP_LOGI(TAG, "external mic slots: left sd %.0f, right sd %.0f -> using %s", sdc[0], sdc[1], g_rubi_ext_slot ? "right" : "left");
-    ext_state_ = (sd > 3.0 && sd < 2000000.0) ? 1 : 2;
+    ext_state_ = (sd > 3.0 && sd < 1000000.0) ? 1 : 2;
     g_rubi_mic_sd = (int)sd;
     g_rubi_mic_state = ext_state_;
     ESP_LOGI(TAG, "external mic probe: std-dev %.0f -> %s", sd, ext_state_ == 1 ? "USING external mic" : "not found, using on-board mic");
@@ -189,6 +197,6 @@ int Es8311AudioCodec::ReadMic(int16_t* dest, int samples) {
 ''')
 
 patch('main/audio/codecs/es8311_audio_codec.cc', [
-    ('#include <freertos/task.h>\n', '#include <freertos/task.h>\n#include <esp_timer.h>\n#include "settings.h"\n'),
+    ('#include <freertos/task.h>\n', '#include <freertos/task.h>\n#include <esp_timer.h>\n#include <driver/gpio.h>\n#include "settings.h"\n'),
 ])
 print('external mic patch applied')
