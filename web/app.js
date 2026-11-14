@@ -246,7 +246,7 @@ setTimeout(tbLoad,1500)}
 (function(){
 var CFG="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/relay-cfg/relay.json";
 var host=null,ws=null,key="",paused=false,retry=0,timer=null,beat=null,lastUrl=null,frames=0,fpsT=Date.now(),lastMsg=0,active=false;
-var devOn=false,talking=false,listening=false,actx=null,mstream=null,mproc=null,msrc=null,lbeat=null,nextT=0,rsAcc=0,rsN=0,rsPos=0,pend=[];
+var drvOn=false,drvT=null,drvL=0,drvR=0,devOn=false,talking=false,listening=false,actx=null,mstream=null,mproc=null,msrc=null,lbeat=null,nextT=0,rsAcc=0,rsN=0,rsPos=0,pend=[];
 function sto(k,v){try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
 function lod(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}
 function say(t){$("rmsg").textContent=t;$("rmsg").style.display="flex";$("rimg").style.display="none";$("rlive").hidden=true;$("rfps").hidden=true}
@@ -264,8 +264,13 @@ function endTalk(){if(!talking)return;talking=false;pend=[];
  try{if(mproc){mproc.onaudioprocess=null;mproc.disconnect()}if(msrc)msrc.disconnect()}catch(x){}
  mproc=null;msrc=null;if(mstream){mstream.getTracks().forEach(function(t){t.stop()});mstream=null}
  tell("t:0");uiTalk()}
+function drvSend(){tell("d:"+drvL+"_"+drvR)}
+function drvSet(l,r){drvL=l;drvR=r;clearInterval(drvT);drvT=null;
+ if(l||r){drvSend();drvT=setInterval(drvSend,250)}else{drvSend();setTimeout(drvSend,120);setTimeout(drvSend,300)}}
+function endDrive(){drvSet(0,0);if(drvOn){drvOn=false;uiDrive()}}
+function uiDrive(){var b=$("rdon");if(!b)return;b.disabled=!devOn;b.textContent=drvOn?"Tắt lái từ xa":"Bật lái từ xa";b.classList.toggle("on",drvOn);$("rpad").hidden=!drvOn}
 function endListen(){if(!listening)return;listening=false;clearInterval(lbeat);lbeat=null;tell("l:0");uiTalk()}
-function stop(){endTalk();endListen();clearTimeout(timer);clearInterval(beat);beat=null;drop();frames=0;devOn=false;uiTalk()}
+function stop(){endDrive();endTalk();endListen();clearTimeout(timer);clearInterval(beat);beat=null;drop();frames=0;devOn=false;uiTalk()}
 function ctxOk(){if(!actx){var C=window.AudioContext||window.webkitAudioContext;if(!C)return false;actx=new C()}if(actx.state==="suspended")actx.resume();return true}
 function playRubi(buf){if(!listening||talking||!actx)return;var n=(buf.byteLength-1)>>1;if(n<=0)return;
  var dv=new DataView(buf,1,n*2),ab=actx.createBuffer(1,n,16000),d=ab.getChannelData(0);
@@ -298,7 +303,7 @@ function connect(){clearTimeout(timer);if(!active||document.hidden||!key)return;
   s.onopen=function(){retry=0;lastMsg=Date.now();st("Đã nối máy chủ, đang chờ camera...",false);uiTalk()};
   s.onmessage=function(e){lastMsg=Date.now();
    if(typeof e.data==="string"){var j;try{j=JSON.parse(e.data)}catch(x){return}
-    if(j.t==="s"){var dv0=!!j.dev;if(dv0!==devOn){devOn=dv0;if(!devOn){endTalk();endListen()}uiTalk()}
+    if(j.t==="s"){var dv0=!!j.dev;if(dv0!==devOn){devOn=dv0;if(!devOn){endDrive();endTalk();endListen()}uiTalk();uiDrive()}
      if(!j.cam){say("Camera Rubi chưa kết nối ra mạng.\nKiểm tra Rubi đã bật nguồn, có Wi-Fi và đã cài khóa từ xa.");st("Camera ngoại tuyến",false)}
      else{st("Camera đã kết nối",true);if(!frames)say("Camera đã kết nối, đang chờ hình...")}}
     return}
@@ -308,17 +313,30 @@ function connect(){clearTimeout(timer);if(!active||document.hidden||!key)return;
    var u=URL.createObjectURL(new Blob([e.data],{type:"image/jpeg"})),im=$("rimg");
    im.onload=function(){if(lastUrl)URL.revokeObjectURL(lastUrl);lastUrl=u};im.src=u;im.style.display="block";$("rmsg").style.display="none";$("rlive").hidden=false;
    frames++;var n=Date.now();if(n-fpsT>=2000){$("rfps").textContent=(frames*1000/(n-fpsT)).toFixed(0)+" hình/giây";$("rfps").hidden=false;frames=0;fpsT=n}};
-  s.onclose=function(){if(ws!==s)return;endTalk();endListen();devOn=false;uiTalk();ws=null;frames=0;st("Mất kết nối, thử lại...",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(1000*retry*retry,20000))};
+  s.onclose=function(){if(ws!==s)return;drvL=drvR=0;clearInterval(drvT);drvT=null;drvOn=false;uiDrive();endTalk();endListen();devOn=false;uiTalk();ws=null;frames=0;st("Mất kết nối, thử lại...",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(1000*retry*retry,20000))};
   s.onerror=function(){try{s.close()}catch(x){}};
  }).catch(function(){if(!active)return;say("Chưa tìm thấy máy chủ trung gian.\nNếu mới cài, đợi vài phút rồi thử lại.");st("Chưa có địa chỉ máy chủ",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(3000*retry,20000))})}
-function begin(){$("rkeybox").hidden=true;$("rscreen").parentNode.hidden=false;say("Đang kết nối...");st("Đang kết nối...",false);stop();retry=0;
+function begin(){$("rkeybox").hidden=true;$("rscreen").parentNode.hidden=false;$("rdrive").hidden=false;say("Đang kết nối...");st("Đang kết nối...",false);stop();retry=0;
  // nhịp tim mỗi 15 giây; im 40 giây = kết nối chết âm thầm -> nối lại
  beat=setInterval(function(){if(!ws||document.hidden)return;if(Date.now()-lastMsg>40000){drop();frames=0;retry=0;st("Mất kết nối, thử lại...",false);connect();return}if(ws&&ws.readyState===1){try{ws.send("h")}catch(x){}}},15000);
  connect()}
-function ask(){stop();$("rscreen").parentNode.hidden=true;$("rkeybox").hidden=false;$("rkey").value="";}
+function ask(){stop();$("rdrive").hidden=true;$("rscreen").parentNode.hidden=true;$("rkeybox").hidden=false;$("rkey").value="";}
 // Mở từ http://rubi.local: gửi khóa cho DevKit để bo màn hình Rubi tự nối ra máy chủ (cần cho nói chuyện từ xa)
 function pushKey(){if(!LIVE||!key)return;api("/api/rkey?set="+encodeURIComponent(key)).then(function(j){if(j&&j.ok)toast("Đã gửi khóa cho Rubi")}).catch(function(){})}
 window.__rubiRemote=function(on){active=on;if(!on){stop();return}key=lod("rubi_rkey");if(key){pushKey();begin()}else ask()};
+$("rdon").onclick=function(){if(drvOn)endDrive();else{drvOn=true;uiDrive();toast("Giữ nút mũi tên để Rubi đi, thả ra là dừng")}};
+(function(){var pad=$("rpad"),cur=null;
+ function dirs(d,s){s=s/100;var v=Math.round(100*s);return d==="f"?[v,v]:d==="b"?[-v,-v]:d==="l"?[-v,v]:d==="r"?[v,-v]:[0,0]}
+ function off(){if(cur){cur.classList.remove("on");cur=null}drvSet(0,0)}
+ pad.addEventListener("pointerdown",function(e){var b=e.target.closest("button[data-d]");if(!b||!drvOn)return;e.preventDefault();
+  try{b.setPointerCapture(e.pointerId)}catch(x){}
+  if(b.dataset.d==="s"){off();return}
+  cur=b;b.classList.add("on");var d=dirs(b.dataset.d,+$("rspd").value);drvSet(d[0],d[1])});
+ ["pointerup","pointercancel","lostpointercapture"].forEach(function(n){pad.addEventListener(n,off)});
+ $("rspd").oninput=function(){$("rspdv").textContent=this.value;if(cur){var d=dirs(cur.dataset.d,+this.value);drvSet(d[0],d[1])}};
+ document.addEventListener("visibilitychange",function(){if(document.hidden)off()});
+ addEventListener("blur",off)
+})();
 $("rtalk").onclick=function(){if(talking)endTalk();else{if(listening)endListen();startTalk()}};
 $("rlisten").onclick=function(){if(listening)endListen();else{if(talking)endTalk();startListen()}};
 $("rok").onclick=function(){var k=$("rkey").value.trim();if(!/^[A-Za-z0-9]{10,40}$/.test(k)){toast("Khóa phải dài 10-40 ký tự, chỉ gồm chữ và số");return}key=k;sto("rubi_rkey",k);pushKey();begin()};

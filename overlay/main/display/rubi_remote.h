@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <functional>
@@ -80,6 +81,8 @@ private:
     std::atomic<int64_t> last_rx_{0};                 // last message from the relay (any kind)
     std::atomic<int64_t> talk_audio_at_{0};           // last parent audio frame
     std::atomic<bool> ws_dropped_{false};
+    std::atomic<int64_t> drive_at_{0};                // last drive command from the parents
+    std::atomic<bool> driving_{false};
     std::mutex pcm_mutex_;
     std::vector<int16_t> pcm_in_;                     // parent's voice, 16 kHz, waiting to be played
     int16_t ring_[kRing];
@@ -149,6 +152,19 @@ private:
             }
         } else if (t == "l:0") {
             listening_.store(false);
+        } else if (t.size() >= 5 && t.size() <= 12 && t[0] == 'd' && t[1] == ':') {
+            // d:<left>_<right> (-100..100): the parents drive Rubi. Passed to the DevKit, which limits the speed and stops
+            // by itself when the commands stop. Only accepted while a parent is connected.
+            int l = 0, r = 0;
+            if (viewers_.load() > 0 && sscanf(t.c_str() + 2, "%d_%d", &l, &r) == 2) {
+                l = std::max(-100, std::min(100, l));
+                r = std::max(-100, std::min(100, r));
+                char b[24];
+                int n = snprintf(b, sizeof(b), "G%d,%d\n", l, r);
+                RubiBattery::Send(b, n);
+                drive_at_.store(NowMs());
+                driving_.store(l != 0 || r != 0);
+            }
         } else if (t == "t:1") {
             talk_audio_at_.store(NowMs());
         }
@@ -298,6 +314,10 @@ private:
                 if (now - last_rx_.load() > 45000) { ESP_LOGW(kTag, "relay silent, reconnecting"); break; }
                 if (RubiBattery::RKey() != key) break;   // the parents changed the key
                 if (listening_.load() && now > listen_until_.load()) listening_.store(false);   // no refresh: stop listening
+                if (driving_.load() && (now - drive_at_.load() > 800 || viewers_.load() == 0)) {   // commands stopped: make sure Rubi stops
+                    driving_.store(false);
+                    RubiBattery::Send("X\n", 2);
+                }
                 bool talking = PlayParent(as, out_rate, playing, pos, in);
                 if (listening_.load()) {
                     if (!SendMic(*ws)) break;
@@ -305,10 +325,11 @@ private:
                     rd_ = wr_.load();   // start from "now" the next time listening begins
                     gain_ = 1.0f;
                 }
-                int mode = listening_.load() ? 3 : (talking ? 2 : (viewers_.load() > 0 ? 1 : 0));
+                int mode = listening_.load() ? 3 : (driving_.load() ? 4 : (talking ? 2 : (viewers_.load() > 0 ? 1 : 0)));
                 ShowMode(mode);
                 vTaskDelay(pdMS_TO_TICKS(talking ? 10 : 20));
             }
+            if (driving_.load()) { driving_.store(false); RubiBattery::Send("X\n", 2); }
             listening_.store(false);
             viewers_.store(0);
             ShowMode(0);

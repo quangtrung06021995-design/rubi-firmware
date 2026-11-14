@@ -136,9 +136,9 @@ public:
             lv_obj_add_flag(remote_box_, LV_OBJ_FLAG_HIDDEN);
             return;
         }
-        const char* t = m == 2 ? "Bố mẹ đang nói" : (m == 3 ? "Bố mẹ đang nghe" : "Bố mẹ đang xem");
+        const char* t = m == 2 ? "Bố mẹ đang nói" : (m == 3 ? "Bố mẹ đang nghe" : (m == 4 ? "Bố mẹ đang lái Rubi" : "Bố mẹ đang xem"));
         lv_label_set_text(remote_lbl_, t);
-        lv_obj_set_style_bg_color(remote_box_, lv_color_hex(m == 2 ? 0x43A047 : (m == 3 ? 0xE53935 : 0x1E88E5)), 0);
+        lv_obj_set_style_bg_color(remote_box_, lv_color_hex(m == 2 ? 0x43A047 : (m == 3 ? 0xE53935 : (m == 4 ? 0xFB8C00 : 0x1E88E5))), 0);
         lv_obj_remove_flag(remote_box_, LV_OBJ_FLAG_HIDDEN);
     }
 

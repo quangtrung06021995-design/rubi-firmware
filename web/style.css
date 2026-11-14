@@ -114,3 +114,8 @@ html,body,button,.btn{touch-action:manipulation}
 #rlive[hidden],#rfps[hidden],.card[hidden]{display:none!important}
 
 #rtalk.on{background:#d64545;color:#fff}#rlisten.on{background:#d64545;color:#fff;border-color:#d64545}#rtalk:disabled,#rlisten:disabled{opacity:.5}
+
+#rpad .pad{display:grid;grid-template-columns:repeat(3,76px);gap:8px;justify-content:center;margin-top:12px}
+#rpad .pad button{height:76px;border-radius:18px;border:1px solid var(--line);background:var(--card,#fff);font-size:28px;touch-action:none;user-select:none;-webkit-user-select:none;color:inherit}
+#rpad .pad button.on{background:#1E88E5;color:#fff}#rpad .pad .stp{background:#d64545;color:#fff;border-color:#d64545}
+#rdon.on{background:#d64545;color:#fff;border-color:#d64545}

@@ -800,6 +800,32 @@ void webDrive() {   // /api/drive?l=-100..100&r=-100..100[&t=<ma>]
     webJson("{\"ok\":true}");
 }
 
+// ---- Lai tu xa qua may chu trung gian: man hinh Rubi chuyen dong "G<trai>,<phai>" (-100..100) ----
+// An toan: toc do bi gioi han rat thap khi chua co cam bien chan vat can / chong roi hoat dong (g_laiTuXaCamBienOk = false);
+// het lenh 0.6 giay thi tu dung. Khi noi xong cam bien sieu am + ToF, dat g_laiTuXaCamBienOk = true va chan chuyen dong tien khi co vat/mep.
+const uint32_t REMOTE_DEADMAN_MS = 600;
+const int REMOTE_MIN_PCT = 22;             // duoi muc nay motor khong du luc quay
+const int REMOTE_CAP_KHONG_CAM_BIEN = 30;  // % toi da khi chua co cam bien
+const int REMOTE_CAP_CO_CAM_BIEN = 50;
+bool g_laiTuXaCamBienOk = false;
+static int remoteMap(int v, int cap) {
+    v = constrain(v, -100, 100);
+    if (v == 0) return 0;
+    int a = abs(v);
+    int out = REMOTE_MIN_PCT + (cap - REMOTE_MIN_PCT) * (a - 1) / 99;
+    return v < 0 ? -out : out;
+}
+void lenhLaiTuXa(int l, int r) {
+    if (g_upd_ds || (l == 0 && r == 0)) { dungHet(); return; }
+    int cap = g_laiTuXaCamBienOk ? REMOTE_CAP_CO_CAM_BIEN : REMOTE_CAP_KHONG_CAM_BIEN;
+    l = remoteMap(l, cap);
+    r = remoteMap(r, cap);
+    g_nhay = false;
+    datToc(0, A_LA_BANH_TRAI ? l : r);
+    datToc(1, A_LA_BANH_TRAI ? r : l);
+    g_cmd_deadline = millis() + REMOTE_DEADMAN_MS;
+}
+
 void webStop() {
     dungHet();
     webJson("{\"ok\":true}");
@@ -919,7 +945,7 @@ void webStatus() {
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
-               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") +
+               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") + ",\"rd\":" + (g_laiTuXaCamBienOk ? "50" : "30") +
                ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
                ((g_c3_at != 0 && millis() - g_c3_at < 120000) ? String(",\"c3v\":\"") + g_c3_v + "\"" : String("")) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
@@ -1670,6 +1696,10 @@ void loop() {
             else if (line2.length() > 2 && line2.length() < 20 && line2[0] == 'V') { g_ds_v = line2.substring(1); g_ds_at = millis() | 1; }
             else if (line2 == "U1") { g_upd_ds = true; g_upd_ds_den = millis() + 60000; dungHet(); }   // man hinh dang nap ban moi
             else if (line2 == "U0") { g_upd_ds = false; }
+            else if (line2.length() >= 4 && line2.length() < 14 && line2[0] == 'G') {   // G<trai>,<phai>: lai tu xa
+                int gl = 0, gr = 0;
+                if (sscanf(line2.c_str() + 1, "%d,%d", &gl, &gr) == 2) lenhLaiTuXa(gl, gr);
+            }
             else if (line2 == "D") nhayBat();       // nhay mua (chi xoay tai cho)
             else if (line2 == "X") dungHet();       // dung (huy nhay)
             else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
