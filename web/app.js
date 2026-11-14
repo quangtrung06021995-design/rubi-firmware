@@ -246,7 +246,12 @@ setTimeout(tbLoad,1500)}
 (function(){
 var CFG="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/relay-cfg/relay.json";
 var host=null,ws=null,key="",paused=false,retry=0,timer=null,beat=null,lastUrl=null,frames=0,fpsT=Date.now(),lastMsg=0,active=false;
-var drvOn=false,drvT=null,drvL=0,drvR=0,devOn=false,talking=false,listening=false,actx=null,mstream=null,mproc=null,msrc=null,lbeat=null,nextT=0,rsAcc=0,rsN=0,rsPos=0,pend=[];
+var lastW=0,rot=270,drvOn=false,drvT=null,drvL=0,drvR=0,devOn=false,talking=false,listening=false,actx=null,mstream=null,mproc=null,msrc=null,lbeat=null,nextT=0,rsAcc=0,rsN=0,rsPos=0,pend=[];
+(function(){var v=lod0("rubi_rrot");if(v!==""&&[0,90,180,270].indexOf(+v)>=0)rot=+v})();
+function lod0(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}
+function layoutRot(){var s=$("rscreen"),im=$("rimg"),w=s.clientWidth,h=s.clientHeight;if(!w||!h)return;
+ var sw=rot===90||rot===270;im.style.width=(sw?h:w)+"px";im.style.height=(sw?w:h)+"px";im.style.transform="translate(-50%,-50%) rotate("+rot+"deg)"}
+function applyRot(){$("rscreen").classList.toggle("v",rot===90||rot===270);layoutRot();setTimeout(layoutRot,60)}
 function sto(k,v){try{if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){}}
 function lod(k){try{return localStorage.getItem(k)||""}catch(e){return ""}}
 function say(t){$("rmsg").textContent=t;$("rmsg").style.display="flex";$("rimg").style.display="none";$("rlive").hidden=true;$("rfps").hidden=true}
@@ -311,19 +316,19 @@ function connect(){clearTimeout(timer);if(!active||document.hidden||!key)return;
    if(b0===0xA1){playRubi(e.data);return}
    if(paused||b0!==0xFF)return;
    var u=URL.createObjectURL(new Blob([e.data],{type:"image/jpeg"})),im=$("rimg");
-   im.onload=function(){if(lastUrl)URL.revokeObjectURL(lastUrl);lastUrl=u};im.src=u;im.style.display="block";$("rmsg").style.display="none";$("rlive").hidden=false;
+   im.onload=function(){if(lastUrl)URL.revokeObjectURL(lastUrl);lastUrl=u;if(!lastW||lastW!==im.naturalWidth){lastW=im.naturalWidth;layoutRot()}};im.src=u;im.style.display="block";$("rmsg").style.display="none";$("rlive").hidden=false;
    frames++;var n=Date.now();if(n-fpsT>=2000){$("rfps").textContent=(frames*1000/(n-fpsT)).toFixed(0)+" hình/giây";$("rfps").hidden=false;frames=0;fpsT=n}};
   s.onclose=function(){if(ws!==s)return;drvL=drvR=0;clearInterval(drvT);drvT=null;drvOn=false;uiDrive();endTalk();endListen();devOn=false;uiTalk();ws=null;frames=0;st("Mất kết nối, thử lại...",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(1000*retry*retry,20000))};
   s.onerror=function(){try{s.close()}catch(x){}};
  }).catch(function(){if(!active)return;say("Chưa tìm thấy máy chủ trung gian.\nNếu mới cài, đợi vài phút rồi thử lại.");st("Chưa có địa chỉ máy chủ",false);retry=Math.min(retry+1,6);timer=setTimeout(connect,Math.min(3000*retry,20000))})}
-function begin(){$("rkeybox").hidden=true;$("rscreen").parentNode.hidden=false;$("rdrive").hidden=false;say("Đang kết nối...");st("Đang kết nối...",false);stop();retry=0;
+function begin(){applyRot();$("rkeybox").hidden=true;$("rscreen").parentNode.hidden=false;$("rdrive").hidden=false;say("Đang kết nối...");st("Đang kết nối...",false);stop();retry=0;
  // nhịp tim mỗi 15 giây; im 40 giây = kết nối chết âm thầm -> nối lại
  beat=setInterval(function(){if(!ws||document.hidden)return;if(Date.now()-lastMsg>40000){drop();frames=0;retry=0;st("Mất kết nối, thử lại...",false);connect();return}if(ws&&ws.readyState===1){try{ws.send("h")}catch(x){}}},15000);
  connect()}
 function ask(){stop();$("rdrive").hidden=true;$("rscreen").parentNode.hidden=true;$("rkeybox").hidden=false;$("rkey").value="";}
 // Mở từ http://rubi.local: gửi khóa cho DevKit để bo màn hình Rubi tự nối ra máy chủ (cần cho nói chuyện từ xa)
 function pushKey(){if(!LIVE||!key)return;api("/api/rkey?set="+encodeURIComponent(key)).then(function(j){if(j&&j.ok)toast("Đã gửi khóa cho Rubi")}).catch(function(){})}
-window.__rubiRemote=function(on){active=on;if(!on){stop();return}key=lod("rubi_rkey");if(key){pushKey();begin()}else ask()};
+window.__rubiRemote=function(on){active=on;if(!on){stop();return}setTimeout(applyRot,50);key=lod("rubi_rkey");if(key){pushKey();begin()}else ask()};
 $("rdon").onclick=function(){if(drvOn)endDrive();else{drvOn=true;uiDrive();toast("Giữ nút mũi tên để Rubi đi, thả ra là dừng")}};
 (function(){var pad=$("rpad"),cur=null;
  function dirs(d,s){s=s/100;var v=Math.round(100*s);return d==="f"?[v,v]:d==="b"?[-v,-v]:d==="l"?[-v,v]:d==="r"?[v,-v]:[0,0]}
@@ -344,8 +349,11 @@ $("rkey").onkeydown=function(e){if(e.key==="Enter")$("rok").onclick()};
 $("rchg").onclick=function(){sto("rubi_rkey",null);key="";ask()};
 $("rpause").onclick=function(){paused=!paused;this.textContent=paused?"Tiếp tục":"Tạm dừng"};
 $("rfull").onclick=function(){var el=$("rscreen");(el.requestFullscreen||el.webkitRequestFullscreen||function(){}).call(el)};
+$("rrot").onclick=function(){rot=(rot+90)%360;sto("rubi_rrot",String(rot));applyRot()};
+addEventListener("resize",layoutRot);document.addEventListener("fullscreenchange",function(){setTimeout(layoutRot,80)});document.addEventListener("webkitfullscreenchange",function(){setTimeout(layoutRot,80)});
 $("rsnap").onclick=function(){var im=$("rimg");if(!im.src||im.style.display==="none")return toast("Chưa có hình để chụp");
- var c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext("2d").drawImage(im,0,0);
+ var c=document.createElement("canvas"),sw=rot===90||rot===270,nw=im.naturalWidth,nh=im.naturalHeight;c.width=sw?nh:nw;c.height=sw?nw:nh;
+ var cx=c.getContext("2d");cx.translate(c.width/2,c.height/2);cx.rotate(rot*Math.PI/180);cx.drawImage(im,-nw/2,-nh/2);
  c.toBlob(function(b){var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="rubi-"+new Date().toISOString().replace(/[:.]/g,"-")+".jpg";a.click();setTimeout(function(){URL.revokeObjectURL(a.href)},2000)},"image/jpeg",.92)};
 // tiết kiệm dữ liệu và pin camera: ẩn trang thì ngắt, quay lại thì nối
 document.addEventListener("visibilitychange",function(){if(!active||!key)return;if(document.hidden)stop();else{retry=0;begin()}});
