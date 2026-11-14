@@ -33,6 +33,7 @@ static const float kRubiExtGain = 64.0f;
 
 // Diagnostics shown on the Settings screen (state: 0 not probed, 1 external, 2 on-board; sd = probe std-dev; peak = loudest sample in the last 1 s)
 volatile int g_rubi_mic_state = 0, g_rubi_mic_sd = 0, g_rubi_mic_peak = 0, g_rubi_mic_rms = 0;
+volatile int g_rubi_mic_sdl = 0, g_rubi_mic_sdr = 0;   // probe std-dev of the left / right I2S slot
 static int64_t g_rubi_peak_t0 = 0;
 // Mic choice from the menu (0 = automatic, 1 = external, 2 = on-board), saved in NVS "rubi"/"mic".
 volatile int g_rubi_mic_force = 0;
@@ -123,7 +124,12 @@ void Es8311AudioCodec::ExtMicProbe() {
     if (cnt < 500) { ext_state_ = 2; g_rubi_mic_state = 2; g_rubi_mic_sd = -1; ESP_LOGW(TAG, "external mic: no data, using on-board mic"); return; }
     double sdc[2];
     for (int c = 0; c < 2; c++) { double m = sum[c] / cnt; double q = sum2[c] / cnt - m * m; sdc[c] = q > 0 ? sqrt(q) : 0; }
-    g_rubi_ext_slot = sdc[1] > sdc[0] ? 1 : 0;
+    // The INMP441 (L/R pin to GND) talks in the LEFT slot only; in the other slot its data pin floats (high impedance) and
+    // the port reads electrical noise. Choosing "the louder slot" could therefore pick the floating slot (clicks, no voice).
+    // So: prefer the left slot; use the right one only when the left one is dead and the right one clearly has a signal.
+    g_rubi_mic_sdl = (int)sdc[0];
+    g_rubi_mic_sdr = (int)sdc[1];
+    g_rubi_ext_slot = (sdc[0] < 8.0 && sdc[1] > 8.0) ? 1 : 0;
     double sd = sdc[g_rubi_ext_slot];
     ESP_LOGI(TAG, "external mic slots: left sd %.0f, right sd %.0f -> using %s", sdc[0], sdc[1], g_rubi_ext_slot ? "right" : "left");
     ext_state_ = (sd > 3.0 && sd < 2000000.0) ? 1 : 2;

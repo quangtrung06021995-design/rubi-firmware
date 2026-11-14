@@ -25,7 +25,7 @@
 #include <esp_random.h>
 
 // Microphone diagnostics, defined in the audio codec (patches/apply_extmic.py)
-extern volatile int g_rubi_mic_state, g_rubi_mic_sd, g_rubi_mic_peak, g_rubi_mic_rms;
+extern volatile int g_rubi_mic_state, g_rubi_mic_sd, g_rubi_mic_peak, g_rubi_mic_rms, g_rubi_mic_sdl, g_rubi_mic_sdr;
 extern volatile int g_rubi_mic_force, g_rubi_cap_len, g_rubi_cap_pos, g_rubi_cap_clip;
 extern int16_t* volatile g_rubi_cap_buf;
 #include <esp_timer.h>
@@ -922,9 +922,9 @@ private:
 
     static std::string MicHint() {
         char b[96];
-        snprintf(b, sizeof(b), "Mic %s r=%d đỉnh=%d đo=%d",
+        snprintf(b, sizeof(b), "%s r=%d đ=%d đo=%d/%d",
                  g_rubi_mic_state == 1 ? "NGOÀI" : (g_rubi_mic_state == 2 ? "TRONG" : "?"),
-                 g_rubi_mic_rms, g_rubi_mic_peak, g_rubi_mic_sd);
+                 g_rubi_mic_rms, g_rubi_mic_peak, g_rubi_mic_sdl, g_rubi_mic_sdr);
         return b;
     }
 
