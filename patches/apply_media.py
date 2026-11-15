@@ -161,7 +161,7 @@ patch('main/application.cc', [
      '            // shown after this state change has finished: the Listening/Idle status set below would hide it at once\n'
      '            std::string rubi_msg(b);\n'
      '            ESP_LOGW(TAG, "Rubi voice: %s", rubi_msg.c_str());\n'
-     '            // (on-screen line removed again at the user's request: dropouts gone; kept in the log)\n'
+     '            // (on-screen line removed again at user request: dropouts gone; kept in the log)\n'
      '            g_rubi_drop = 0;\n'
      '        }\n'
      '        rubi_prev = new_state;\n'
