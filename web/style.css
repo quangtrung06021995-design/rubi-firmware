@@ -124,3 +124,9 @@ html,body,button,.btn{touch-action:manipulation}
 #rscreen.v{aspect-ratio:3/4;width:min(100%,calc(64svh*.75));margin-inline:auto}
 #rscreen:fullscreen{width:100%;height:100%;aspect-ratio:auto;border-radius:0}
 #rscreen:-webkit-full-screen{width:100%;height:100%;aspect-ratio:auto;border-radius:0}
+
+.toan-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:10px 0}
+.toan-o{cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;font-weight:700;font-size:13px;color:inherit;text-decoration:none}
+.toan-o img{width:100%;max-width:150px;aspect-ratio:1;object-fit:contain;transition:transform .15s}
+.toan-o:active img{transform:scale(.94)}
+@media(max-width:560px){.toan-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

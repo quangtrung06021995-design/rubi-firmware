@@ -138,7 +138,7 @@ function render(){
  if(dt)dt.style.display=dkNew?"":"none";
  renderSd(s,ok);
  var hp=$("hpv"),hb=$("hpb"),hw=$("hwv"),stt=$("state");
- if(hp){var mv2=ok?(+s.bat_mv||0):0,pp=mv2>2000?Math.max(0,Math.min(100,Math.round((mv2-6000)/24))):null;hp.textContent=pp==null?"—":pp+"%";if(hb)hb.style.width=(pp||0)+"%";if(hw)hw.textContent=ok&&s.rssi!=null?s.rssi+" dBm":"—";if(stt)stt.textContent=!s?"Chưa kết nối với Rubi":"Sẵn sàng chơi cùng bé";var ht=$("hoctoan"),tq=ok&&s.toan;if(ht){if(tq&&(tq.s>0||tq.l>0)){ht.hidden=false;ht.textContent="📘 Học toán: "+(tq.l>0?"hôm nay "+tq.l+" lượt, đúng "+tq.d+"/"+tq.c+" câu · ":"hôm nay chưa học · ")+tq.s+" sao"+(tq.k>=2?" · "+tq.k+" ngày liền":"")}else ht.hidden=true}}}
+ if(hp){var mv2=ok?(+s.bat_mv||0):0,pp=mv2>2000?Math.max(0,Math.min(100,Math.round((mv2-6000)/24))):null;hp.textContent=pp==null?"—":pp+"%";if(hb)hb.style.width=(pp||0)+"%";if(hw)hw.textContent=ok&&s.rssi!=null?s.rssi+" dBm":"—";if(stt)stt.textContent=!s?"Chưa kết nối với Rubi":"Sẵn sàng chơi cùng bé";var ht=$("hoctoan"),tq=ok&&s.toan;if(ht){if(tq&&(tq.s>0||tq.l>0)){ht.hidden=false;ht.textContent="📘 Học toán: "+(tq.l>0?"hôm nay "+tq.l+" lượt, đúng "+tq.d+"/"+tq.c+" câu · ":"hôm nay chưa học · ")+tq.s+" sao"+(tq.k>=2?" · "+tq.k+" ngày liền":"")}else ht.hidden=true}var ts=$("toan-st");if(ts&&tq&&(tq.s>0||tq.l>0))ts.textContent="⭐ "+tq.s+" sao · "+(tq.l>0?"hôm nay "+tq.l+" lượt, đúng "+tq.d+"/"+tq.c+" câu":"hôm nay chưa học")+(tq.k>=2?" · "+tq.k+" ngày liền":"")}}
 function conn(){var c=$("conn"),n=$("demonote");
  if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
  if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Thẻ nhớ hiện số thật. Các mục còn lại (đèn, trò chơi, camera) vẫn là mẫu."}
@@ -165,7 +165,7 @@ function lenh(c,msg){return api("/api/lenh?c="+c).then(function(j){toast(j&&j.ok
 function btns(arr){return '<div class="acts">'+arr.map(function(b){return '<button class="btn" data-c="'+b[0]+'">'+b[1]+'</button>'}).join("")+'</div>'}
 var HOLD='<p class="hint">Rubi sẽ mở mục này trên màn hình. Muốn dừng, bấm "Dừng" hoặc chạm màn hình Rubi.</p>';
 (function(){
- var c=$("c-toan");if(c)c.innerHTML='<h2>Toán lớp 1</h2>'+btns([["m0","Cộng trừ trong 10"],["m1","Cộng trừ trong 20"],["m2","Cộng trừ trong 100"],["m3","Toán lời văn"]])+HOLD;
+ var c=$("c-toan");if(c)c.innerHTML='<h2>Toán lớp 1</h2><div class="toan-grid">'+[["m0","toan-10","Cộng trừ trong 10"],["m1","toan-20","Cộng trừ trong 20"],["m2","toan-100","Cộng trừ trong 100"],["m3","toan-loi-van","Toán lời văn"]].map(function(b){return '<a class="toan-o" data-c="'+b[0]+'" role="button" tabindex="0"><img alt="" src="img/'+b[1]+'.webp"><span>'+b[2]+'</span></a>'}).join("")+'</div><p class="hint" id="toan-st">⭐ Sao và kết quả hôm nay hiện ở đây sau khi bé học xong một lượt.</p>'+HOLD;
  c=$("c-anh");if(c)c.innerHTML='<h2>Tiếng Anh giao tiếp</h2>'+btns([["en","Mở các bài Tiếng Anh trên Rubi"]])+'<p class="hint">Rubi mở danh sách bài trên màn hình, bé chạm để chọn bài. Bài mới chép vào thẻ nhớ (thư mục rubi/anh) sẽ tự hiện trong danh sách.</p>';
  c=$("c-hoc");if(c)c.innerHTML='<h2>Học song ngữ</h2>'+btns([["h0","Trái cây"],["h1","Động vật"],["h2","Đồ vật"],["h3","Hình khối"]])+HOLD;
  var cc=document.querySelector("#v-choi-cung");
