@@ -72,4 +72,15 @@
             PropertyList(), [](const PropertyList&) -> ReturnValue {
                 return RubiMedia::Get().VoiceStep(-1);
             });
+
+        McpServer::GetInstance().AddTool("self.math.open",
+            "Open Rubi's maths practice for a first grader on the screen (the child answers on the touch keypad, Rubi reads the "
+            "questions aloud and gives stars). Use this whenever the child or a parent wants to learn, practise or play maths "
+            "(\"học toán\", \"làm toán\", \"chơi toán\"). level: -1 = show the level menu so the child chooses; "
+            "0 = add/subtract within 10, 1 = within 20, 2 = within 100, 3 = word problems. Use -1 unless a level was clearly asked. "
+            "After calling, say only one short encouraging sentence and then stay silent.",
+            PropertyList({Property("level", kPropertyTypeInteger, -1, -1, 3)}),
+            [](const PropertyList& properties) -> ReturnValue {
+                return RubiMedia::Get().VoiceMath(properties["level"].value<int>());
+            });
     }

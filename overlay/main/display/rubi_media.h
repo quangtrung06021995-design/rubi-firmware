@@ -246,6 +246,7 @@ public:
         case Screen::kMathBusy:
             break;
         case Screen::kMathDone:
+            StopMathDance();
             ShowMathMenu();
             break;
         case Screen::kSync:
@@ -490,6 +491,10 @@ public:
                     if (!filler) q += (q.empty() ? "" : " ") + w;
                 }
             }
+        }
+        if (cmd == 0 && (has("hoc toan") || has("lam toan") || has("choi toan"))) {
+            VoiceMath(-1);
+            return;
         }
         if (cmd == 0) return;
         ESP_LOGI(kTag, "voice command %d, song query '%s'", cmd, q.c_str());
@@ -1362,16 +1367,170 @@ private:
     RubiMath::Q math_q_;
     std::string math_buf_;
     int math_idx_ = 0, math_score_ = 0, math_tries_ = 0;
+    std::vector<std::string> math_wrong_;   // questions answered wrong at the first try (for the parents' report)
+
+    // ---- "Học toán cùng Rubi": stars, best score per level, today's numbers and learning streak (NVS "rubi_toan") ----
+    struct MathProg {
+        int stars = 0;                     // all stars ever earned
+        int best[4] = {-1, -1, -1, -1};    // best round score per level (-1 = never played)
+        int day = 0;                       // day number of the "today" counters below
+        int rounds = 0, right = 0, asked = 0;
+        int streak = 0, last = 0;          // days in a row with at least one round, last such day
+    };
+    static constexpr const char* kMathLevelName[4] = {"Cộng trừ trong 10", "Cộng trừ trong 20", "Cộng trừ trong 100", "Toán lời văn"};
+
+    // Local day number (days since 1970), 0 while the clock is not set yet.
+    static int MathDayNumber() {
+        time_t t = time(nullptr);
+        struct tm tm;
+        localtime_r(&t, &tm);
+        if (tm.tm_year + 1900 < 2025) return 0;
+        int y = tm.tm_year + 1900, m = tm.tm_mon + 1, d = tm.tm_mday;
+        y -= m <= 2;
+        int era = (y >= 0 ? y : y - 399) / 400;
+        int yoe = y - era * 400;
+        int doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+        int doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+        return era * 146097 + doe - 719468;
+    }
+
+    static MathProg LoadMathProg() {
+        MathProg p;
+        Settings st("rubi_toan", false);
+        p.stars = st.GetInt("sao", 0);
+        for (int i = 0; i < 4; i++) p.best[i] = st.GetInt((std::string("b") + std::to_string(i)).c_str(), -1);
+        p.day = st.GetInt("day", 0);
+        p.rounds = st.GetInt("dl", 0);
+        p.right = st.GetInt("dd", 0);
+        p.asked = st.GetInt("dq", 0);
+        p.streak = st.GetInt("chuoi", 0);
+        p.last = st.GetInt("last", 0);
+        int today = MathDayNumber();
+        if (today != 0 && p.day != today) { p.rounds = p.right = p.asked = 0; }   // a new day: today's counters start at 0
+        if (today != 0 && p.last != 0 && today - p.last > 1) p.streak = 0;          // missed a day: the streak is broken
+        return p;
+    }
+
+    static void SaveMathProg(const MathProg& p) {
+        Settings st("rubi_toan", true);
+        st.SetInt("sao", p.stars);
+        for (int i = 0; i < 4; i++) st.SetInt((std::string("b") + std::to_string(i)).c_str(), p.best[i]);
+        st.SetInt("day", p.day);
+        st.SetInt("dl", p.rounds);
+        st.SetInt("dd", p.right);
+        st.SetInt("dq", p.asked);
+        st.SetInt("chuoi", p.streak);
+        st.SetInt("last", p.last);
+    }
 
     void ShowMathMenu() {
         screen_ = Screen::kMathMenu;
-        if (display_) display_->MenuShowList("HỌC TOÁN", {"Cộng trừ trong 10", "Cộng trừ trong 20", "Cộng trừ trong 100", "Toán lời văn", "Quay lại"}, "Mỗi lượt 10 câu");
+        MathProg p = LoadMathProg();
+        std::vector<std::string> rows;
+        for (int i = 0; i < 4; i++) {
+            std::string r = kMathLevelName[i];
+            if (p.best[i] >= 0) r += "  (" + std::to_string(p.best[i]) + "/10)";
+            rows.push_back(r);
+        }
+        rows.push_back("Quay lại");
+        std::string hint = std::to_string(p.stars) + " sao";
+        if (p.rounds > 0) hint += " · hôm nay " + std::to_string(p.rounds) + " lượt";
+        if (p.streak >= 2) hint += " · " + std::to_string(p.streak) + " ngày liền";
+        if (display_) display_->MenuShowList("HỌC TOÁN", rows, hint.c_str());
     }
 
     void StartMath(RubiMath::Mode m) {
+        StopMathDance();
         math_mode_ = m; math_idx_ = 0; math_score_ = 0;
+        math_wrong_.clear();
         NextMath();
     }
+
+    // A good round (9-10 correct): Rubi spins on the spot for a few seconds (DevKit "D", stopped with "X").
+    std::atomic<int> math_dance_gen_{0};
+    std::atomic<bool> math_dancing_{false};
+    void StartMathDance() {
+        if (!RubiBattery::Send("D\n", 2)) return;
+        math_dancing_ = true;
+        int gen = ++math_dance_gen_;
+        RunTask([this, gen]() {
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            if (math_dance_gen_ == gen && math_dancing_) { math_dancing_ = false; RubiBattery::Send("X\n", 2); }
+        }, "math_dance");
+    }
+    void StopMathDance() {
+        math_dance_gen_++;
+        if (math_dancing_) { math_dancing_ = false; RubiBattery::Send("X\n", 2); }
+    }
+
+    // End of a round: stars, saved progress, report to the DevKit (-> Telegram message + web page).
+    // Returns the stars earned in this round.
+    int FinishMathRound(MathProg& p) {
+        int stars = math_score_ + (math_score_ == kMathRound ? 3 : 0);   // 1 star per first-try answer, +3 for a perfect round
+        p = LoadMathProg();
+        int today = MathDayNumber();
+        p.stars += stars;
+        int lv = (int)math_mode_;
+        if (lv >= 0 && lv < 4 && math_score_ > p.best[lv]) p.best[lv] = math_score_;
+        if (today != 0) {
+            p.day = today;
+            p.rounds++;
+            p.right += math_score_;
+            p.asked += kMathRound;
+            if (p.last != today) { p.streak = (p.last == today - 1) ? p.streak + 1 : 1; p.last = today; }
+        }
+        SaveMathProg(p);
+        // K<level>\t<score>\t<stars this round>\t<all stars>\t<streak>\t<questions to practise>
+        std::string wrong;
+        for (size_t i = 0; i < math_wrong_.size() && i < 4; i++) wrong += (i ? "; " : "") + math_wrong_[i];
+        char head[64];
+        snprintf(head, sizeof(head), "K%d\t%d\t%d\t%d\t%d\t", lv, math_score_, stars, p.stars, p.streak);
+        std::string line = std::string(head) + wrong + "\n";
+        if (line.size() < 118) RubiBattery::Send(line.c_str(), line.size());
+        return stars;
+    }
+
+public:
+    // "Học toán" asked by voice (assistant tool or the spoken words): wait until Rubi has finished answering, then open
+    // the maths menu (level < 0) or start a level straight away.
+    int64_t math_voice_at_ = 0;
+    std::string VoiceMath(int level) {
+        int64_t now = esp_timer_get_time() / 1000;
+        if (now - math_voice_at_ < 15000) return "Đang mở bài toán trên màn hình rồi.";   // tool + spoken words: only once
+        math_voice_at_ = now;
+        RunTask([this, level]() {
+            auto& app = Application::GetInstance();
+            auto& as = app.GetAudioService();
+            bool seen_speaking = false, asked_stop = false;
+            for (int w = 0; w < 1000; w++) {   // up to 20 s
+                auto st = app.GetDeviceState();
+                if (st == kDeviceStateIdle) break;
+                if (st == kDeviceStateSpeaking) seen_speaking = true;
+                if (st == kDeviceStateListening && !asked_stop && w >= 25 && ((seen_speaking && as.IsPlaybackIdle()) || w >= 400)) {
+                    asked_stop = true;
+                    app.StopListening();
+                }
+                vTaskDelay(pdMS_TO_TICKS(20));
+            }
+            if (display_ == nullptr || app.GetDeviceState() != kDeviceStateIdle) return;
+            if (!IsOpen()) {
+                sync_cancel_ = true;
+                for (int i = 0; i < 150 && syncing_; i++) vTaskDelay(pdMS_TO_TICKS(20));
+                if (syncing_) return;
+                as.EnableWakeWordDetection(false);
+                LoadCalibration();
+            } else if (screen_ == Screen::kCalib1 || screen_ == Screen::kCalib2 || screen_ == Screen::kCalib3 || screen_ == Screen::kCalib4) {
+                return;
+            }
+            std::lock_guard<std::recursive_mutex> lk(mutex_);
+            StopPlayback();
+            scene_gen_++;
+            if (level >= 0 && level <= 3) StartMath((RubiMath::Mode)level); else ShowMathMenu();
+        }, "math_voice");
+        return level >= 0 && level <= 3 ? std::string("Đã mở bài ") + kMathLevelName[level] + " trên màn hình. Chỉ nói một câu ngắn động viên bé rồi im lặng để bé làm bài."
+                                        : "Đã mở mục Học toán trên màn hình để bé chọn bài. Chỉ nói một câu ngắn rồi im lặng.";
+    }
+private:
 
     // Asks the cloud assistant (xiaozhi.me) to read the question aloud. Needs Wi-Fi; silent if the cloud is unreachable.
     std::atomic<int> say_gen_{0};
@@ -1547,7 +1706,13 @@ private:
         if (math_idx_ >= kMathRound) {
             screen_ = Screen::kMathDone;
             const char* praise = math_score_ >= 9 ? "Giỏi quá, tuyệt vời!" : (math_score_ >= 7 ? "Giỏi lắm!" : (math_score_ >= 5 ? "Khá lắm, luyện thêm nhé!" : "Cố lên, mình chơi lại nhé!"));
-            std::string t = "Xong rồi!\nĐúng ngay " + std::to_string(math_score_) + "/" + std::to_string(kMathRound) + " câu\n" + praise + "\n\nChạm để chơi tiếp";
+            MathProg prog;
+            int got = FinishMathRound(prog);
+            std::string t = "Xong rồi!\nĐúng ngay " + std::to_string(math_score_) + "/" + std::to_string(kMathRound) + " câu\n" +
+                            "+" + std::to_string(got) + " sao (có " + std::to_string(prog.stars) + " sao)\n" + praise;
+            if (prog.streak >= 2) t += "\nHọc " + std::to_string(prog.streak) + " ngày liền!";
+            t += "\n\nChạm để chơi tiếp";
+            if (math_score_ >= 9) StartMathDance();
             if (display_) display_->MenuShowMessage(t.c_str(), -1, -1, true);
             StopSayMath();
             SayMathNames({"ph_xong", "ph_condung", "so_" + std::to_string(math_score_), "ph_cau",
@@ -1609,7 +1774,16 @@ private:
         bool right = v == math_q_.answer;
         bool reveal = false;
         if (right) { if (math_tries_ == 0) math_score_++; }
-        else { math_tries_++; reveal = math_tries_ >= 2; }
+        else {
+            if (math_tries_ == 0) {
+                std::string w;
+                if (!math_q_.story.empty()) w = "toán đố câu " + std::to_string(math_idx_ + 1);
+                else { for (char ch : math_q_.ask) if (ch != ' ') w += ch; }
+                math_wrong_.push_back(w);
+            }
+            math_tries_++;
+            reveal = math_tries_ >= 2;
+        }
         std::string msg = right ? "Đúng rồi!\nGiỏi quá!" : (reveal ? "Đáp án là " + std::to_string(math_q_.answer) + "\nMình làm câu tiếp nhé" : "Chưa đúng,\nthử lại nhé!");
         if (display_) display_->MenuShowMessage(msg.c_str(), -1, -1, true);
         if (right) SayMathNames({"ph_dung" + std::to_string(1 + (int)(esp_random() % 3))});

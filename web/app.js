@@ -138,7 +138,7 @@ function render(){
  if(dt)dt.style.display=dkNew?"":"none";
  renderSd(s,ok);
  var hp=$("hpv"),hb=$("hpb"),hw=$("hwv"),stt=$("state");
- if(hp){var mv2=ok?(+s.bat_mv||0):0,pp=mv2>2000?Math.max(0,Math.min(100,Math.round((mv2-6000)/24))):null;hp.textContent=pp==null?"—":pp+"%";if(hb)hb.style.width=(pp||0)+"%";if(hw)hw.textContent=ok&&s.rssi!=null?s.rssi+" dBm":"—";if(stt)stt.textContent=!s?"Chưa kết nối với Rubi":"Sẵn sàng chơi cùng bé"}}
+ if(hp){var mv2=ok?(+s.bat_mv||0):0,pp=mv2>2000?Math.max(0,Math.min(100,Math.round((mv2-6000)/24))):null;hp.textContent=pp==null?"—":pp+"%";if(hb)hb.style.width=(pp||0)+"%";if(hw)hw.textContent=ok&&s.rssi!=null?s.rssi+" dBm":"—";if(stt)stt.textContent=!s?"Chưa kết nối với Rubi":"Sẵn sàng chơi cùng bé";var ht=$("hoctoan"),tq=ok&&s.toan;if(ht){if(tq&&(tq.s>0||tq.l>0)){ht.hidden=false;ht.textContent="📘 Học toán: "+(tq.l>0?"hôm nay "+tq.l+" lượt, đúng "+tq.d+"/"+tq.c+" câu · ":"hôm nay chưa học · ")+tq.s+" sao"+(tq.k>=2?" · "+tq.k+" ngày liền":"")}else ht.hidden=true}}}
 function conn(){var c=$("conn"),n=$("demonote");
  if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
  if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Thẻ nhớ hiện số thật. Các mục còn lại (đèn, trò chơi, camera) vẫn là mẫu."}

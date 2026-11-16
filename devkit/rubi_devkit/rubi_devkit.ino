@@ -946,7 +946,7 @@ void webStatus() {
     }
     String j = String("{\"ver\":\"") + FW_VERSION + "\",\"pin\":" + (g_pin.length() ? "true" : "false") + ",\"auth\":true,\"ip\":\"" + WiFi.localIP().toString() +
                "\",\"ssid\":\"" + g_ssid + "\",\"rssi\":" + String(WiFi.RSSI()) + updJson() + phienBanJson() + sdJson() +
-               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") + ",\"rd\":" + (g_laiTuXaCamBienOk ? "50" : "30") + ",\"rko\":" + (g_rkoff ? "true" : "false") +
+               ",\"bat_mv\":" + String((int)g_bat_mv) + tgJson() + toanJson() + ",\"rk\":" + (g_rkey.length() ? "true" : "false") + ",\"rd\":" + (g_laiTuXaCamBienOk ? "50" : "30") + ",\"rko\":" + (g_rkoff ? "true" : "false") +
                ",\"led\":" + String(g_ledMask) + ",\"lc\":" + String(g_ledColor) +
                ((g_c3_at != 0 && millis() - g_c3_at < 120000) ? String(",\"c3v\":\"") + g_c3_v + "\"" : String("")) +
                ",\"l\":" + String(A_LA_BANH_TRAI ? g_cmd[0] : g_cmd[1]) +
@@ -1017,6 +1017,39 @@ void tgGuiTin(const String& msg) {   // dua vao hang doi; khong chan
     memcpy(buf, msg.c_str(), n);
     buf[n] = 0;
     xQueueSend(g_tgQ, buf, 0);
+}
+// ---------------- Hoc toan cung Rubi: ket qua tung luot tu bo man hinh ("K...") ----------------
+int g_toanNgay = -1, g_toanLuot = 0, g_toanDung = 0, g_toanCau = 0, g_toanSao = 0, g_toanChuoi = 0;
+int toanNgayHom() {   // so ngay dia phuong, -1 khi chua co gio
+    time_t t = time(nullptr);
+    if (t < 1700000000) return -1;
+    return (int)(((long)t + (long)g_tzMin * 60) / 86400);
+}
+String toanJson() {
+    int h = toanNgayHom();
+    if (h >= 0 && h != g_toanNgay) { g_toanLuot = g_toanDung = g_toanCau = 0; }
+    return String(",\"toan\":{\"l\":") + g_toanLuot + ",\"d\":" + g_toanDung + ",\"c\":" + g_toanCau + ",\"s\":" + g_toanSao + ",\"k\":" + g_toanChuoi + "}";
+}
+void toanKetQua(const String& line) {   // K<muc>\t<dung>\t<sao luot>\t<tong sao>\t<chuoi ngay>\t<cau sai>
+    String f[6];
+    int n = 0, a = 1;
+    for (int i = 1; i <= (int)line.length() && n < 6; i++) {
+        if (i == (int)line.length() || (line[i] == '\t' && n < 5)) { f[n++] = line.substring(a, i); a = i + 1; }
+    }
+    if (n < 5) return;
+    static const char* ten[4] = {"Cộng trừ trong 10", "Cộng trừ trong 20", "Cộng trừ trong 100", "Toán lời văn"};
+    int muc = f[0].toInt(), dung = f[1].toInt(), sao = f[2].toInt();
+    if (muc < 0 || muc > 3 || dung < 0 || dung > 10) return;
+    int h = toanNgayHom();
+    if (h >= 0 && h != g_toanNgay) { g_toanNgay = h; g_toanLuot = g_toanDung = g_toanCau = 0; }
+    g_toanLuot++; g_toanDung += dung; g_toanCau += 10;
+    g_toanSao = f[3].toInt(); g_toanChuoi = f[4].toInt();
+    String m = String("📘 Bé vừa học Toán (") + ten[muc] + "): đúng " + dung + "/10 câu, được " + sao + " sao (tổng " + g_toanSao + " sao).";
+    if (n >= 6 && f[5].length()) m += String(" Câu cần ôn: ") + f[5] + ".";
+    m += String(" Hôm nay: ") + g_toanLuot + " lượt, đúng " + g_toanDung + "/" + g_toanCau + " câu.";
+    if (g_toanChuoi >= 2) m += String(" Đã học ") + g_toanChuoi + " ngày liền 🔥";
+    tgGuiTin(m);
+    Serial.printf("Hoc toan: muc %d, dung %d/10, %d sao\n", muc, dung, sao);
 }
 static int tgHttp(const String& url, const String* body, String* out) {   // tra ma HTTP (<0 la loi mang)
     WiFiClientSecure cl;
@@ -1707,6 +1740,7 @@ void loop() {
                 int gl = 0, gr = 0;
                 if (sscanf(line2.c_str() + 1, "%d,%d", &gl, &gr) == 2) lenhLaiTuXa(gl, gr);
             }
+            else if (line2.length() > 6 && line2[0] == 'K' && line2[1] >= '0' && line2[1] <= '3' && line2[2] == '\t') toanKetQua(line2);   // ket qua mot luot hoc toan
             else if (line2 == "D") nhayBat();       // nhay mua (chi xoay tai cho)
             else if (line2 == "X") dungHet();       // dung (huy nhay)
             else if ((line2.length() > 1 && line2[0] == 'w') || line2 == "u") {
