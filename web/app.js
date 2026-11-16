@@ -84,6 +84,9 @@ $("songs").innerHTML=songs.map(function(s,i){return '<div class="item"><div clas
 $("songs").onclick=function(e){var b=e.target.closest("button");if(b)toast("Phát: "+b.dataset.s+" (mẫu)")};
 $("dkbtn").onclick=function(){var b=this,bar=$("dkbar"),i=bar.firstChild,p=0;b.disabled=true;bar.hidden=false;$("dk").textContent="Đang tải bản 1.0.2...";
  var iv=setInterval(function(){p+=8;i.style.width=Math.min(p,100)+"%";if(p>=100){clearInterval(iv);$("dk").textContent="1.0.2, đã mới nhất";bar.hidden=true;b.textContent="Mới nhất";b.className="btn ghost";document.querySelector(".alert").style.display="none";var dt=document.querySelector(".drawer .dot");if(dt)dt.style.display="none";toast("Cập nhật xong (mẫu)")}},300)};
+/* ---- Toán lớp 1: icon các bài (hiện cả trên Vercel; chỉ bấm được khi mở từ rubi.local) ---- */
+(function(){var c=$("c-toan");if(c)c.innerHTML='<h2>Toán lớp 1</h2><div class="toan-grid">'+[["m0","toan-10","Cộng trừ trong 10"],["m1","toan-20","Cộng trừ trong 20"],["m2","toan-100","Cộng trừ trong 100"],["m3","toan-loi-van","Toán lời văn"]].map(function(b){return '<a class="toan-o" data-c="'+b[0]+'" role="button" tabindex="0"><img alt="" src="img/'+b[1]+'.webp"><span>'+b[2]+'</span></a>'}).join("")+'</div><p class="hint" id="toan-st">⭐ Sao và kết quả hôm nay hiện ở đây sau khi bé học xong một lượt.</p>'+'<p class="hint">'+(LIVE?'Bấm vào bài, Rubi sẽ mở bài đó trên màn hình. Muốn dừng, chạm màn hình Rubi.':'Đây là bản xem trước. Mở trang từ http://rubi.local (điện thoại cùng Wi-Fi với Rubi) để bấm mở bài trên Rubi.')+'</p>';})();
+if(!LIVE)document.addEventListener("click",function(e){if(e.target.closest(".toan-o"))toast("Mở từ http://rubi.local để bấm mở bài trên Rubi")});
 /* ---- Chế độ thật (mở từ rubi.local): số thật từ DevKit (/api/status) + bản mới nhất trên GitHub ---- */
 if(LIVE){
 var RAW="https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/";
@@ -165,8 +168,7 @@ function lenh(c,msg){return api("/api/lenh?c="+c).then(function(j){toast(j&&j.ok
 function btns(arr){return '<div class="acts">'+arr.map(function(b){return '<button class="btn" data-c="'+b[0]+'">'+b[1]+'</button>'}).join("")+'</div>'}
 var HOLD='<p class="hint">Rubi sẽ mở mục này trên màn hình. Muốn dừng, bấm "Dừng" hoặc chạm màn hình Rubi.</p>';
 (function(){
- var c=$("c-toan");if(c)c.innerHTML='<h2>Toán lớp 1</h2><div class="toan-grid">'+[["m0","toan-10","Cộng trừ trong 10"],["m1","toan-20","Cộng trừ trong 20"],["m2","toan-100","Cộng trừ trong 100"],["m3","toan-loi-van","Toán lời văn"]].map(function(b){return '<a class="toan-o" data-c="'+b[0]+'" role="button" tabindex="0"><img alt="" src="img/'+b[1]+'.webp"><span>'+b[2]+'</span></a>'}).join("")+'</div><p class="hint" id="toan-st">⭐ Sao và kết quả hôm nay hiện ở đây sau khi bé học xong một lượt.</p>'+HOLD;
- c=$("c-anh");if(c)c.innerHTML='<h2>Tiếng Anh giao tiếp</h2>'+btns([["en","Mở các bài Tiếng Anh trên Rubi"]])+'<p class="hint">Rubi mở danh sách bài trên màn hình, bé chạm để chọn bài. Bài mới chép vào thẻ nhớ (thư mục rubi/anh) sẽ tự hiện trong danh sách.</p>';
+ var c=$("c-anh");if(c)c.innerHTML='<h2>Tiếng Anh giao tiếp</h2>'+btns([["en","Mở các bài Tiếng Anh trên Rubi"]])+'<p class="hint">Rubi mở danh sách bài trên màn hình, bé chạm để chọn bài. Bài mới chép vào thẻ nhớ (thư mục rubi/anh) sẽ tự hiện trong danh sách.</p>';
  c=$("c-hoc");if(c)c.innerHTML='<h2>Học song ngữ</h2>'+btns([["h0","Trái cây"],["h1","Động vật"],["h2","Đồ vật"],["h3","Hình khối"]])+HOLD;
  var cc=document.querySelector("#v-choi-cung");
  if(cc){var d=document.createElement("div");d.className="card";d.innerHTML='<h2>Đi ngủ, đồng hồ, hẹn giờ</h2>'+btns([["sleep","Đi ngủ (hát ru 30 phút)"],["clock","Đồng hồ"],["t2","Hẹn 2 phút"],["t5","Hẹn 5 phút"],["t10","Hẹn 10 phút"],["t20","Hẹn 20 phút"],["huy","■ Dừng và đóng menu"]])+HOLD;cc.appendChild(d)}
