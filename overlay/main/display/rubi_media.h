@@ -232,9 +232,10 @@ public:
             ShowControl();
             break;
         case Screen::kMathMenu: {
-            int r = RubiDisplay::RowAt(sx, sy, 5);
-            if (r >= 0 && r <= 3) StartMath((RubiMath::Mode)r);
-            else if (r == 4) ShowMain();
+            int t = RubiDisplay::TileAt(sx, sy, 6);
+            if (t >= 0 && t <= 3) StartMath((RubiMath::Mode)t);
+            else if (t == 4) ShowMain();
+            else if (t == 5) ShowMathProgress();
             break;
         }
         case Screen::kMathStory:
@@ -1423,20 +1424,26 @@ private:
         st.SetInt("last", p.last);
     }
 
+    // Level tiles with the child's own icons; the label under each one is the best score so far. The star tile shows progress.
     void ShowMathMenu() {
         screen_ = Screen::kMathMenu;
         MathProg p = LoadMathProg();
-        std::vector<std::string> rows;
-        for (int i = 0; i < 4; i++) {
-            std::string r = kMathLevelName[i];
-            if (p.best[i] >= 0) r += "  (" + std::to_string(p.best[i]) + "/10)";
-            rows.push_back(r);
-        }
-        rows.push_back("Quay lại");
-        std::string hint = std::to_string(p.stars) + " sao";
-        if (p.rounds > 0) hint += " · hôm nay " + std::to_string(p.rounds) + " lượt";
-        if (p.streak >= 2) hint += " · " + std::to_string(p.streak) + " ngày liền";
-        if (display_) display_->MenuShowList("HỌC TOÁN", rows, hint.c_str());
+        auto lbl = [&](int i) { return p.best[i] >= 0 ? "Đúng " + std::to_string(p.best[i]) + "/10" : std::string("Chơi thử"); };
+        if (display_) display_->MenuShowTiles({
+            {&rubi_icon_toan_10, lbl(0)}, {&rubi_icon_toan_20, lbl(1)}, {&rubi_icon_toan_100, lbl(2)},
+            {&rubi_icon_toan_loi_van, lbl(3)}, {&rubi_icon_dong, "Quay lại"}, {&rubi_icon_sao_toan, std::to_string(p.stars) + " sao"},
+        });
+    }
+
+    void ShowMathProgress() {
+        screen_ = Screen::kMathDone;
+        MathProg p = LoadMathProg();
+        std::string t = "Rubi đang giữ cho bé\n" + std::to_string(p.stars) + " sao\n\n";
+        t += p.rounds > 0 ? "Hôm nay: " + std::to_string(p.rounds) + " lượt, đúng " + std::to_string(p.right) + "/" + std::to_string(p.asked) + " câu\n"
+                          : std::string("Hôm nay chưa học\n");
+        if (p.streak >= 2) t += "Học " + std::to_string(p.streak) + " ngày liền!\n";
+        t += "\nChạm để quay lại";
+        if (display_) display_->MenuShowMessage(t.c_str(), -1, -1, true);
     }
 
     void StartMath(RubiMath::Mode m) {
