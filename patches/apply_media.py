@@ -42,7 +42,8 @@ patch(B, [
 patch('main/audio/audio_service.h', [
     ('    void ResetDecoder();\n', '    void ResetDecoder();\n    bool PushPcmToPlayback(std::vector<int16_t>&& pcm);  // Rubi: raw PCM at the codec output rate\n'
      '    int64_t rubi_last_out_ms_ = 0;   // Rubi jitter buffer: when the speaker last got a frame\n'
-     '    int64_t rubi_jb_t0_ = 0;         // Rubi jitter buffer: when the current wait started (0 = not waiting)\n'),
+     '    int64_t rubi_jb_t0_ = 0;         // Rubi jitter buffer: when the current wait started (0 = not waiting)\n'
+     '    int rubi_jb_target_ = 8;         // Rubi jitter buffer: packets to collect before playing (8 = 480 ms, grows on stalls)\n'),
 ])
 # Rubi: jitter buffer for the cloud voice (the Xiaozhi server is far away, packets arrive unevenly and the speech
 # stuttered). Only when the speaker has been silent for 150 ms (a new reply / new sentence, or a real drop-out)
@@ -54,9 +55,15 @@ patch('main/audio/audio_service.cc', [
      '        if (!audio_decode_queue_.empty() && audio_encode_queue_.empty() && audio_playback_queue_.empty() &&\n'
      '            !output_in_flight_) {\n'
      '            int64_t now_ms = esp_timer_get_time() / 1000;\n'
-     '            if (now_ms - rubi_last_out_ms_ > 150 && audio_decode_queue_.size() < 8) {\n'
-     '                if (rubi_jb_t0_ == 0) rubi_jb_t0_ = now_ms;\n'
-     '                if (now_ms - rubi_jb_t0_ < 600) {\n'
+     '            if (now_ms - rubi_last_out_ms_ > 150 && (int)audio_decode_queue_.size() < rubi_jb_target_) {\n'
+     '                if (rubi_jb_t0_ == 0) {\n'
+     '                    rubi_jb_t0_ = now_ms;\n'
+     '                    // stall in the middle of a reply (speaker played < 3 s ago): the network is uneven, so keep a bigger cushion\n'
+     '                    // (up to 24 packets = 1.4 s); a new reply starts again with the normal 8 packets\n'
+     '                    if (now_ms - rubi_last_out_ms_ < 3000) { if (rubi_jb_target_ < 24) rubi_jb_target_ += 4; }\n'
+     '                    else rubi_jb_target_ = 8;\n'
+     '                }\n'
+     '                if (now_ms - rubi_jb_t0_ < 600 + (rubi_jb_target_ - 8) * 100) {\n'
      '                    audio_queue_cv_.wait_for(lock, std::chrono::milliseconds(20));\n'
      '                    continue;\n'
      '                }\n'

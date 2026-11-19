@@ -937,10 +937,13 @@ private:
     // One line for finding faults: free internal memory (now / lowest ever), the remote link, and the sound packets of the last answer
     static std::string DiagHint() {
         char b[112];
-        snprintf(b, sizeof(b), "RAM %d/%dk Xa:%s Gói%d Bỏ%d",
+        wifi_ap_record_t ap;
+        int rssi = esp_wifi_sta_get_ap_info(&ap) == ESP_OK ? ap.rssi : 0;
+        // Mất = packets the network lost, Hụt = times the speech stalled (both for the last answer), W = Wi-Fi signal in dBm
+        snprintf(b, sizeof(b), "RAM %d/%dk Xa:%s Mất%d Hụt%d W%d",
                  (int)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
                  (int)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL) / 1024),
-                 RubiRemote::Get().StatusText(), g_rubi_pkts.load(), g_rubi_drop.load());
+                 RubiRemote::Get().StatusText(), g_rubi_lost.load(), g_rubi_hut.load(), rssi);
         return b;
     }
 
