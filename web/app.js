@@ -129,13 +129,13 @@ function render(){
   setCard("csen","Bánh xe",stat("Bánh trái",(s.l!=null?s.l+"%":"—"))+stat("Bánh phải",(s.r!=null?s.r+"%":"—"))+stat("Lỗi motor",s.fault?"Có lỗi":"Không")+note("Cảm biến khoảng cách chưa có số thật."));
   bindPin()}
  function pill(c,t){return '<span class="pill '+c+'"><b></b>'+t+'</span>'}
- var B=[{n:"Bo màn hình",run:s&&s.dsv?String(s.dsv):"",lat:LAT.ds},{n:"DevKit (bánh xe)",run:ver,lat:LAT.dk},{n:"Camera",run:s&&s.cv?String(s.cv):"",lat:LAT.cam},{n:"Bo đèn (C3 Zero)",run:s&&s.c3v?String(s.c3v):"",lat:LAT.c3}];
+ var B=[{n:"Bo màn hình",run:s&&s.dsv?String(s.dsv):"",lat:LAT.ds},{n:"DevKit (bánh xe)",run:ver,lat:LAT.dk},{n:"Camera",run:s&&s.cv?String(s.cv):CVR,lat:LAT.cam},{n:"Bo đèn (C3 Zero)",run:s&&s.c3v?String(s.c3v):"",lat:LAT.c3}];
  B.forEach(function(x){x.neu=!!(x.run&&x.lat&&x.run!==x.lat)});
  var moi=B.filter(function(x){return x.neu}).map(function(x){return x.n});
  var tb=$("vtb");
- if(tb)tb.innerHTML=B.map(function(x){return '<tr><td>'+x.n+'</td><td>'+esc(x.run||"—")+'</td><td>'+esc(x.lat||"—")+'</td><td>'+(!x.run?"Chưa đọc được (bo tắt?)":!x.lat?"—":x.neu?pill("warn","Có bản mới"):pill("ok","Mới nhất"))+'</td></tr>'}).join("");
+ if(tb)tb.innerHTML=B.map(function(x){return '<tr><td>'+x.n+'</td><td>'+esc(x.run||"—")+'</td><td>'+esc(x.lat||"—")+'</td><td>'+(!x.run?"Chưa báo về (bo tắt hoặc chưa nối Wi-Fi?)":!x.lat?"—":x.neu?pill("warn","Có bản mới"):pill("ok","Mới nhất"))+'</td></tr>'}).join("");
  var ups=$("ups");
- if(ups)ups.innerHTML=B.map(function(x){return '<div class="item"><div class="t">'+x.n+'<small>'+(!x.run?"Chưa đọc được bản đang chạy (bo đang tắt hoặc chưa nối)":x.neu?esc(x.run)+" → "+esc(x.lat)+" (bo tự cập nhật khi bật nguồn)":esc(x.run)+", đã mới nhất")+'</small></div>'+(x.neu?'<button class="btn" disabled>Tự cập nhật khi bật nguồn</button>':'<button class="btn ghost" disabled>'+(x.run?"Mới nhất":"—")+'</button>')+'</div>'}).join("");
+ if(ups)ups.innerHTML=B.map(function(x){return '<div class="item"><div class="t">'+x.n+'<small>'+(!x.run?"Chưa báo phiên bản về (bo đang tắt hoặc chưa nối Wi-Fi)":x.neu?esc(x.run)+" → "+esc(x.lat)+" (bo tự cập nhật khi bật nguồn)":esc(x.run)+", đã mới nhất")+'</small></div>'+(x.neu?'<button class="btn" disabled>Tự cập nhật khi bật nguồn</button>':'<button class="btn ghost" disabled>'+(x.run?"Mới nhất":"—")+'</button>')+'</div>'}).join("");
  var al=document.querySelector(".alert"),dt=document.querySelector(".drawer .dot"),dkNew=moi.length>0;
  if(al){al.style.display=dkNew?"":"none";if(dkNew){var b=al.querySelector("b");if(b)b.textContent=moi.join(", ")+" có bản mới.";var sp=al.querySelector("span");if(sp&&sp.lastChild&&sp.lastChild.nodeType===3)sp.lastChild.textContent=" Robot sẽ tự cập nhật khi bật nguồn lại."}}
  if(dt)dt.style.display=dkNew?"":"none";
@@ -145,7 +145,15 @@ function render(){
 function conn(){var c=$("conn"),n=$("demonote");
  if(c)c.innerHTML='<b></b>'+(ST?"Đã nối Rubi":"Chưa kết nối với Rubi");
  if(n)n.textContent="Đã nối Rubi thật: Điều khiển lái xe, Tình trạng và Cập nhật. Thẻ nhớ hiện số thật. Các mục còn lại (đèn, trò chơi, camera) vẫn là mẫu."}
-function refresh(){return api("/api/status").then(function(j){ST=j;ledSync()}).catch(function(){ST=null}).then(loadLat).then(function(){render();conn()})}
+/* Phiên bản camera: DevKit chỉ biết nếu camera tìm được rubi.local trong mạng nhà; nếu không, đọc từ máy chủ trung gian (camera tự báo ở đó) */
+var CVR="",RHOST="",CVAT=0;
+function relayCv(){if(!LIVE||(ST&&ST.cv)){CVR="";return Promise.resolve()}
+ var k="";try{k=localStorage.getItem("rubi_rkey")||""}catch(e){}
+ if(!/^[A-Za-z0-9]{10,40}$/.test(k)||Date.now()-CVAT<20000)return Promise.resolve();
+ CVAT=Date.now();
+ var h=RHOST?Promise.resolve(RHOST):fetch("https://raw.githubusercontent.com/quangtrung06021995-design/rubi-firmware/relay-cfg/relay.json?_="+Math.floor(Date.now()/60000),{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){if(!j||!/^[A-Za-z0-9.-]+$/.test(j.host||""))throw 0;RHOST=j.host;return RHOST});
+ return h.then(function(x){return fetch("https://"+x+"/info?k="+k,{cache:"no-store"})}).then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){CVR=j&&j.cv&&/^[A-Za-z0-9.-]{1,15}$/.test(j.cv)?j.cv:""}).catch(function(){})}
+function refresh(){return api("/api/status").then(function(j){ST=j;ledSync()}).catch(function(){ST=null}).then(loadLat).then(relayCv).then(function(){render();conn()})}
 function watching(){var h=(location.hash||"#trang-chu").slice(1);return h==="tinh-trang"||h==="cap-nhat"||h==="trang-chu"||h==="the-nho"}
 addEventListener("hashchange",function(){if(watching())refresh()});
 setInterval(function(){if(!document.hidden&&watching())refresh()},5000);

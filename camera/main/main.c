@@ -707,6 +707,7 @@ static void relay_task(void *arg) {
     int64_t host_at = 0;
     int64_t frame_at = 0;
     int64_t beat_at = 0;
+    bool ver_sent = false;  // "v:<version>" once per connection: the control page reads the camera version from the relay
     for (;;) {
         bool want = g_rkey[0] != 0 && !g_updating && g_cam_ok;
         if (!want) {
@@ -762,7 +763,14 @@ static void relay_task(void *arg) {
         }
         // Heartbeat: every 15 s say "h"; the relay answers. No word from the relay for 45 s = the link died silently
         // (router / mobile carrier dropped it): throw the client away, the loop above builds a new one.
+        if (!g_rconn) ver_sent = false;
         if (g_rconn && esp_websocket_client_is_connected(cl)) {
+            if (!ver_sent) {
+                char vm[24];
+                int vn = snprintf(vm, sizeof(vm), "v:%s", version());
+                if (vn > 2 && vn < (int)sizeof(vm) &&
+                    esp_websocket_client_send_text(cl, vm, vn, pdMS_TO_TICKS(2000)) >= 0) ver_sent = true;
+            }
             if (now - beat_at >= 15000000LL) {
                 beat_at = now;
                 esp_websocket_client_send_text(cl, "h", 1, pdMS_TO_TICKS(2000));

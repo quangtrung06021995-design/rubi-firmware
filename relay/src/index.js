@@ -12,10 +12,12 @@
 // Messages
 //   room -> camera  (text)  "V<n>"   n = how many viewers are watching. The camera sends video only while n > 0.
 //   room -> dev     (text)  "V<n>"   same, so Rubi can show "someone is watching" and stop the microphone at n = 0
-//   room -> viewer  (text)  {"t":"s","cam":true|false,"dev":true|false,"n":<viewers>,"rot":0|90|180|270|null}   state, sent on every change
+//   room -> viewer  (text)  {"t":"s","cam":true|false,"dev":true|false,"n":<viewers>,"rot":0|90|180|270|null,"cv":"<camera version>"|null}   state, sent on every change
 //                           "rot" = how the camera picture must be turned to look upright; the room remembers it so every page
 //                           (Vercel, rubi.local, other phones) shows the picture the same way
-//   camera -> room  (binary) one JPEG frame; (text) short status, passed on to the viewers as it is
+//   camera -> room  (binary) one JPEG frame; (text) "v:<version>" = the firmware version it runs: kept by the room, not
+//                           passed on, shown to the viewers as "cv" in the state; other short text is passed on as it is
+//   GET /info?k=KEY  {"cam":bool,"dev":bool,"cv":"1.0.8"|null}  for the control page (Update screen) -- CORS open
 //   dev -> room     (binary) 0xA1 + 16 kHz mono PCM16 little-endian: what Rubi's microphone hears, passed on to the viewers
 //   viewer -> room  (binary) 0xA0 + 16 kHz mono PCM16 little-endian: the parent's voice, passed on to the dev (never to the camera)
 //   viewer -> room  (text)  short command like "q:2"; letters c,q go to the camera, all others (t = talking, l = listening) to the dev
@@ -33,6 +35,8 @@ const MAX_AUDIO = 8192;   // bytes in one audio frame (a normal frame is ~2 KB)
 const CAM_CMDS = "cq";
 const CMD_RE = /^[A-Za-z]:[A-Za-z0-9._-]{0,24}$/;
 const OPEN = 1;
+const CV_RE = /^v:[A-Za-z0-9.-]{1,15}$/;
+const CORS = { "access-control-allow-origin": "*", "cache-control": "no-store" };
 
 async function roomName(key) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("rubi-relay:" + key));
@@ -44,6 +48,11 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === "/" || url.pathname === "/health") {
       return new Response("Rubi relay OK", { headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
+    if (url.pathname === "/info") {
+      const k = url.searchParams.get("k") || "";
+      if (!KEY_RE.test(k)) return new Response("bad request", { status: 400, headers: CORS });
+      return env.ROOM.get(env.ROOM.idFromName(await roomName(k))).fetch(req);
     }
     if (url.pathname !== "/ws") return new Response("not found", { status: 404 });
     if (req.headers.get("Upgrade") !== "websocket") return new Response("expected a websocket", { status: 426 });
@@ -57,17 +66,20 @@ export default {
 
 export class Room extends DurableObject {
   #rot = null;
+  #cv = null;
 
   constructor(ctx, env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
       const r = await ctx.storage.get("rot");
       this.#rot = r === 0 || r === 90 || r === 180 || r === 270 ? r : null;
+      const v = await ctx.storage.get("cv");
+      this.#cv = typeof v === "string" && CV_RE.test("v:" + v) ? v : null;
     });
   }
 
   #state() {
-    return JSON.stringify({ t: "s", cam: this.#open("cam").length > 0, dev: this.#open("dev").length > 0, n: this.#open("view").length, rot: this.#rot });
+    return JSON.stringify({ t: "s", cam: this.#open("cam").length > 0, dev: this.#open("dev").length > 0, n: this.#open("view").length, rot: this.#rot, cv: this.#open("cam").length > 0 ? this.#cv : null });
   }
 
   #open(tag) {
@@ -88,6 +100,10 @@ export class Room extends DurableObject {
   }
 
   async fetch(req) {
+    if (new URL(req.url).pathname === "/info") {
+      const st = JSON.parse(this.#state());
+      return new Response(JSON.stringify({ cam: st.cam, dev: st.dev, cv: st.cv }), { headers: { ...CORS, "content-type": "application/json" } });
+    }
     const role = new URL(req.url).searchParams.get("role");
     if (role === "view" && this.#open("view").length >= MAX_VIEWERS) {
       return new Response("busy", { status: 429 });
@@ -116,6 +132,15 @@ export class Room extends DurableObject {
       return;
     }
     if (tags.includes("cam")) {
+      if (typeof msg === "string" && CV_RE.test(msg)) {
+        const v = msg.slice(2);
+        if (v !== this.#cv) {
+          this.#cv = v;
+          this.ctx.storage.put("cv", v);
+        }
+        this.#notify();
+        return;
+      }
       for (const v of this.#open("view")) {
         try { v.send(msg); } catch (e) { /* closing */ }
       }
