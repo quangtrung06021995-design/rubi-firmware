@@ -1,0 +1,123 @@
+devkit run 35 sha 23fc64b243963130fe6ba27f8d141193381f6f43
+Config file written to: /home/runner/.arduino15/arduino-cli.yaml
+Downloading index: library_index.tar.bz2 0 B / 4.53 MiB    0.00%Downloading index: library_index.tar.bz2 downloaded
+Downloading index: package_index.tar.bz2 0 B / 112.61 KiB    0.00%Downloading index: package_index.tar.bz2 downloaded
+Downloading index: package_esp32_index.json 0 B / 720.12 KiB    0.00%Downloading index: package_esp32_index.json downloaded
+Downloading missing tool builtin:mdns-discovery@1.1.0...
+builtin:mdns-discovery@1.1.0 0 B / 3.07 MiB    0.00%builtin:mdns-discovery@1.1.0 downloaded
+Installing builtin:mdns-discovery@1.1.0...
+Skipping tool configuration....
+builtin:mdns-discovery@1.1.0 installed
+Downloading missing tool builtin:serial-discovery@1.5.2...
+builtin:serial-discovery@1.5.2 0 B / 2.06 MiB    0.00%builtin:serial-discovery@1.5.2 downloaded
+Installing builtin:serial-discovery@1.5.2...
+Skipping tool configuration....
+builtin:serial-discovery@1.5.2 installed
+Downloading missing tool builtin:serial-monitor@0.15.0...
+builtin:serial-monitor@0.15.0 0 B / 2.33 MiB    0.00%builtin:serial-monitor@0.15.0 downloaded
+Installing builtin:serial-monitor@0.15.0...
+Skipping tool configuration....
+builtin:serial-monitor@0.15.0 installed
+Downloading missing tool builtin:ctags@5.8-arduino12...
+builtin:ctags@5.8-arduino12 0 B / 555.43 KiB    0.00%builtin:ctags@5.8-arduino12 downloaded
+Installing builtin:ctags@5.8-arduino12...
+Skipping tool configuration....
+builtin:ctags@5.8-arduino12 installed
+Downloading missing tool builtin:dfu-discovery@0.1.2...
+builtin:dfu-discovery@0.1.2 0 B / 1.65 MiB    0.00%builtin:dfu-discovery@0.1.2 downloaded
+Installing builtin:dfu-discovery@0.1.2...
+Skipping tool configuration....
+builtin:dfu-discovery@0.1.2 installed
+Downloading index: package_index.tar.bz2 0 B / 112.61 KiB    0.00%Downloading index: package_index.tar.bz2 downloaded
+Downloading index: package_esp32_index.json 0 B / 720.12 KiB    0.00%Downloading index: package_esp32_index.json downloaded
+Downloading packages...
+esp32:esp-x32@2512 0 B / 318.36 MiB    0.00%esp32:esp-x32@2512 0 B / 318.36 MiB    0.00%esp32:esp-x32@2512 62.93 MiB / 318.36 MiB   19.77% 00m01sesp32:esp-x32@2512 140.00 MiB / 318.36 MiB   43.98%esp32:esp-x32@2512 223.37 MiB / 318.36 MiB   70.16%esp32:esp-x32@2512 298.53 MiB / 318.36 MiB   93.77%esp32:esp-x32@2512 downloaded
+esp32:xtensa-esp-elf-gdb@17.1_20260402 0 B / 40.68 MiB    0.00%esp32:xtensa-esp-elf-gdb@17.1_20260402 downloaded
+esp32:esp-rv32@2512 0 B / 784.13 MiB    0.00%esp32:esp-rv32@2512 0 B / 784.13 MiB    0.00%esp32:esp-rv32@2512 84.17 MiB / 784.13 MiB   10.73% 00m02sesp32:esp-rv32@2512 164.56 MiB / 784.13 MiB   20.99% 00m01sesp32:esp-rv32@2512 233.17 MiB / 784.13 MiB   29.74% 00m01sesp32:esp-rv32@2512 309.26 MiB / 784.13 MiB   39.44% 00m01sesp32:esp-rv32@2512 309.26 MiB / 784.13 MiB   39.44% 00m01sesp32:esp-rv32@2512 374.19 MiB / 784.13 MiB   47.72% 00m01sesp32:esp-rv32@2512 448.44 MiB / 784.13 MiB   57.19% 00m01sesp32:esp-rv32@2512 522.89 MiB / 784.13 MiB   66.68%esp32:esp-rv32@2512 604.10 MiB / 784.13 MiB   77.04%esp32:esp-rv32@2512 604.10 MiB / 784.13 MiB   77.04%esp32:esp-rv32@2512 680.29 MiB / 784.13 MiB   86.76%esp32:esp-rv32@2512 downloaded
+esp32:riscv32-esp-elf-gdb@17.1_20260402 0 B / 41.05 MiB    0.00%esp32:riscv32-esp-elf-gdb@17.1_20260402 downloaded
+esp32:openocd-esp32@v0.12.0-esp32-20260831 0 B / 2.55 MiB    0.00%esp32:openocd-esp32@v0.12.0-esp32-20260831 downloaded
+esp32:esptool_py@5.3.1 0 B / 79.71 MiB    0.00%esp32:esptool_py@5.3.1 0 B / 79.71 MiB    0.00%esp32:esptool_py@5.3.1 downloaded
+esp32:mkspiffs@0.2.3 0 B / 49.46 KiB    0.00%esp32:mkspiffs@0.2.3 downloaded
+esp32:mklittlefs@4.0.2-db0513a 0 B / 52.73 KiB    0.00%esp32:mklittlefs@4.0.2-db0513a downloaded
+arduino:dfu-util@0.11.0-arduino5 0 B / 2.18 MiB    0.00%arduino:dfu-util@0.11.0-arduino5 downloaded
+esp32:esp32s31-libs@4.0.0 0 B / 89.25 MiB    0.00%esp32:esp32s31-libs@4.0.0 0 B / 89.25 MiB    0.00%esp32:esp32s31-libs@4.0.0 downloaded
+esp32:esp32-libs@4.0.0 0 B / 44.94 MiB    0.00%esp32:esp32-libs@4.0.0 downloaded
+esp32:esp32c3-libs@4.0.0 0 B / 67.86 MiB    0.00%esp32:esp32c3-libs@4.0.0 0 B / 67.86 MiB    0.00%esp32:esp32c3-libs@4.0.0 downloaded
+esp32:esp32c5-libs@4.0.0 0 B / 92.09 MiB    0.00%esp32:esp32c5-libs@4.0.0 0 B / 92.09 MiB    0.00%esp32:esp32c5-libs@4.0.0 downloaded
+esp32:esp32c6-libs@4.0.0 0 B / 74.89 MiB    0.00%esp32:esp32c6-libs@4.0.0 0 B / 74.89 MiB    0.00%esp32:esp32c6-libs@4.0.0 downloaded
+esp32:esp32h2-libs@4.0.0 0 B / 71.52 MiB    0.00%esp32:esp32h2-libs@4.0.0 0 B / 71.52 MiB    0.00%esp32:esp32h2-libs@4.0.0 downloaded
+esp32:esp32p4-libs@4.0.0 0 B / 104.44 MiB    0.00%esp32:esp32p4-libs@4.0.0 0 B / 104.44 MiB    0.00%esp32:esp32p4-libs@4.0.0 downloaded
+esp32:esp32p4_es-libs@4.0.0 0 B / 105.45 MiB    0.00%esp32:esp32p4_es-libs@4.0.0 0 B / 105.45 MiB    0.00%esp32:esp32p4_es-libs@4.0.0 downloaded
+esp32:esp32s2-libs@4.0.0 0 B / 42.76 MiB    0.00%esp32:esp32s2-libs@4.0.0 downloaded
+esp32:esp32s3-libs@4.0.0 0 B / 78.76 MiB    0.00%esp32:esp32s3-libs@4.0.0 0 B / 78.76 MiB    0.00%esp32:esp32s3-libs@4.0.0 downloaded
+esp32:esp32@4.0.0 0 B / 59.87 MiB    0.00%esp32:esp32@4.0.0 downloaded
+Installing esp32:esp-x32@2512...
+Skipping tool configuration....
+esp32:esp-x32@2512 installed
+Installing esp32:xtensa-esp-elf-gdb@17.1_20260402...
+Skipping tool configuration....
+esp32:xtensa-esp-elf-gdb@17.1_20260402 installed
+Installing esp32:esp-rv32@2512...
+Skipping tool configuration....
+esp32:esp-rv32@2512 installed
+Installing esp32:riscv32-esp-elf-gdb@17.1_20260402...
+Skipping tool configuration....
+esp32:riscv32-esp-elf-gdb@17.1_20260402 installed
+Installing esp32:openocd-esp32@v0.12.0-esp32-20260831...
+Skipping tool configuration....
+esp32:openocd-esp32@v0.12.0-esp32-20260831 installed
+Installing esp32:esptool_py@5.3.1...
+Skipping tool configuration....
+esp32:esptool_py@5.3.1 installed
+Installing esp32:mkspiffs@0.2.3...
+Skipping tool configuration....
+esp32:mkspiffs@0.2.3 installed
+Installing esp32:mklittlefs@4.0.2-db0513a...
+Skipping tool configuration....
+esp32:mklittlefs@4.0.2-db0513a installed
+Installing arduino:dfu-util@0.11.0-arduino5...
+Skipping tool configuration....
+arduino:dfu-util@0.11.0-arduino5 installed
+Installing esp32:esp32s31-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32s31-libs@4.0.0 installed
+Installing esp32:esp32-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32-libs@4.0.0 installed
+Installing esp32:esp32c3-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32c3-libs@4.0.0 installed
+Installing esp32:esp32c5-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32c5-libs@4.0.0 installed
+Installing esp32:esp32c6-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32c6-libs@4.0.0 installed
+Installing esp32:esp32h2-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32h2-libs@4.0.0 installed
+Installing esp32:esp32p4-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32p4-libs@4.0.0 installed
+Installing esp32:esp32p4_es-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32p4_es-libs@4.0.0 installed
+Installing esp32:esp32s2-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32s2-libs@4.0.0 installed
+Installing esp32:esp32s3-libs@4.0.0...
+Skipping tool configuration....
+esp32:esp32s3-libs@4.0.0 installed
+Installing platform esp32:esp32@4.0.0...
+Skipping platform configuration....
+Platform esp32:esp32@4.0.0 installed
+Downloading NimBLE-Arduino@1.4.3...
+NimBLE-Arduino@1.4.3 0 B / 1.28 MiB    0.00%NimBLE-Arduino@1.4.3 downloaded
+Installing NimBLE-Arduino@1.4.3...
+Installed NimBLE-Arduino@1.4.3
+Downloading VL53L0X@1.3.1...
+VL53L0X@1.3.1 0 B / 18.64 KiB    0.00%VL53L0X@1.3.1 downloaded
+Installing VL53L0X@1.3.1...
+Installed VL53L0X@1.3.1
+Sketch uses 1539166 bytes (78%) of program storage space. Maximum is 1966080 bytes.
+Global variables use 70492 bytes (21%) of dynamic memory, leaving 257188 bytes for local variables. Maximum is 327680 bytes.
