@@ -3,12 +3,19 @@
 //
 // KHI THU LAN DAU: NHAC BANH XE KHOI MAT BAN (hoac lat nguoc robot) de banh quay tu do.
 //
-// Chan DevKit (theo so do day):
-//   Motor A: PWMA=D25  AIN1=D26  AIN2=D27     encoder E1A=D34  E1B=D35
-//   Motor B: PWMB=D33  BIN1=D13  BIN2=D14     encoder E2A=VN(GPIO39)  E2B=D32
-//   STBY=D23 (muc cao = driver chay)
-//   Do pin: module chia ap 5:1, S -> GPIO36 (VP)   (dat CO_MODULE_DO_PIN = true khi da noi module)
-//   UART2 sang bo man hinh: TX2=GPIO17, RX2=GPIO16 (chi gui "B<mV>" moi giay, nhu pin_gui_phan_tram.ino)
+// Chan DevKit (DUNG THEO SO DO DIEN CHINH THUC 23/11/2026, trang 4 va 9):
+//   Motor A (banh phai): PWMA=D25  AIN1=D26  AIN2=D27
+//   Motor B (banh trai): PWMB=D14  BIN1=D32  BIN2=D33
+//   STBY=D13 (muc cao = driver chay)
+//   Encoder: CHUA NOI (CO_ENCODER = false): khong dem xung, khong chong ket bang encoder.
+//   Do pin: module chia ap 5:1, S -> GPIO36 (VP), "B<mV>" gui bo man hinh moi giay.
+//   UART2 sang bo man hinh: RX2=D16 (<- TX IO43, day vang), TX2=D17 (-> RX IO44, day xanh)
+//   UART1 sang C3 Zero: RX1=D18 (<- GPIO21), TX1=D19 (-> GPIO20)   (den LED + xin Wi-Fi cap nhat)
+//   ToF truoc TOF200C-VL53L0X: SDA=D21, SCL=D22 (VIN va GND; INT, SHUT de trong)
+//   3 mat IR truoc VS1838B: OUT trai=D4, OUT phai=D5, OUT giua=D15 (them 10 kOhm len 3V3; bat CO_MAT_GIUA khi da noi)
+//   Bo cam bien sieu am cu: DA BO (chuyen sang C3 Zero).
+//   Di theo: dong ho cua be phat ma hong ngoai 38 kHz (ma 0x3C); mat IR nao nhan duoc ma thi robot re ve phia do,
+//   ToF truoc do khoang cach: <10 cm dung, 10-30 cm cham, xa hon chay binh thuong.
 //
 // Lenh go trong Serial Monitor (gui bang Enter):
 //   t        thu tu dong: tung motor chay tien/lui 2 giay, in ket qua encoder va chan doan
@@ -43,14 +50,20 @@
 #include <esp_random.h>
 #include <NimBLEDevice.h>   // Bluetooth cho dong ho cua be (thu vien NimBLE-Arduino 1.4.3)
 #include <time.h>
+#include <Wire.h>
+#include <VL53L0X.h>   // thu vien Pololu "VL53L0X" (Arduino Library Manager)
 
 // ---------------- Chan ----------------
 const int PIN_PWMA = 25, PIN_AIN1 = 26, PIN_AIN2 = 27;
-const int PIN_PWMB = 33, PIN_BIN1 = 13, PIN_BIN2 = 14;
-const int PIN_STBY = 23;
-const int PIN_E1A = 34, PIN_E1B = 35;
-const int PIN_E2A = 39, PIN_E2B = 32;
+const int PIN_PWMB = 14, PIN_BIN1 = 32, PIN_BIN2 = 33;
+const int PIN_STBY = 13;
+const int PIN_E1A = 34, PIN_E1B = 35;     // encoder chua noi (CO_ENCODER = false)
+const int PIN_E2A = 39, PIN_E2B = 36;     // (khong dung; D32/D36 da duoc dung cho viec khac)
 const int PIN_VBAT = 36;
+const int PIN_I2C_SDA = 21, PIN_I2C_SCL = 22;   // ToF truoc
+const int PIN_IR_TRAI = 4, PIN_IR_PHAI = 5, PIN_IR_GIUA = 15;
+const bool CO_ENCODER = false;            // dat true khi da noi encoder (luc do phai doi lai chan cho dung)
+const bool CO_MAT_GIUA = false;           // dat true khi da noi mat IR giua (D15) va dien tro 10 kOhm
 
 // ---------------- Cau hinh (sua o day neu can) ----------------
 // Dao chieu neu "tien" ma banh quay lui:
@@ -79,7 +92,7 @@ const int STALL_MIN_COUNTS = 6;
 
 // Do pin: chi bat (true) khi da noi module do ap (S -> GPIO36, - -> GND). Chua noi thi de false,
 // neu khong chan GPIO36 de ho se doc ra so ngau nhien va chuong trinh tuong pin yeu.
-const bool CO_MODULE_DO_PIN = false;
+const bool CO_MODULE_DO_PIN = true;      // da noi module do pin: S -> D36
 const float TI_LE_CHIA = 5.0f;           // module 30k/7.5k
 const float HE_SO_HIEU_CHINH = 1.000f;   // do pin bang dong ho van nang roi sua so nay
 const int PIN_THAP_MV = 6200;            // duoi muc nay (2S, 3.1 V/cell) -> khong cho motor chay
@@ -175,18 +188,131 @@ void dungHet() {
     g_cmd_deadline = 0;
 }
 
+// ---------------- ToF truoc (VL53L0X) ----------------
+// Khoang cach vat phia truoc, mm. 8000 tro len = khong thay gi trong tam (xa hon ~1,2 m).
+const int TOF_DUNG_MM = 100;          // < 10 cm: khong cho tien
+const int TOF_CHAM_MM = 300;          // 10-30 cm: chi cho chay cham
+const int TOF_CHAM_PCT = 35;          // % toi da trong vung cham
+const int TOF_KHONG_HOP_LE = 8000;    // >= so nay (hoac qua han) = khong co vat
+static inline uint32_t dauGio() { uint32_t m = millis(); return m ? m : 1; }   // millis() khac 0 (0 = chua co), khong lech len truoc millis()
+VL53L0X g_tof;
+bool g_tof_ok = false;                // da khoi tao duoc cam bien
+int g_tof_mm = 9999;                  // so do moi nhat (9999 = chua co / khong thay)
+uint32_t g_tof_at = 0;                // luc co so do hop le gan nhat
+uint8_t g_tof_gan_dem = 0;            // so lan lien tiep thay vat < TOF_DUNG_MM (loc nhieu)
+uint32_t g_tof_thu_lai = 0;
+
+void tofKhoiTao() {
+    Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+    Wire.setClock(400000);
+    g_tof.setTimeout(500);
+    if (g_tof.init()) {
+        g_tof.setMeasurementTimingBudget(33000);
+        g_tof.startContinuous();
+        g_tof_ok = true;
+        Serial.println("ToF truoc: OK");
+    } else {
+        g_tof_ok = false;
+        Serial.println("! ToF truoc khong thay (kiem tra day D21 SDA, D22 SCL, VIN, GND). Robot van chay nhung khong co chan vat can.");
+    }
+}
+
+void tofTick() {   // goi moi vong loop, khong chan
+    uint32_t now = millis();
+    if (!g_tof_ok) {   // thu lai moi 15 giay, chi luc motor dung (init co the mat toi 0,5 giay)
+        if (now - g_tof_thu_lai >= 15000 && g_cmd[0] == 0 && g_cmd[1] == 0) { g_tof_thu_lai = now; tofKhoiTao(); }
+        return;
+    }
+    if ((g_tof.readReg(VL53L0X::RESULT_INTERRUPT_STATUS) & 0x07) == 0) return;   // chua co so do moi
+    uint16_t mm = g_tof.readRangeContinuousMillimeters();
+    if (g_tof.timeoutOccurred() || mm >= TOF_KHONG_HOP_LE) { g_tof_mm = 9999; }
+    else { g_tof_mm = mm; }
+    g_tof_at = dauGio();
+    if (g_tof_mm < TOF_DUNG_MM) { if (g_tof_gan_dem < 255) g_tof_gan_dem++; } else g_tof_gan_dem = 0;
+}
+
+bool tofConSong() { return g_tof_ok && g_tof_at != 0 && (millis() - g_tof_at) < 600; }
+bool tofGan()  { return tofConSong() && g_tof_gan_dem >= 2; }                       // < 10 cm (2 lan lien tiep)
+bool tofCham() { return tofConSong() && g_tof_mm >= TOF_DUNG_MM && g_tof_mm < TOF_CHAM_MM; }
+
+// ---------------- 3 mat IR truoc (VS1838B) nhan ma cua dong ho ----------------
+// Khung dong ho: mark 3000us, space 1500us, 8 bit ID (0x3C), 8 bit ID dao, mark 600us.
+// Bit: mark 600us + space 600us (0) hoac 1200us (1). VS1838B: OUT xuong THAP khi co song mang.
+const uint8_t IR_ID_DONG_HO = 0x3C;
+const uint32_t IR_GIU_MS = 400;       // thay ma trong 0,4 giay gan day = be dang o phia do
+struct IrMat {
+    uint8_t chan;
+    volatile uint8_t st;              // 0 nghi, 1 cho space dau, 2 dang doc bit, 3 cho space bit
+    volatile uint8_t nbit;
+    volatile uint16_t bits;
+    volatile uint32_t t_canh;         // micros canh truoc
+    volatile uint32_t thay_luc;       // millis luc nhan duoc khung hop le (0 = chua)
+};
+IrMat g_ir[3] = {{(uint8_t)PIN_IR_TRAI, 0, 0, 0, 0, 0}, {(uint8_t)PIN_IR_PHAI, 0, 0, 0, 0, 0}, {(uint8_t)PIN_IR_GIUA, 0, 0, 0, 0, 0}};
+
+static inline void IRAM_ATTR irCanh(IrMat& m) {
+    uint32_t t = micros();
+    uint32_t dt = t - m.t_canh;
+    m.t_canh = t;
+    bool thap = gpio_get_level((gpio_num_t)m.chan) == 0;
+    if (thap) {                                   // canh xuong: bat dau mark, dt = do dai space truoc do
+        if (m.st == 1) { m.st = (dt > 1000 && dt < 2100) ? 2 : 0; m.nbit = 0; m.bits = 0; }
+        else if (m.st == 3) {
+            if (dt > 350 && dt < 1700) { m.bits = (uint16_t)((m.bits << 1) | (dt > 900 ? 1 : 0)); m.nbit++; m.st = 2; }
+            else m.st = 0;
+        }
+    } else {                                      // canh len: het mark, dt = do dai mark
+        if (m.st == 0) { if (dt > 2400 && dt < 3700) m.st = 1; }
+        else if (m.st == 2) {
+            if (dt > 350 && dt < 950) {
+                if (m.nbit == 16) {
+                    uint8_t a = (uint8_t)(m.bits >> 8), b = (uint8_t)(m.bits & 0xFF);
+                    if (a == IR_ID_DONG_HO && (uint8_t)(a ^ b) == 0xFF) m.thay_luc = dauGio();
+                    m.st = 0;
+                } else m.st = 3;
+            } else m.st = 0;
+        }
+    }
+}
+void IRAM_ATTR irIsr0() { irCanh(g_ir[0]); }
+void IRAM_ATTR irIsr1() { irCanh(g_ir[1]); }
+void IRAM_ATTR irIsr2() { irCanh(g_ir[2]); }
+
+void irNap() {
+    pinMode(PIN_IR_TRAI, INPUT);
+    pinMode(PIN_IR_PHAI, INPUT);
+    attachInterrupt(digitalPinToInterrupt(PIN_IR_TRAI), irIsr0, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_IR_PHAI), irIsr1, CHANGE);
+    if (CO_MAT_GIUA) { pinMode(PIN_IR_GIUA, INPUT); attachInterrupt(digitalPinToInterrupt(PIN_IR_GIUA), irIsr2, CHANGE); }
+}
+bool irThay(int i) {
+    uint32_t t = g_ir[i].thay_luc;
+    return t != 0 && (millis() - t) < IR_GIU_MS;
+}
+
+// Chan tien khi co vat sat phia truoc, cham lai khi vat gan (ap dung cho MOI kieu lai: tay, web, man hinh, di theo, nhay)
+void tofGioiHanMuc(int* t) {
+    if (!tofConSong()) return;
+    bool y = (t[0] + t[1]) > 0;      // dang muon tien
+    if (!y) return;
+    if (tofGan()) { for (int i = 0; i < 2; i++) if (t[i] > 0) t[i] = 0; }
+    else if (tofCham()) { for (int i = 0; i < 2; i++) if (t[i] > TOF_CHAM_PCT) t[i] = TOF_CHAM_PCT; }
+}
+
 // Goi moi 10 ms
 void capNhatMotor() {
     uint32_t now = millis();
+    int tg[2] = {g_target[0], g_target[1]};
+    tofGioiHanMuc(tg);
     for (int ch = 0; ch < 2; ch++) {
-        int t = g_fault[ch] ? 0 : g_target[ch];
+        int t = g_fault[ch] ? 0 : tg[ch];
         int buoc = g_pin_yeu ? SLEW_PIN_YEU : SLEW_STEP;
         if (g_cmd[ch] < t) g_cmd[ch] = min(g_cmd[ch] + buoc, t);
         else if (g_cmd[ch] > t) g_cmd[ch] = max(g_cmd[ch] - buoc, t);
         xuatMotor(ch, g_cmd[ch]);
 
         // chong ket
-        if (abs(g_cmd[ch]) >= STALL_MIN_PCT) {
+        if (CO_ENCODER && abs(g_cmd[ch]) >= STALL_MIN_PCT) {
             int32_t c = doDem(ch);
             if (g_stall_since[ch] == 0) {
                 g_stall_since[ch] = now;
@@ -635,6 +761,41 @@ void nhayTick() {   // goi moi 10 ms
     }
     nhayDatBuoc(g_nhay_buoc);
 }
+
+// ---------------- Di theo be (mat IR + ToF truoc) ----------------
+// Dong ho cua be phat ma IR khi bam "Di theo" tren dong ho. Mat nao nhan duoc ma thi be o phia do.
+const int DI_THEO_PCT = 40;           // toc do co ban (motor can >= ~22% moi quay)
+const int DI_THEO_DUNG_MM = 300;      // cach be khoang 30 cm thi dung lai
+const int DI_THEO_GAN_MM = 500;       // 30-50 cm: di cham hon
+bool g_theo_dang = false;             // chinh chuong trinh di theo dang giu motor
+bool g_theo_bao = false;
+
+void followTick() {   // goi moi 10 ms
+    bool tr = irThay(0), ph = irThay(1), gi = CO_MAT_GIUA && irThay(2);
+    bool thay = tr || ph || gi;
+    bool nhuong = (g_cmd_deadline != 0) || g_nhay || g_upd_ds || g_pin_thap;   // co lenh khac dang lai
+    if (nhuong) { g_theo_dang = false; return; }
+    if (!thay) {
+        if (g_theo_dang) { g_target[0] = g_target[1] = 0; g_theo_dang = false; }
+        return;
+    }
+    if (!tofConSong()) {   // khong co ToF thi khong di theo (de khong dam vao be)
+        if (!g_theo_bao) { g_theo_bao = true; Serial.println("! Di theo: ToF truoc khong chay, robot dung yen"); }
+        if (g_theo_dang) { g_target[0] = g_target[1] = 0; g_theo_dang = false; }
+        return;
+    }
+    g_theo_bao = false;
+    int base = DI_THEO_PCT;
+    int d = g_tof_mm;                 // 9999 = khong thay gi trong tam ToF
+    if (d <= DI_THEO_DUNG_MM) { g_target[0] = g_target[1] = 0; g_theo_dang = true; return; }
+    if (d <= DI_THEO_GAN_MM) base = (DI_THEO_PCT * 3) / 4;
+    int l = base, r = base;
+    if (tr && !ph && !gi) { l = base / 3; }          // be o ben trai: banh trai cham lai
+    else if (ph && !tr && !gi) { r = base / 3; }     // be o ben phai: banh phai cham lai
+    g_theo_dang = true;
+    datToc(0, A_LA_BANH_TRAI ? l : r);
+    datToc(1, A_LA_BANH_TRAI ? r : l);
+}
 bool g_web_started = false;
 bool g_mdns_started = false;
 
@@ -818,6 +979,7 @@ static int remoteMap(int v, int cap) {
 }
 void lenhLaiTuXa(int l, int r) {
     if (g_upd_ds || (l == 0 && r == 0)) { dungHet(); return; }
+    g_laiTuXaCamBienOk = tofConSong();
     int cap = g_laiTuXaCamBienOk ? REMOTE_CAP_CO_CAM_BIEN : REMOTE_CAP_KHONG_CAM_BIEN;
     l = remoteMap(l, cap);
     r = remoteMap(r, cap);
@@ -1591,6 +1753,7 @@ void xuLyLenh(String s) {
         case 's': dungHet(); Serial.println("Da dung"); break;
         case 'r': noInterrupts(); g_cnt[0] = g_cnt[1] = 0; interrupts(); Serial.println("Da dat lai dem"); break;
         case 'e': inDem(); break;
+        case 'f': Serial.printf("ToF: ok=%d  %d mm (song=%d)  IR trai=%d phai=%d giua=%d  pin=%.2f V\n", g_tof_ok, g_tof_mm, tofConSong(), irThay(0), irThay(1), irThay(2), g_bat_mv / 1000.0f); break;
         case 'i': wifiTrangThai(); break;
         case 'v': Serial.printf("Phien ban: %s\n", FW_VERSION); break;
         case 'u': githubCapNhat(s.length() > 1 && s[1] == '!'); break;
@@ -1645,14 +1808,18 @@ void setup() {
     ledNap();
     analogSetPinAttenuation(PIN_VBAT, ADC_11db);
 
-    pinMode(PIN_E1A, INPUT); pinMode(PIN_E1B, INPUT);
-    pinMode(PIN_E2A, INPUT); pinMode(PIN_E2B, INPUT);
-    g_st[0] = (uint8_t)((digitalRead(PIN_E1A) << 1) | digitalRead(PIN_E1B));
-    g_st[1] = (uint8_t)((digitalRead(PIN_E2A) << 1) | digitalRead(PIN_E2B));
-    attachInterrupt(digitalPinToInterrupt(PIN_E1A), isrA, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(PIN_E1B), isrA, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(PIN_E2A), isrB, CHANGE);
-    attachInterrupt(digitalPinToInterrupt(PIN_E2B), isrB, CHANGE);
+    if (CO_ENCODER) {
+        pinMode(PIN_E1A, INPUT); pinMode(PIN_E1B, INPUT);
+        pinMode(PIN_E2A, INPUT); pinMode(PIN_E2B, INPUT);
+        g_st[0] = (uint8_t)((digitalRead(PIN_E1A) << 1) | digitalRead(PIN_E1B));
+        g_st[1] = (uint8_t)((digitalRead(PIN_E2A) << 1) | digitalRead(PIN_E2B));
+        attachInterrupt(digitalPinToInterrupt(PIN_E1A), isrA, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(PIN_E1B), isrA, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(PIN_E2A), isrB, CHANGE);
+        attachInterrupt(digitalPinToInterrupt(PIN_E2B), isrB, CHANGE);
+    }
+    irNap();
+    tofKhoiTao();
 
     delay(300);
     digitalWrite(PIN_STBY, HIGH);   // bat driver (motor van dung vi PWM = 0)
@@ -1677,10 +1844,12 @@ void loop() {
     if (now - last10 >= 10) {
         last10 += 10;
         if (now - last10 > 100) last10 = now;
+        followTick();
         capNhatMotor();
         nhayTick();
     }
     doPin();
+    tofTick();
     wifiTick();
     bleTick();
     tbTick(millis());
